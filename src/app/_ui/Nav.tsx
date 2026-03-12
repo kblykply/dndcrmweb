@@ -17,7 +17,9 @@ export default function Nav() {
   if (!mounted) return null;
 
   const role = me?.role as string | undefined;
+
   const isManager = role === "MANAGER" || role === "ADMIN";
+  const isAdmin = role === "ADMIN";
 
   const linkStyle = (active: boolean): React.CSSProperties => ({
     padding: "8px 14px",
@@ -39,21 +41,12 @@ export default function Nav() {
         marginBottom: 18,
       }}
     >
-      {/* Left */}
+      {/* LEFT NAV */}
       <div style={{ display: "flex", gap: 6 }}>
+
         <a
           href="/leads"
           style={linkStyle(pathname === "/leads")}
-          onMouseEnter={(e) => {
-            if (pathname !== "/leads") {
-              e.currentTarget.style.background = "var(--surface-2)";
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (pathname !== "/leads") {
-              e.currentTarget.style.background = "transparent";
-            }
-          }}
         >
           Leads
         </a>
@@ -62,23 +55,32 @@ export default function Nav() {
           <a
             href="/manager/queue"
             style={linkStyle(pathname === "/manager/queue")}
-            onMouseEnter={(e) => {
-              if (pathname !== "/manager/queue") {
-                e.currentTarget.style.background = "var(--surface-2)";
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (pathname !== "/manager/queue") {
-                e.currentTarget.style.background = "transparent";
-              }
-            }}
           >
             Manager Queue
           </a>
         )}
+
+        {isAdmin && (
+          <a
+            href="/admin"
+            style={linkStyle(pathname === "/admin")}
+          >
+            Admin
+          </a>
+        )}
+
+        {isAdmin && (
+          <a
+            href="/admin/users"
+            style={linkStyle(pathname === "/admin/users")}
+          >
+            Users
+          </a>
+        )}
+
       </div>
 
-      {/* Right */}
+      {/* RIGHT USER INFO */}
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <div style={{ fontSize: 13 }}>
           <span style={{ fontWeight: 700 }}>{me?.name}</span>
@@ -101,15 +103,8 @@ export default function Nav() {
             border: "none",
             fontWeight: 600,
             fontSize: 13,
+            cursor: "pointer",
             transition: "all .18s ease",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--surface-2)";
-            e.currentTarget.style.boxShadow = "var(--shadow)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "var(--surface)";
-            e.currentTarget.style.boxShadow = "var(--shadow-sm)";
           }}
         >
           Logout

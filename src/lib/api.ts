@@ -1,12 +1,10 @@
-export const API =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+export const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
   const headers = new Headers({
     "Content-Type": "application/json",
   });
 
-  // merge custom headers safely
   if (init.headers) {
     const extra = new Headers(init.headers);
     extra.forEach((value, key) => headers.set(key, value));
@@ -19,9 +17,18 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   });
 
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error("Unauthorized");
+    }
+
     const text = await res.text();
     throw new Error(text || `HTTP ${res.status}`);
   }
 
-  return res.json();
+  const contentType = res.headers.get("content-type") || "";
+  if (contentType.includes("application/json")) {
+    return res.json();
+  }
+
+  return null;
 }
