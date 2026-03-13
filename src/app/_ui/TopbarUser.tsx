@@ -14,12 +14,12 @@ function initials(name?: string) {
 
 function SunIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.8" />
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.9" />
       <path
-        d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1l2.1-2.1M17 7l2.1-2.1"
+        d="M12 2.5v2.5M12 19v2.5M4.93 4.93l1.77 1.77M17.3 17.3l1.77 1.77M2.5 12H5M19 12h2.5M4.93 19.07l1.77-1.77M17.3 6.7l1.77-1.77"
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="1.9"
         strokeLinecap="round"
       />
     </svg>
@@ -28,11 +28,11 @@ function SunIcon() {
 
 function MoonIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
-        d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"
+        d="M20.2 14.2A8.8 8.8 0 1 1 9.8 3.8a7.3 7.3 0 0 0 10.4 10.4Z"
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="1.9"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -40,26 +40,36 @@ function MoonIcon() {
   );
 }
 
-const iconButtonStyle: React.CSSProperties = {
-  width: 36,
-  height: 36,
-  borderRadius: 12,
+const CONTROL_SIZE = 40;
+
+const controlButtonStyle: React.CSSProperties = {
+  width: CONTROL_SIZE,
+  height: CONTROL_SIZE,
+  minWidth: CONTROL_SIZE,
+  minHeight: CONTROL_SIZE,
+  borderRadius: 14,
   border: "1px solid var(--stroke)",
-  background: "var(--surface-2)",
+  background: "transparent",
   color: "var(--text-primary)",
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
   cursor: "pointer",
-  transition: "background .15s, border-color .15s, transform .05s",
+  transition: "background .15s, border-color .15s, transform .05s, box-shadow .15s",
+  boxShadow: "none",
+  padding: 0,
+  flex: "0 0 auto",
 };
 
-const avatarFallbackStyle: React.CSSProperties = {
-  width: 34,
-  height: 34,
+const skeletonAvatarStyle: React.CSSProperties = {
+  width: CONTROL_SIZE,
+  height: CONTROL_SIZE,
+  minWidth: CONTROL_SIZE,
+  minHeight: CONTROL_SIZE,
   borderRadius: 999,
-  background: "var(--surface-3)",
+  background: "transparent",
   border: "1px solid var(--stroke)",
+  flex: "0 0 auto",
 };
 
 export default function TopbarUser() {
@@ -104,13 +114,13 @@ export default function TopbarUser() {
     if (!btn) return;
 
     const rect = btn.getBoundingClientRect();
-    const width = 240;
+    const width = 260;
     const margin = 12;
 
     let left = rect.right - width;
     left = Math.max(margin, Math.min(left, window.innerWidth - margin - width));
 
-    const estimatedHeight = 180;
+    const estimatedHeight = 220;
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
 
@@ -166,8 +176,8 @@ export default function TopbarUser() {
   if (!mounted) {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <button style={iconButtonStyle} aria-label="Tema değiştir" />
-        <div style={avatarFallbackStyle} />
+        <button style={controlButtonStyle} aria-label="Tema değiştir" />
+        <div style={skeletonAvatarStyle} />
       </div>
     );
   }
@@ -181,13 +191,13 @@ export default function TopbarUser() {
           onClick={toggleTheme}
           title="Tema değiştir"
           aria-label="Tema değiştir"
-          style={iconButtonStyle}
+          style={controlButtonStyle}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--surface-3)";
+            e.currentTarget.style.background = "var(--surface-2)";
             e.currentTarget.style.borderColor = "var(--stroke-2)";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = "var(--surface-2)";
+            e.currentTarget.style.background = "transparent";
             e.currentTarget.style.borderColor = "var(--stroke)";
           }}
         >
@@ -198,17 +208,18 @@ export default function TopbarUser() {
           ref={btnRef}
           onClick={() => setOpen((v) => !v)}
           style={{
-            ...iconButtonStyle,
-            padding: 0,
+            ...controlButtonStyle,
+            borderRadius: 999,
             overflow: "hidden",
           }}
           title={me?.email || "Profil"}
+          aria-label="Profil"
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = "var(--surface-3)";
+            if (!avatarUrl) e.currentTarget.style.background = "var(--surface-2)";
             e.currentTarget.style.borderColor = "var(--stroke-2)";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = "var(--surface-2)";
+            e.currentTarget.style.background = "transparent";
             e.currentTarget.style.borderColor = "var(--stroke)";
           }}
         >
@@ -216,7 +227,12 @@ export default function TopbarUser() {
             <img
               src={avatarUrl}
               alt="avatar"
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
             />
           ) : (
             <div
@@ -226,8 +242,10 @@ export default function TopbarUser() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontWeight: 800,
+                fontWeight: 900,
+                fontSize: 13,
                 color: "var(--text-primary)",
+                letterSpacing: ".02em",
               }}
             >
               {initials(me?.name)}
@@ -244,10 +262,10 @@ export default function TopbarUser() {
                 position: "fixed",
                 top: pos.top,
                 left: pos.left,
-                width: 240,
+                width: 260,
                 background: "var(--surface)",
                 border: "1px solid var(--stroke)",
-                borderRadius: 14,
+                borderRadius: 16,
                 boxShadow: "var(--shadow)",
                 padding: 12,
                 zIndex: 2147483647,
@@ -255,8 +273,14 @@ export default function TopbarUser() {
                 gap: 10,
               }}
             >
-              <div>
-                <div style={{ fontWeight: 800, color: "var(--text-primary)" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 4,
+                  padding: "4px 2px 8px",
+                }}
+              >
+                <div style={{ fontWeight: 900, color: "var(--text-primary)", fontSize: 14 }}>
                   {me?.name || "Kullanıcı"}
                 </div>
                 <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
@@ -268,10 +292,12 @@ export default function TopbarUser() {
                 href="/profile"
                 style={{
                   padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid var(--stroke-2)",
+                  borderRadius: 12,
+                  border: "1px solid var(--stroke)",
                   background: "var(--surface-2)",
                   color: "var(--text-primary)",
+                  fontWeight: 700,
+                  fontSize: 13,
                 }}
                 onClick={() => setOpen(false)}
               >

@@ -164,6 +164,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         display: "flex",
         background: "var(--bg)",
         color: "var(--text-primary)",
+        padding: mobile ? 0 : 12,
+        gap: mobile ? 0 : 12,
       }}
     >
       {!mobile ? (
@@ -171,12 +173,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           style={{
             width: 268,
             background: "var(--surface)",
-            borderRight: "1px solid var(--stroke)",
+            border: "1px solid var(--stroke)",
+            borderRadius: 24,
             display: "flex",
             flexDirection: "column",
             padding: "18px 14px",
             gap: 14,
-            boxShadow: "inset -1px 0 0 var(--stroke)",
+            boxShadow: "var(--shadow-sm)",
+            minHeight: "calc(100vh - 24px)",
+            position: "sticky",
+            top: 12,
           }}
         >
           <div style={{ padding: "10px 12px" }}>
@@ -194,19 +200,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               marginTop: 8,
             }}
           >
-            <Link
-              href="/leads"
-              style={navItemStyle(pathname.startsWith("/leads"))}
-            >
+            <Link href="/leads" style={navItemStyle(pathname.startsWith("/leads"))}>
               <LeadsIcon />
               Leadler
             </Link>
 
             {mounted && isManager ? (
-              <Link
-                href="/manager/queue"
-                style={navItemStyle(pathname.startsWith("/manager"))}
-              >
+              <Link href="/manager/queue" style={navItemStyle(pathname.startsWith("/manager"))}>
                 <ManagerIcon />
                 Yönetici Kuyruğu
               </Link>
@@ -214,26 +214,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
             {mounted && isAdmin ? (
               <>
-                <Link
-                  href="/admin"
-                  style={navItemStyle(pathname === "/admin")}
-                >
+                <Link href="/admin" style={navItemStyle(pathname === "/admin")}>
                   <AdminIcon />
                   Admin Panel
                 </Link>
 
-                <Link
-                  href="/admin/users"
-                  style={navItemStyle(pathname.startsWith("/admin/users"))}
-                >
+                <Link href="/admin/users" style={navItemStyle(pathname.startsWith("/admin/users"))}>
                   <UsersIcon />
                   Kullanıcılar
                 </Link>
 
-                <Link
-                  href="/admin/leads"
-                  style={navItemStyle(pathname.startsWith("/admin/leads"))}
-                >
+                <Link href="/admin/leads" style={navItemStyle(pathname.startsWith("/admin/leads"))}>
                   <DeleteIcon />
                   Lead Temizliği
                 </Link>
@@ -280,17 +271,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <header
           style={{
             height: 64,
-            background: "var(--surface)",
-            borderBottom: "1px solid var(--stroke)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: mobile ? "0 14px" : "0 18px",
+            padding: mobile ? "0 14px" : "0 6px 0 10px",
             gap: 14,
             position: "sticky",
             top: 0,
             zIndex: 1000,
-            boxShadow: "inset 0 -1px 0 var(--stroke)",
           }}
         >
           <div />
@@ -308,7 +296,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         <main
           style={{
-            padding: mobile ? 14 : 18,
+            padding: mobile ? 14 : 6,
             display: "grid",
             gap: 14,
             minWidth: 0,
