@@ -2,7 +2,6 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import styles from "../page.module.css";
 
 function BellIcon({ size = 40 }: { size?: number }) {
   return (
@@ -26,6 +25,20 @@ function BellIcon({ size = 40 }: { size?: number }) {
 }
 
 type Notif = { id: string; title: string; desc: string; time: string };
+
+const iconButtonStyle: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: 14,
+  border: "1px solid var(--stroke)",
+  background: "var(--surface-2)",
+  color: "var(--text-primary)",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  cursor: "pointer",
+  transition: "background .15s, border-color .15s, transform .05s",
+};
 
 export default function Notifications() {
   const [open, setOpen] = useState(false);
@@ -116,15 +129,17 @@ export default function Notifications() {
     <>
       <button
         ref={btnRef}
-        className={styles.iconBtn}
         onClick={() => setOpen((v) => !v)}
         title="Bildirimler"
         aria-label="Bildirimler"
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 14,
-          color: "var(--text-primary)",
+        style={iconButtonStyle}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--surface-3)";
+          e.currentTarget.style.borderColor = "var(--stroke-2)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "var(--surface-2)";
+          e.currentTarget.style.borderColor = "var(--stroke)";
         }}
       >
         <BellIcon size={22} />
@@ -148,11 +163,25 @@ export default function Notifications() {
                 zIndex: 2147483647,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                <div style={{ fontWeight: 900, fontSize: 14 }}>Bildirimler</div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <div style={{ fontWeight: 900, fontSize: 14, color: "var(--text-primary)" }}>
+                  Bildirimler
+                </div>
                 <button
                   onClick={() => setOpen(false)}
-                  style={{ height: 30, padding: "0 10px", borderRadius: 10, fontSize: 12 }}
+                  style={{
+                    height: 30,
+                    padding: "0 10px",
+                    borderRadius: 10,
+                    fontSize: 12,
+                  }}
                 >
                   Kapat
                 </button>
@@ -165,7 +194,15 @@ export default function Notifications() {
                   Henüz bildiriminiz yok.
                 </div>
               ) : (
-                <div style={{ display: "grid", gap: 10, maxHeight: 260, overflow: "auto", paddingRight: 2 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    maxHeight: 260,
+                    overflow: "auto",
+                    paddingRight: 2,
+                  }}
+                >
                   {items.map((n) => (
                     <div
                       key={n.id}
@@ -177,10 +214,18 @@ export default function Notifications() {
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                        <div style={{ fontWeight: 800, fontSize: 13 }}>{n.title}</div>
+                        <div style={{ fontWeight: 800, fontSize: 13, color: "var(--text-primary)" }}>
+                          {n.title}
+                        </div>
                         <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{n.time}</div>
                       </div>
-                      <div style={{ marginTop: 4, fontSize: 12, color: "var(--text-secondary)" }}>
+                      <div
+                        style={{
+                          marginTop: 4,
+                          fontSize: 12,
+                          color: "var(--text-secondary)",
+                        }}
+                      >
                         {n.desc}
                       </div>
                     </div>

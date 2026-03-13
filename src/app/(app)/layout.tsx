@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import styles from "../page.module.css";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import TopbarUser from "../_ui/TopbarUser";
@@ -11,7 +10,7 @@ import { getUser } from "@/lib/auth";
 function LeadsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -19,8 +18,8 @@ function LeadsIcon() {
 function ManagerIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8"/>
-      <path d="M4 20c1.5-4 6-6 8-6s6.5 2 8 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M4 20c1.5-4 6-6 8-6s6.5 2 8 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -34,7 +33,7 @@ function AdminIcon() {
         strokeWidth="1.6"
         strokeLinejoin="round"
       />
-      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6"/>
+      <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.6" />
     </svg>
   );
 }
@@ -42,10 +41,10 @@ function AdminIcon() {
 function UsersIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8"/>
-      <path d="M3.5 18c1-3 3.7-4.5 5.5-4.5S13.5 15 14.5 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-      <circle cx="17" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8"/>
-      <path d="M15.5 17.5c.7-1.9 2.2-3 4.2-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3.5 18c1-3 3.7-4.5 5.5-4.5S13.5 15 14.5 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="17" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M15.5 17.5c.7-1.9 2.2-3 4.2-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -53,110 +52,270 @@ function UsersIcon() {
 function DeleteIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-      <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-      <path d="M6 7l1 13h10l1-13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-      <path d="M9 4h6l1 3H8l1-3z" stroke="currentColor" strokeWidth="1.8"/>
+      <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M6 7l1 13h10l1-13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M9 4h6l1 3H8l1-3z" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
+}
+
+function navItemStyle(active: boolean): React.CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "11px 14px",
+    borderRadius: 14,
+    color: active ? "var(--text-primary)" : "var(--text-secondary)",
+    textDecoration: "none",
+    fontWeight: active ? 700 : 600,
+    transition: "all .18s ease",
+    position: "relative",
+    border: `1px solid ${active ? "var(--stroke)" : "transparent"}`,
+    background: active ? "var(--surface-2)" : "transparent",
+  };
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [mobile, setMobile] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     setMe(getUser());
+
+    function resolveTheme() {
+      const attr = document.documentElement.getAttribute("data-theme");
+      if (attr === "dark" || attr === "light") {
+        setTheme(attr);
+        return;
+      }
+
+      const saved = localStorage.getItem("crm-theme");
+      if (saved === "dark" || saved === "light") {
+        setTheme(saved);
+        return;
+      }
+
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setTheme(prefersDark ? "dark" : "light");
+    }
+
+    function handleResize() {
+      setMobile(window.innerWidth <= 820);
+    }
+
+    resolveTheme();
+    handleResize();
+
+    const observer = new MutationObserver(() => {
+      const attr = document.documentElement.getAttribute("data-theme");
+      if (attr === "dark" || attr === "light") {
+        setTheme(attr);
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onMediaChange = () => {
+      const saved = localStorage.getItem("crm-theme");
+      if (!saved) {
+        setTheme(media.matches ? "dark" : "light");
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    if (media.addEventListener) {
+      media.addEventListener("change", onMediaChange);
+    } else {
+      media.addListener(onMediaChange);
+    }
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", handleResize);
+      if (media.removeEventListener) {
+        media.removeEventListener("change", onMediaChange);
+      } else {
+        media.removeListener(onMediaChange);
+      }
+    };
   }, []);
 
   const role = me?.role as string | undefined;
   const isManager = role === "MANAGER" || role === "ADMIN";
   const isAdmin = role === "ADMIN";
 
+  const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
+
   return (
-    <div className={styles.page}>
-      {/* ===== Sidebar ===== */}
-      <aside className={styles.sidebar}>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        background: "var(--bg)",
+        color: "var(--text-primary)",
+      }}
+    >
+      {!mobile ? (
+        <aside
+          style={{
+            width: 268,
+            background: "var(--surface)",
+            borderRight: "1px solid var(--stroke)",
+            display: "flex",
+            flexDirection: "column",
+            padding: "18px 14px",
+            gap: 14,
+            boxShadow: "inset -1px 0 0 var(--stroke)",
+          }}
+        >
+          <div style={{ padding: "10px 12px" }}>
+            <img
+              src={logoSrc}
+              alt="Logo"
+              style={{ width: 100, objectFit: "contain" }}
+            />
+          </div>
 
-        {/* Logo */}
-        <div style={{ padding: "10px 12px" }}>
-          <img
-            src="/dndblack.png"
-            alt="Logo"
-            style={{ width: 100, objectFit: "contain" }}
-          />
-        </div>
-
-        {/* Navigation */}
-        <nav className={styles.navGroup}>
-          <Link
-            href="/leads"
-            className={`${styles.navItem} ${pathname.startsWith("/leads") ? styles.navItemActive : ""}`}
+          <nav
+            style={{
+              display: "grid",
+              gap: 6,
+              marginTop: 8,
+            }}
           >
-            <LeadsIcon />
-            Leadler
-          </Link>
-
-          {mounted && isManager && (
             <Link
-              href="/manager/queue"
-              className={`${styles.navItem} ${pathname.startsWith("/manager") ? styles.navItemActive : ""}`}
+              href="/leads"
+              style={navItemStyle(pathname.startsWith("/leads"))}
             >
-              <ManagerIcon />
-              Yönetici Kuyruğu
+              <LeadsIcon />
+              Leadler
             </Link>
-          )}
 
-          {mounted && isAdmin && (
-            <>
+            {mounted && isManager ? (
               <Link
-                href="/admin"
-                className={`${styles.navItem} ${pathname === "/admin" ? styles.navItemActive : ""}`}
+                href="/manager/queue"
+                style={navItemStyle(pathname.startsWith("/manager"))}
               >
-                <AdminIcon />
-                Admin Panel
+                <ManagerIcon />
+                Yönetici Kuyruğu
               </Link>
+            ) : null}
 
-              <Link
-                href="/admin/users"
-                className={`${styles.navItem} ${pathname.startsWith("/admin/users") ? styles.navItemActive : ""}`}
-              >
-                <UsersIcon />
-                Kullanıcılar
-              </Link>
+            {mounted && isAdmin ? (
+              <>
+                <Link
+                  href="/admin"
+                  style={navItemStyle(pathname === "/admin")}
+                >
+                  <AdminIcon />
+                  Admin Panel
+                </Link>
 
-              <Link
-                href="/admin/leads"
-                className={`${styles.navItem} ${pathname.startsWith("/admin/leads") ? styles.navItemActive : ""}`}
-              >
-                <DeleteIcon />
-                Lead Temizliği
-              </Link>
-            </>
-          )}
-        </nav>
+                <Link
+                  href="/admin/users"
+                  style={navItemStyle(pathname.startsWith("/admin/users"))}
+                >
+                  <UsersIcon />
+                  Kullanıcılar
+                </Link>
 
-        {/* Footer */}
-        <div className={styles.sidebarFooter}>
-          <Link href="/help" className={styles.smallLink}>
-            Yardım & Destek
-          </Link>
-        </div>
-      </aside>
+                <Link
+                  href="/admin/leads"
+                  style={navItemStyle(pathname.startsWith("/admin/leads"))}
+                >
+                  <DeleteIcon />
+                  Lead Temizliği
+                </Link>
+              </>
+            ) : null}
+          </nav>
 
-      {/* ===== Content ===== */}
-      <div className={styles.content}>
-        <header className={styles.topbar}>
+          <div
+            style={{
+              marginTop: "auto",
+              display: "grid",
+              gap: 6,
+              paddingTop: 12,
+              borderTop: "1px solid var(--stroke)",
+            }}
+          >
+            <Link
+              href="/help"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 12px",
+                borderRadius: 12,
+                color: "var(--text-secondary)",
+                textDecoration: "none",
+                border: "1px solid transparent",
+              }}
+            >
+              Yardım & Destek
+            </Link>
+          </div>
+        </aside>
+      ) : null}
+
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+        }}
+      >
+        <header
+          style={{
+            height: 64,
+            background: "var(--surface)",
+            borderBottom: "1px solid var(--stroke)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: mobile ? "0 14px" : "0 18px",
+            gap: 14,
+            position: "sticky",
+            top: 0,
+            zIndex: 1000,
+            boxShadow: "inset 0 -1px 0 var(--stroke)",
+          }}
+        >
           <div />
-          <div className={styles.topActions}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
             <Notifications />
             <TopbarUser />
           </div>
         </header>
 
-        <main className={styles.container}>{children}</main>
+        <main
+          style={{
+            padding: mobile ? 14 : 18,
+            display: "grid",
+            gap: 14,
+            minWidth: 0,
+          }}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

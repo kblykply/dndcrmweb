@@ -16,11 +16,11 @@ function followTone(nextFollowUpAt?: string | null) {
   const endToday = new Date();
   endToday.setHours(23, 59, 59, 999);
 
-  if (t < now) return "danger" as const; // overdue
-  if (t >= startToday.getTime() && t <= endToday.getTime()) return "warning" as const; // today
+  if (t < now) return "danger" as const;
+  if (t >= startToday.getTime() && t <= endToday.getTime()) return "warning" as const;
 
   const week = now + 7 * 24 * 60 * 60 * 1000;
-  if (t <= week) return "info" as const; // soon
+  if (t <= week) return "info" as const;
 
   return "none" as const;
 }
@@ -40,13 +40,20 @@ export default function ManagerQueue() {
   async function load() {
     setErr(null);
     setLoading(true);
+
     try {
-      const data = await authedFetch("/leads?status=MANAGER_REVIEW");
-      setLeads(data);
+      const res = await authedFetch(
+        "/leads?status=MANAGER_REVIEW&page=1&pageSize=100"
+      );
+
+      const items = Array.isArray(res) ? res : res?.items || [];
+      setLeads(items);
 
       setAssignById((prev) => {
         const next = { ...prev };
-        for (const l of data) if (next[l.id] === undefined) next[l.id] = "";
+        for (const l of items) {
+          if (next[l.id] === undefined) next[l.id] = "";
+        }
         return next;
       });
     } catch (e: any) {
@@ -59,7 +66,7 @@ export default function ManagerQueue() {
   async function loadSales() {
     try {
       const reps = await authedFetch("/users?role=SALES");
-      setSales(reps);
+      setSales(Array.isArray(reps) ? reps : []);
     } catch {
       // ignore
     }
@@ -74,6 +81,7 @@ export default function ManagerQueue() {
 
     setErr(null);
     setSavingId(leadId);
+
     try {
       await authedFetch(`/leads/${leadId}/assign-to-sales`, {
         method: "POST",
@@ -90,6 +98,7 @@ export default function ManagerQueue() {
   async function returnToCallCenter(leadId: string) {
     setErr(null);
     setSavingId(leadId);
+
     try {
       await authedFetch(`/leads/${leadId}/activity`, {
         method: "POST",
@@ -119,12 +128,12 @@ export default function ManagerQueue() {
     if (!mounted) return;
     load();
     loadSales();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     if (!qq) return leads;
+
     return leads.filter((l) => {
       const hay = `${l.fullName || ""} ${l.phone || ""}`.toLowerCase();
       return hay.includes(qq);
@@ -135,7 +144,6 @@ export default function ManagerQueue() {
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      {/* Header */}
       <div className="flex-between">
         <div style={{ display: "grid", gap: 4 }}>
           <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Yönetici</div>
@@ -150,7 +158,6 @@ export default function ManagerQueue() {
         </button>
       </div>
 
-      {/* Search */}
       <div className="card" style={{ padding: 12 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <div style={{ flex: 1, minWidth: 260 }}>
@@ -183,7 +190,6 @@ export default function ManagerQueue() {
         ) : null}
       </div>
 
-      {/* Table */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <table>
           <thead>
@@ -210,7 +216,10 @@ export default function ManagerQueue() {
                         {l.fullName}
                       </a>
                       <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-                        Son aktivite: {l.lastActivityAt ? new Date(l.lastActivityAt).toLocaleString() : "-"}
+                        Son aktivite:{" "}
+                        {l.lastActivityAt
+                          ? new Date(l.lastActivityAt).toLocaleString()
+                          : "-"}
                       </div>
                     </div>
                   </td>
@@ -224,16 +233,27 @@ export default function ManagerQueue() {
                   <td>
                     <div style={{ display: "grid", gap: 8 }}>
                       <span className={`badge ${tone}`}>
-                        {l.nextFollowUpAt ? new Date(l.nextFollowUpAt).toLocaleString() : "Takip yok"}
+                        {l.nextFollowUpAt
+                          ? new Date(l.nextFollowUpAt).toLocaleString()
+                          : "Takip yok"}
                       </span>
                     </div>
                   </td>
 
                   <td style={{ minWidth: 320 }}>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                      }}
+                    >
                       <select
                         value={assignById[l.id] ?? ""}
-                        onChange={(e) => setAssignById((p) => ({ ...p, [l.id]: e.target.value }))}
+                        onChange={(e) =>
+                          setAssignById((p) => ({ ...p, [l.id]: e.target.value }))
+                        }
                         style={{ minWidth: 220 }}
                       >
                         <option value="">Satış temsilcisi seç</option>

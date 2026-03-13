@@ -47,9 +47,12 @@ export default function AdminLeadsPage() {
   async function load() {
     setErr(null);
     setLoading(true);
+
     try {
-      const data = await authedFetch("/leads");
-      setLeads(data);
+      const data = await authedFetch("/leads?page=1&pageSize=1000");
+      const items = Array.isArray(data) ? data : data?.items || [];
+
+      setLeads(items);
       setSelected({});
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -69,14 +72,14 @@ export default function AdminLeadsPage() {
   }, [mounted]);
 
   const statuses = useMemo(() => {
-    const s = Array.from(new Set(leads.map((l) => l.status))).filter(Boolean);
+    const s = Array.from(new Set((leads || []).map((l) => l.status))).filter(Boolean);
     return ["ALL", ...s];
   }, [leads]);
 
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
 
-    return leads.filter((l) => {
+    return (leads || []).filter((l) => {
       if (statusFilter !== "ALL" && l.status !== statusFilter) return false;
       if (!qq) return true;
 
