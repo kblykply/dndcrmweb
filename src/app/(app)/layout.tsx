@@ -228,6 +228,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   <DeleteIcon />
                   Lead Temizliği
                 </Link>
+
+
+                <Link
+  href="/agencies"
+  style={navItemStyle(pathname.startsWith("/agencies"))}
+>
+  <UsersIcon />
+  Ajanslar
+</Link>
               </>
             ) : null}
           </nav>
