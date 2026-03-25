@@ -156,7 +156,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isAdmin = role === "ADMIN";
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
-
+const canSeeCustomers = role === "ADMIN" || role === "MANAGER" || role === "SALES";
   return (
     <div
       style={{
@@ -204,7 +204,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <LeadsIcon />
               Leadler
             </Link>
-
+{mounted && canSeeCustomers ? (
+  <Link href="/customers" style={navItemStyle(pathname.startsWith("/customers"))}>
+    <UsersIcon />
+    Müşteriler
+  </Link>
+) : null}
             {mounted && isManager ? (
 
               <>
