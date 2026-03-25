@@ -206,10 +206,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </Link>
 
             {mounted && isManager ? (
+
+              <>
+              
               <Link href="/manager/queue" style={navItemStyle(pathname.startsWith("/manager"))}>
                 <ManagerIcon />
                 Yönetici Kuyruğu
               </Link>
+
+      <Link
+  href="/agencies"
+  style={navItemStyle(pathname.startsWith("/agencies"))}
+>
+  <UsersIcon />
+  Ajanslar
+</Link>
+              </>
+
+
             ) : null}
 
             {mounted && isAdmin ? (
