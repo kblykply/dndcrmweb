@@ -5,8 +5,19 @@ import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 
-type PresentationStatus = "SCHEDULED" | "COMPLETED" | "CANCELLED" | "RESCHEDULED";
-type PresentationOutcome = "POSITIVE" | "NEGATIVE" | "FOLLOW_UP" | "NO_DECISION" | "WON" | "LOST";
+type PresentationStatus =
+  | "SCHEDULED"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "RESCHEDULED";
+
+type PresentationOutcome =
+  | "POSITIVE"
+  | "NEGATIVE"
+  | "FOLLOW_UP"
+  | "NO_DECISION"
+  | "WON"
+  | "LOST";
 
 type SalesUser = {
   id: string;
@@ -27,6 +38,7 @@ type CustomerDetail = {
   source?: string | null;
   type?: "POTENTIAL" | "EXISTING";
   notesSummary?: string | null;
+  ownerId?: string | null;
   agency?: {
     id: string;
     name: string;
@@ -81,10 +93,22 @@ const OUTCOME_OPTIONS: PresentationOutcome[] = [
 ];
 
 function badgeClass(status?: string) {
-  if (status === "COMPLETED" || status === "POSITIVE" || status === "WON") return "success";
-  if (status === "SCHEDULED" || status === "FOLLOW_UP" || status === "NO_DECISION") return "info";
-  if (status === "RESCHEDULED") return "warning";
-  if (status === "CANCELLED" || status === "NEGATIVE" || status === "LOST") return "danger";
+  if (status === "COMPLETED" || status === "POSITIVE" || status === "WON") {
+    return "success";
+  }
+  if (
+    status === "SCHEDULED" ||
+    status === "FOLLOW_UP" ||
+    status === "NO_DECISION"
+  ) {
+    return "info";
+  }
+  if (status === "RESCHEDULED") {
+    return "warning";
+  }
+  if (status === "CANCELLED" || status === "NEGATIVE" || status === "LOST") {
+    return "danger";
+  }
   return "";
 }
 
@@ -110,13 +134,17 @@ export default function CustomerDetailPage() {
   const [notesSummary, setNotesSummary] = useState("");
   const [assignedSalesId, setAssignedSalesId] = useState("");
 
-  const [noteByPresentationId, setNoteByPresentationId] = useState<Record<string, string>>({});
+  const [noteByPresentationId, setNoteByPresentationId] = useState<
+    Record<string, string>
+  >({});
 
   const role = me?.role as string | undefined;
   const isSales = role === "SALES";
-  const canCreatePresentation = role === "MANAGER" || role === "ADMIN" || role === "SALES";
+  const isManagerOrAdmin = role === "MANAGER" || role === "ADMIN";
+  const canCreatePresentation =
+    role === "MANAGER" || role === "ADMIN" || role === "SALES";
 
-  async function load() {
+  async function loadCustomer() {
     if (!customerId) {
       setErr("Müşteri ID bulunamadı.");
       setLoading(false);
@@ -125,16 +153,10 @@ export default function CustomerDetailPage() {
 
     setErr(null);
     setLoading(true);
+
     try {
-      const [customerData, sales] = await Promise.all([
-        authedFetch(`/customers/${customerId}`),
-        authedFetch("/users?role=SALES"),
-      ]);
-
+      const customerData = await authedFetch(`/customers/${customerId}`);
       setCustomer(customerData);
-      setSalesUsers(Array.isArray(sales) ? sales : []);
-
-      setAssignedSalesId(isSales ? me?.id || "" : "");
     } catch (e: any) {
       setCustomer(null);
       setErr(String(e?.message || e));
@@ -143,11 +165,30 @@ export default function CustomerDetailPage() {
     }
   }
 
+  async function loadSalesUsers() {
+    if (!isManagerOrAdmin) {
+      setSalesUsers([]);
+      return;
+    }
+
+    try {
+      const sales = await authedFetch("/users?role=SALES");
+      setSalesUsers(Array.isArray(sales) ? sales : []);
+    } catch {
+      setSalesUsers([]);
+    }
+  }
+
+  async function load() {
+    await Promise.all([loadCustomer(), loadSalesUsers()]);
+  }
+
   async function createPresentation() {
     if (!customer || !title.trim() || !presentationAt) return;
 
     setErr(null);
     setSaving(true);
+
     try {
       await authedFetch(`/customers/${customer.id}/presentations`, {
         method: "POST",
@@ -168,7 +209,7 @@ export default function CustomerDetailPage() {
       setNotesSummary("");
       setAssignedSalesId(isSales ? me?.id || "" : "");
 
-      await load();
+      await loadCustomer();
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
@@ -182,6 +223,7 @@ export default function CustomerDetailPage() {
 
     setErr(null);
     setSaving(true);
+
     try {
       await authedFetch(`/presentations/${presentationId}/notes`, {
         method: "POST",
@@ -193,7 +235,7 @@ export default function CustomerDetailPage() {
         [presentationId]: "",
       }));
 
-      await load();
+      await loadCustomer();
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
@@ -210,13 +252,14 @@ export default function CustomerDetailPage() {
   ) {
     setErr(null);
     setSaving(true);
+
     try {
       await authedFetch(`/presentations/${presentationId}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
 
-      await load();
+      await loadCustomer();
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
@@ -231,8 +274,20 @@ export default function CustomerDetailPage() {
 
   useEffect(() => {
     if (!mounted) return;
-    load();
+    loadCustomer();
   }, [mounted, customerId]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!me) return;
+
+    if (role === "SALES") {
+      setAssignedSalesId(me?.id || "");
+      setSalesUsers([]);
+    } else {
+      loadSalesUsers();
+    }
+  }, [mounted, me, role]);
 
   const stats = useMemo(() => {
     const presentations = customer?.presentations || [];
@@ -269,7 +324,11 @@ export default function CustomerDetailPage() {
           </div>
         </div>
 
-        <span className={`badge ${customer.type === "EXISTING" ? "success" : "info"}`}>
+        <span
+          className={`badge ${
+            customer.type === "EXISTING" ? "success" : "info"
+          }`}
+        >
           {customer.type || "-"}
         </span>
       </div>
@@ -294,10 +353,22 @@ export default function CustomerDetailPage() {
           gap: 14,
         }}
       >
-        <div className="card"><div className="muted">Toplam Sunum</div><div style={{ fontSize: 28, fontWeight: 900 }}>{stats.total}</div></div>
-        <div className="card"><div className="muted">Planlı</div><div style={{ fontSize: 28, fontWeight: 900 }}>{stats.scheduled}</div></div>
-        <div className="card"><div className="muted">Tamamlanan</div><div style={{ fontSize: 28, fontWeight: 900 }}>{stats.completed}</div></div>
-        <div className="card"><div className="muted">WON</div><div style={{ fontSize: 28, fontWeight: 900 }}>{stats.won}</div></div>
+        <div className="card">
+          <div className="muted">Toplam Sunum</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.total}</div>
+        </div>
+        <div className="card">
+          <div className="muted">Planlı</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.scheduled}</div>
+        </div>
+        <div className="card">
+          <div className="muted">Tamamlanan</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.completed}</div>
+        </div>
+        <div className="card">
+          <div className="muted">WON</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.won}</div>
+        </div>
       </div>
 
       <div className="card" style={{ display: "grid", gap: 12 }}>
@@ -310,12 +381,24 @@ export default function CustomerDetailPage() {
             gap: 10,
           }}
         >
-          <div><b>Telefon:</b> {customer.phone || "-"}</div>
-          <div><b>E-posta:</b> {customer.email || "-"}</div>
-          <div><b>Ajans:</b> {customer.agency?.name || "-"}</div>
-          <div><b>Şehir:</b> {customer.city || "-"}</div>
-          <div><b>Ülke:</b> {customer.country || "-"}</div>
-          <div><b>Kaynak:</b> {customer.source || "-"}</div>
+          <div>
+            <b>Telefon:</b> {customer.phone || "-"}
+          </div>
+          <div>
+            <b>E-posta:</b> {customer.email || "-"}
+          </div>
+          <div>
+            <b>Ajans:</b> {customer.agency?.name || "-"}
+          </div>
+          <div>
+            <b>Şehir:</b> {customer.city || "-"}
+          </div>
+          <div>
+            <b>Ülke:</b> {customer.country || "-"}
+          </div>
+          <div>
+            <b>Kaynak:</b> {customer.source || "-"}
+          </div>
         </div>
 
         {customer.notesSummary ? (
@@ -343,15 +426,34 @@ export default function CustomerDetailPage() {
               gap: 10,
             }}
           >
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Sunum başlığı" />
-            <input value={projectName} onChange={(e) => setProjectName(e.target.value)} placeholder="Proje adı" />
-            <input type="datetime-local" value={presentationAt} onChange={(e) => setPresentationAt(e.target.value)} />
-            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Lokasyon" />
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Sunum başlığı"
+            />
+            <input
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              placeholder="Proje adı"
+            />
+            <input
+              type="datetime-local"
+              value={presentationAt}
+              onChange={(e) => setPresentationAt(e.target.value)}
+            />
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Lokasyon"
+            />
 
             {isSales ? (
               <input value={me?.name || ""} disabled />
             ) : (
-              <select value={assignedSalesId} onChange={(e) => setAssignedSalesId(e.target.value)}>
+              <select
+                value={assignedSalesId}
+                onChange={(e) => setAssignedSalesId(e.target.value)}
+              >
                 <option value="">Sales temsilcisi seç</option>
                 {salesUsers.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -389,7 +491,17 @@ export default function CustomerDetailPage() {
         <div style={{ fontWeight: 900 }}>Sunum Geçmişi</div>
 
         {customer.presentations.length === 0 ? (
-          <div className="muted">Henüz sunum kaydı yok.</div>
+          <div
+            style={{
+              border: "1px solid var(--stroke)",
+              borderRadius: 14,
+              background: "var(--surface-2)",
+              padding: 18,
+              color: "var(--text-secondary)",
+            }}
+          >
+            Henüz sunum kaydı yok.
+          </div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
             {customer.presentations.map((p) => (
@@ -408,17 +520,23 @@ export default function CustomerDetailPage() {
                   <div style={{ display: "grid", gap: 4 }}>
                     <div style={{ fontWeight: 900, fontSize: 16 }}>{p.title}</div>
                     <div className="muted" style={{ fontSize: 12 }}>
-                      {p.projectName || "-"} • {new Date(p.presentationAt).toLocaleString()}
+                      {p.projectName || "-"} •{" "}
+                      {new Date(p.presentationAt).toLocaleString()}
                     </div>
                     <div className="muted" style={{ fontSize: 12 }}>
-                      Sales: {p.assignedSales?.name || "-"} • Oluşturan: {p.createdBy?.name || "-"}
+                      Sales: {p.assignedSales?.name || "-"} • Oluşturan:{" "}
+                      {p.createdBy?.name || "-"}
                     </div>
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span className={`badge ${badgeClass(p.status)}`}>{p.status}</span>
+                    <span className={`badge ${badgeClass(p.status)}`}>
+                      {p.status}
+                    </span>
                     {p.outcome ? (
-                      <span className={`badge ${badgeClass(p.outcome)}`}>{p.outcome}</span>
+                      <span className={`badge ${badgeClass(p.outcome)}`}>
+                        {p.outcome}
+                      </span>
                     ) : null}
                   </div>
                 </div>
@@ -493,8 +611,12 @@ export default function CustomerDetailPage() {
                           background: "var(--surface)",
                         }}
                       >
-                        <div className="muted" style={{ fontSize: 12, marginBottom: 4 }}>
-                          {n.createdBy?.name || "-"} • {new Date(n.createdAt).toLocaleString()}
+                        <div
+                          className="muted"
+                          style={{ fontSize: 12, marginBottom: 4 }}
+                        >
+                          {n.createdBy?.name || "-"} •{" "}
+                          {new Date(n.createdAt).toLocaleString()}
                         </div>
                         <div>{n.note}</div>
                       </div>

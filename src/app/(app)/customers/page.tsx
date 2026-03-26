@@ -66,8 +66,11 @@ export default function CustomersPage() {
   const [agencyId, setAgencyId] = useState("");
 
   const role = me?.role as string | undefined;
-  const canCreate = role === "MANAGER" || role === "ADMIN";
+  console.log("CUSTOMERS PAGE ROLE:", role, me);
 
+
+const canCreate =
+  role === "MANAGER" || role === "ADMIN" || role === "SALES";
   async function load() {
     setErr(null);
     setLoading(true);
@@ -92,46 +95,53 @@ export default function CustomersPage() {
   }
 
   async function createCustomer() {
-    setErr(null);
-    setSaving(true);
-    try {
-      await authedFetch("/customers", {
-        method: "POST",
-        body: JSON.stringify({
-          fullName: fullName.trim(),
-          companyName: companyName.trim() || undefined,
-          phone: phone.trim() || undefined,
-          email: email.trim() || undefined,
-          city: city.trim() || undefined,
-          country: country.trim() || undefined,
-          address: address.trim() || undefined,
-          source: source.trim() || undefined,
-          notesSummary: notesSummary.trim() || undefined,
-          type,
-          agencyId: agencyId || null,
-        }),
-      });
+  console.log("createCustomer clicked");
+  setErr(null);
+  setSaving(true);
 
-      setFullName("");
-      setCompanyName("");
-      setPhone("");
-      setEmail("");
-      setCity("");
-      setCountry("");
-      setAddress("");
-      setSource("");
-      setNotesSummary("");
-      setType("POTENTIAL");
-      setAgencyId("");
-      setShowCreate(false);
+  try {
+    const payload = {
+      fullName: fullName.trim(),
+      companyName: companyName.trim() || undefined,
+      phone: phone.trim() || undefined,
+      email: email.trim() || undefined,
+      city: city.trim() || undefined,
+      country: country.trim() || undefined,
+      address: address.trim() || undefined,
+      source: source.trim() || undefined,
+      notesSummary: notesSummary.trim() || undefined,
+      type,
+      agencyId: agencyId || null,
+    };
 
-      await load();
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setSaving(false);
-    }
+    console.log("createCustomer payload:", payload);
+
+    await authedFetch("/customers", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    setFullName("");
+    setCompanyName("");
+    setPhone("");
+    setEmail("");
+    setCity("");
+    setCountry("");
+    setAddress("");
+    setSource("");
+    setNotesSummary("");
+    setType("POTENTIAL");
+    setAgencyId("");
+    setShowCreate(false);
+
+    await load();
+  } catch (e: any) {
+    console.error("createCustomer error:", e);
+    setErr(String(e?.message || e));
+  } finally {
+    setSaving(false);
   }
+}
 
   useEffect(() => {
     setMounted(true);
@@ -336,4 +346,4 @@ export default function CustomersPage() {
       </div>
     </div>
   );
-}
+} 

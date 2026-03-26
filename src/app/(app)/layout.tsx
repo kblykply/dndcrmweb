@@ -154,9 +154,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const role = me?.role as string | undefined;
   const isManager = role === "MANAGER" || role === "ADMIN";
   const isAdmin = role === "ADMIN";
+  const canSeeCRM = role === "ADMIN" || role === "MANAGER" || role === "SALES";
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
-const canSeeCustomers = role === "ADMIN" || role === "MANAGER" || role === "SALES";
+
   return (
     <div
       style={{
@@ -204,31 +205,26 @@ const canSeeCustomers = role === "ADMIN" || role === "MANAGER" || role === "SALE
               <LeadsIcon />
               Leadler
             </Link>
-{mounted && canSeeCustomers ? (
-  <Link href="/customers" style={navItemStyle(pathname.startsWith("/customers"))}>
-    <UsersIcon />
-    Müşteriler
-  </Link>
-) : null}
-            {mounted && isManager ? (
 
-              <>
-              
+            {mounted && canSeeCRM ? (
+              <Link href="/customers" style={navItemStyle(pathname.startsWith("/customers"))}>
+                <UsersIcon />
+                Müşteriler
+              </Link>
+            ) : null}
+
+            {mounted && canSeeCRM ? (
+              <Link href="/agencies" style={navItemStyle(pathname.startsWith("/agencies"))}>
+                <UsersIcon />
+                Ajanslar
+              </Link>
+            ) : null}
+
+            {mounted && isManager ? (
               <Link href="/manager/queue" style={navItemStyle(pathname.startsWith("/manager"))}>
                 <ManagerIcon />
                 Yönetici Kuyruğu
               </Link>
-
-      <Link
-  href="/agencies"
-  style={navItemStyle(pathname.startsWith("/agencies"))}
->
-  <UsersIcon />
-  Ajanslar
-</Link>
-              </>
-
-
             ) : null}
 
             {mounted && isAdmin ? (
@@ -247,15 +243,6 @@ const canSeeCustomers = role === "ADMIN" || role === "MANAGER" || role === "SALE
                   <DeleteIcon />
                   Lead Temizliği
                 </Link>
-
-
-                <Link
-  href="/agencies"
-  style={navItemStyle(pathname.startsWith("/agencies"))}
->
-  <UsersIcon />
-  Ajanslar
-</Link>
               </>
             ) : null}
           </nav>

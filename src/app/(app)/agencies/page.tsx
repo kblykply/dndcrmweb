@@ -82,9 +82,16 @@ export default function AgenciesPage() {
   const [assignedSalesId, setAssignedSalesId] = useState("");
 
   const role = me?.role as string | undefined;
-  const canCreate = role === "MANAGER" || role === "ADMIN";
+  const isSales = role === "SALES";
+  const canCreate =
+    role === "MANAGER" || role === "ADMIN" || role === "SALES";
 
-  async function load(nextPage = page, nextStatus = status, nextQ = q, nextPageSize = pageSize) {
+  async function load(
+    nextPage = page,
+    nextStatus = status,
+    nextQ = q,
+    nextPageSize = pageSize,
+  ) {
     setErr(null);
     setLoading(true);
     try {
@@ -109,6 +116,11 @@ export default function AgenciesPage() {
   }
 
   async function loadSalesUsers() {
+    if (isSales) {
+      setSalesUsers([]);
+      return;
+    }
+
     try {
       const data = await authedFetch("/users?role=SALES");
       setSalesUsers(Array.isArray(data) ? data : []);
@@ -133,7 +145,7 @@ export default function AgenciesPage() {
           website: website.trim() || undefined,
           source: source.trim() || undefined,
           notesSummary: notesSummary.trim() || undefined,
-          assignedSalesId: assignedSalesId || null,
+          assignedSalesId: isSales ? undefined : assignedSalesId || null,
         }),
       });
 
@@ -165,9 +177,17 @@ export default function AgenciesPage() {
   useEffect(() => {
     if (!mounted) return;
     load(1, status, q, pageSize);
-    loadSalesUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    loadSalesUsers();
+    if (isSales) {
+      setAssignedSalesId(me?.id || "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, role, me?.id]);
 
   const pageInfo = useMemo(() => {
     if (!total) return "Kayıt yok";
@@ -182,20 +202,29 @@ export default function AgenciesPage() {
     <div style={{ display: "grid", gap: 14 }}>
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Ajans Yönetimi</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+            Ajans Yönetimi
+          </div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>Ajanslar</div>
           <div className="muted" style={{ fontSize: 13 }}>
-            Manager ve sales ekipleri için ajans kayıtları, notlar, toplantılar ve görevler
+            Manager ve sales ekipleri için ajans kayıtları, notlar, toplantılar
+            ve görevler
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={() => load(page, status, q, pageSize)} disabled={loading}>
+          <button
+            onClick={() => load(page, status, q, pageSize)}
+            disabled={loading}
+          >
             {loading ? "Yenileniyor..." : "Yenile"}
           </button>
 
           {canCreate ? (
-            <button className="primary" onClick={() => setShowCreate((v) => !v)}>
+            <button
+              className="primary"
+              onClick={() => setShowCreate((v) => !v)}
+            >
               {showCreate ? "Kapat" : "Yeni Ajans"}
             </button>
           ) : null}
@@ -213,24 +242,64 @@ export default function AgenciesPage() {
               gap: 10,
             }}
           >
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ajans adı" />
-            <input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Yetkili kişi" />
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefon" />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ajans adı"
+            />
+            <input
+              value={contactName}
+              onChange={(e) => setContactName(e.target.value)}
+              placeholder="Yetkili kişi"
+            />
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Telefon"
+            />
 
-            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-posta" />
-            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Şehir" />
-            <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Ülke" />
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="E-posta"
+            />
+            <input
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="Şehir"
+            />
+            <input
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              placeholder="Ülke"
+            />
 
-            <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Website" />
-            <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Kaynak" />
-            <select value={assignedSalesId} onChange={(e) => setAssignedSalesId(e.target.value)}>
-              <option value="">Sales temsilcisi seç</option>
-              {salesUsers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.email})
-                </option>
-              ))}
-            </select>
+            <input
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              placeholder="Website"
+            />
+            <input
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              placeholder="Kaynak"
+            />
+
+            {isSales ? (
+              <input value={me?.name || ""} disabled placeholder="Sales" />
+            ) : (
+              <select
+                value={assignedSalesId}
+                onChange={(e) => setAssignedSalesId(e.target.value)}
+              >
+                <option value="">Sales temsilcisi seç</option>
+                {salesUsers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.email})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <textarea
@@ -239,7 +308,9 @@ export default function AgenciesPage() {
             placeholder="Özet not"
           />
 
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <div
+            style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}
+          >
             <button onClick={() => setShowCreate(false)}>Vazgeç</button>
             <button
               className="primary"
@@ -266,7 +337,10 @@ export default function AgenciesPage() {
             placeholder="Ajans, yetkili, telefon, şehir ara..."
           />
 
-          <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as any)}
+          >
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {s === "ALL" ? "Tüm Durumlar" : s}
@@ -274,13 +348,19 @@ export default function AgenciesPage() {
             ))}
           </select>
 
-          <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+          <select
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value))}
+          >
             <option value={20}>20 / sayfa</option>
             <option value={50}>50 / sayfa</option>
             <option value={100}>100 / sayfa</option>
           </select>
 
-          <button onClick={() => load(1, status, q, pageSize)} disabled={loading}>
+          <button
+            onClick={() => load(1, status, q, pageSize)}
+            disabled={loading}
+          >
             Ara / Yenile
           </button>
         </div>
@@ -321,7 +401,9 @@ export default function AgenciesPage() {
                     <a href={`/agencies/${a.id}`} style={{ fontWeight: 900 }}>
                       {a.name}
                     </a>
-                    <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
+                    <div
+                      style={{ color: "var(--text-secondary)", fontSize: 12 }}
+                    >
                       {a.contactName || "-"}
                     </div>
                   </div>
@@ -330,7 +412,11 @@ export default function AgenciesPage() {
                 <td>
                   <div style={{ display: "grid", gap: 4 }}>
                     <div>{a.phone || "-"}</div>
-                    <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>{a.email || "-"}</div>
+                    <div
+                      style={{ color: "var(--text-secondary)", fontSize: 12 }}
+                    >
+                      {a.email || "-"}
+                    </div>
                     <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
                       {[a.city, a.country].filter(Boolean).join(", ") || "-"}
                     </div>
@@ -346,14 +432,23 @@ export default function AgenciesPage() {
                 </td>
 
                 <td>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      fontSize: 12,
+                    }}
+                  >
                     <span>Not: {a._count?.notes ?? 0}</span>
                     <span>Toplantı: {a._count?.meetings ?? 0}</span>
                     <span>Görev: {a._count?.tasks ?? 0}</span>
                   </div>
                 </td>
 
-                <td>{a.updatedAt ? new Date(a.updatedAt).toLocaleString() : "-"}</td>
+                <td>
+                  {a.updatedAt ? new Date(a.updatedAt).toLocaleString() : "-"}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -385,7 +480,9 @@ export default function AgenciesPage() {
             </span>
 
             <button
-              onClick={() => load(Math.min(totalPages, page + 1), status, q, pageSize)}
+              onClick={() =>
+                load(Math.min(totalPages, page + 1), status, q, pageSize)
+              }
               disabled={page >= totalPages || loading}
             >
               Sonraki
