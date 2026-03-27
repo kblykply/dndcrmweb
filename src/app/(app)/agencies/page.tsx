@@ -59,6 +59,7 @@ export default function AgenciesPage() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
@@ -85,6 +86,7 @@ export default function AgenciesPage() {
   const isSales = role === "SALES";
   const canCreate =
     role === "MANAGER" || role === "ADMIN" || role === "SALES";
+  const canDelete = role === "MANAGER" || role === "ADMIN";
 
   async function load(
     nextPage = page,
@@ -166,6 +168,31 @@ export default function AgenciesPage() {
       setErr(String(e?.message || e));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteAgency(id: string, agencyName: string) {
+    const ok = window.confirm(
+      `"${agencyName}" ajansını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+    );
+    if (!ok) return;
+
+    setErr(null);
+    setDeletingId(id);
+    try {
+      await authedFetch(`/agencies/${id}`, {
+        method: "DELETE",
+      });
+
+      if (items.length === 1 && page > 1) {
+        await load(page - 1, status, q, pageSize);
+      } else {
+        await load(page, status, q, pageSize);
+      }
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -390,6 +417,7 @@ export default function AgenciesPage() {
               <th>DURUM</th>
               <th>NOT / TOPLANTI / GÖREV</th>
               <th>GÜNCELLEME</th>
+              {canDelete ? <th>İŞLEMLER</th> : null}
             </tr>
           </thead>
 
@@ -449,6 +477,18 @@ export default function AgenciesPage() {
                 <td>
                   {a.updatedAt ? new Date(a.updatedAt).toLocaleString() : "-"}
                 </td>
+
+                {canDelete ? (
+                  <td>
+                    <button
+                      className="danger"
+                      onClick={() => deleteAgency(a.id, a.name)}
+                      disabled={deletingId === a.id}
+                    >
+                      {deletingId === a.id ? "Siliniyor..." : "Sil"}
+                    </button>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>

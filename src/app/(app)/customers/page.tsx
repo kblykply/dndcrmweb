@@ -29,7 +29,11 @@ type CustomerRow = {
   };
 };
 
-const TYPE_OPTIONS: Array<"ALL" | CustomerType> = ["ALL", "POTENTIAL", "EXISTING"];
+const TYPE_OPTIONS: Array<"ALL" | CustomerType> = [
+  "ALL",
+  "POTENTIAL",
+  "EXISTING",
+];
 
 function badgeClass(type?: string) {
   if (type === "EXISTING") return "success";
@@ -46,6 +50,7 @@ export default function CustomersPage() {
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
@@ -66,11 +71,10 @@ export default function CustomersPage() {
   const [agencyId, setAgencyId] = useState("");
 
   const role = me?.role as string | undefined;
-  console.log("CUSTOMERS PAGE ROLE:", role, me);
+  const canCreate =
+    role === "MANAGER" || role === "ADMIN" || role === "SALES";
+  const canDelete = role === "MANAGER" || role === "ADMIN";
 
-
-const canCreate =
-  role === "MANAGER" || role === "ADMIN" || role === "SALES";
   async function load() {
     setErr(null);
     setLoading(true);
@@ -95,53 +99,71 @@ const canCreate =
   }
 
   async function createCustomer() {
-  console.log("createCustomer clicked");
-  setErr(null);
-  setSaving(true);
+    setErr(null);
+    setSaving(true);
 
-  try {
-    const payload = {
-      fullName: fullName.trim(),
-      companyName: companyName.trim() || undefined,
-      phone: phone.trim() || undefined,
-      email: email.trim() || undefined,
-      city: city.trim() || undefined,
-      country: country.trim() || undefined,
-      address: address.trim() || undefined,
-      source: source.trim() || undefined,
-      notesSummary: notesSummary.trim() || undefined,
-      type,
-      agencyId: agencyId || null,
-    };
+    try {
+      const payload = {
+        fullName: fullName.trim(),
+        companyName: companyName.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        city: city.trim() || undefined,
+        country: country.trim() || undefined,
+        address: address.trim() || undefined,
+        source: source.trim() || undefined,
+        notesSummary: notesSummary.trim() || undefined,
+        type,
+        agencyId: agencyId || null,
+      };
 
-    console.log("createCustomer payload:", payload);
+      await authedFetch("/customers", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
 
-    await authedFetch("/customers", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+      setFullName("");
+      setCompanyName("");
+      setPhone("");
+      setEmail("");
+      setCity("");
+      setCountry("");
+      setAddress("");
+      setSource("");
+      setNotesSummary("");
+      setType("POTENTIAL");
+      setAgencyId("");
+      setShowCreate(false);
 
-    setFullName("");
-    setCompanyName("");
-    setPhone("");
-    setEmail("");
-    setCity("");
-    setCountry("");
-    setAddress("");
-    setSource("");
-    setNotesSummary("");
-    setType("POTENTIAL");
-    setAgencyId("");
-    setShowCreate(false);
-
-    await load();
-  } catch (e: any) {
-    console.error("createCustomer error:", e);
-    setErr(String(e?.message || e));
-  } finally {
-    setSaving(false);
+      await load();
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setSaving(false);
+    }
   }
-}
+
+  async function deleteCustomer(id: string, name: string) {
+    const ok = window.confirm(
+      `"${name}" müşterisini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+    );
+    if (!ok) return;
+
+    setErr(null);
+    setDeletingId(id);
+
+    try {
+      await authedFetch(`/customers/${id}`, {
+        method: "DELETE",
+      });
+
+      await load();
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   useEffect(() => {
     setMounted(true);
@@ -173,10 +195,13 @@ const canCreate =
     <div style={{ display: "grid", gap: 14 }}>
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Sunum & Müşteri Yönetimi</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+            Sunum & Müşteri Yönetimi
+          </div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>Müşteriler</div>
           <div className="muted" style={{ fontSize: 13 }}>
-            Potansiyel ve mevcut müşteriler, sunum geçmişiyle birlikte burada tutulur
+            Potansiyel ve mevcut müşteriler, sunum geçmişiyle birlikte burada
+            tutulur
           </div>
         </div>
 
@@ -186,7 +211,10 @@ const canCreate =
           </button>
 
           {canCreate ? (
-            <button className="primary" onClick={() => setShowCreate((v) => !v)}>
+            <button
+              className="primary"
+              onClick={() => setShowCreate((v) => !v)}
+            >
               {showCreate ? "Kapat" : "Yeni Müşteri"}
             </button>
           ) : null}
@@ -204,23 +232,61 @@ const canCreate =
               gap: 10,
             }}
           >
-            <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Ad Soyad" />
-            <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Şirket / Kurum" />
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefon" />
+            <input
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Ad Soyad"
+            />
+            <input
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="Şirket / Kurum"
+            />
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Telefon"
+            />
 
-            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-posta" />
-            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Şehir" />
-            <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Ülke" />
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="E-posta"
+            />
+            <input
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder="Şehir"
+            />
+            <input
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              placeholder="Ülke"
+            />
 
-            <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Adres" />
-            <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Kaynak" />
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Adres"
+            />
+            <input
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              placeholder="Kaynak"
+            />
 
-            <select value={type} onChange={(e) => setType(e.target.value as CustomerType)}>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as CustomerType)}
+            >
               <option value="POTENTIAL">POTENTIAL</option>
               <option value="EXISTING">EXISTING</option>
             </select>
 
-            <select value={agencyId} onChange={(e) => setAgencyId(e.target.value)}>
+            <select
+              value={agencyId}
+              onChange={(e) => setAgencyId(e.target.value)}
+            >
               <option value="">Ajans seç</option>
               {agencies.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -238,7 +304,11 @@ const canCreate =
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
             <button onClick={() => setShowCreate(false)}>Vazgeç</button>
-            <button className="primary" onClick={createCustomer} disabled={saving || !fullName.trim()}>
+            <button
+              className="primary"
+              onClick={createCustomer}
+              disabled={saving || !fullName.trim()}
+            >
               {saving ? "Kaydediliyor..." : "Müşteri Oluştur"}
             </button>
           </div>
@@ -259,7 +329,10 @@ const canCreate =
             placeholder="Müşteri, telefon, e-posta, ajans ara..."
           />
 
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as any)}>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value as any)}
+          >
             {TYPE_OPTIONS.map((t) => (
               <option key={t} value={t}>
                 {t === "ALL" ? "Tüm Tipler" : t}
@@ -297,6 +370,7 @@ const canCreate =
               <th>TİP</th>
               <th>SUNUM SAYISI</th>
               <th>GÜNCELLEME</th>
+              {canDelete ? <th>İŞLEMLER</th> : null}
             </tr>
           </thead>
 
@@ -308,7 +382,9 @@ const canCreate =
                     <a href={`/customers/${c.id}`} style={{ fontWeight: 900 }}>
                       {c.fullName}
                     </a>
-                    <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
+                    <div
+                      style={{ color: "var(--text-secondary)", fontSize: 12 }}
+                    >
                       {c.companyName || "-"}
                     </div>
                   </div>
@@ -317,7 +393,11 @@ const canCreate =
                 <td>
                   <div style={{ display: "grid", gap: 4 }}>
                     <div>{c.phone || "-"}</div>
-                    <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>{c.email || "-"}</div>
+                    <div
+                      style={{ color: "var(--text-secondary)", fontSize: 12 }}
+                    >
+                      {c.email || "-"}
+                    </div>
                     <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
                       {[c.city, c.country].filter(Boolean).join(", ") || "-"}
                     </div>
@@ -327,12 +407,28 @@ const canCreate =
                 <td>{c.agency?.name || "-"}</td>
 
                 <td>
-                  <span className={`badge ${badgeClass(c.type)}`}>{c.type || "-"}</span>
+                  <span className={`badge ${badgeClass(c.type)}`}>
+                    {c.type || "-"}
+                  </span>
                 </td>
 
                 <td>{c._count?.presentations ?? 0}</td>
 
-                <td>{c.updatedAt ? new Date(c.updatedAt).toLocaleString() : "-"}</td>
+                <td>
+                  {c.updatedAt ? new Date(c.updatedAt).toLocaleString() : "-"}
+                </td>
+
+                {canDelete ? (
+                  <td>
+                    <button
+                      className="danger"
+                      onClick={() => deleteCustomer(c.id, c.fullName)}
+                      disabled={deletingId === c.id}
+                    >
+                      {deletingId === c.id ? "Siliniyor..." : "Sil"}
+                    </button>
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>
@@ -346,4 +442,4 @@ const canCreate =
       </div>
     </div>
   );
-} 
+}
