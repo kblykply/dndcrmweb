@@ -206,6 +206,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               Leadler
             </Link>
 
+            <Link href="/calendar" style={navItemStyle(pathname.startsWith("/calendar"))}>
+  <UsersIcon />
+  Takvim
+</Link>
+
+
             {mounted && canSeeCRM ? (
               <Link href="/customers" style={navItemStyle(pathname.startsWith("/customers"))}>
                 <UsersIcon />
@@ -221,18 +227,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             ) : null}
 
             {mounted && isManager ? (
+
+
+              <>
+
               <Link href="/manager/queue" style={navItemStyle(pathname.startsWith("/manager"))}>
                 <ManagerIcon />
                 Yönetici Kuyruğu
               </Link>
+
+  <Link href="/admin" style={navItemStyle(pathname === "/admin")}>
+                  <AdminIcon />
+                  Admin Panel
+                </Link>
+
+
+
+              </>
+
+
+
+
             ) : null}
 
             {mounted && isAdmin ? (
               <>
-                <Link href="/admin" style={navItemStyle(pathname === "/admin")}>
-                  <AdminIcon />
-                  Admin Panel
-                </Link>
+              
 
                 <Link href="/admin/users" style={navItemStyle(pathname.startsWith("/admin/users"))}>
                   <UsersIcon />

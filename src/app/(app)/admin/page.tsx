@@ -207,7 +207,9 @@ export default function AdminPage() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const isAdmin = me?.role === "ADMIN";
+  const role = me?.role as string | undefined;
+  const canSeeDashboard = role === "ADMIN" || role === "MANAGER";
+  const isManagerView = role === "MANAGER";
 
   async function load() {
     setErr(null);
@@ -322,11 +324,13 @@ export default function AdminPage() {
 
   if (!mounted) return <div>Yükleniyor…</div>;
 
-  if (!isAdmin) {
+  if (!canSeeDashboard) {
     return (
       <div className="card">
         <div style={{ fontWeight: 900, marginBottom: 8 }}>Yetkisiz Erişim</div>
-        <div className="muted">Bu sayfa yalnızca ADMIN kullanıcılar içindir.</div>
+        <div className="muted">
+          Bu sayfayı yalnızca ADMIN ve MANAGER kullanıcıları görebilir.
+        </div>
       </div>
     );
   }
@@ -339,7 +343,9 @@ export default function AdminPage() {
     <div style={{ display: "grid", gap: 16 }}>
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Admin</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+            {isManagerView ? "Manager" : "Admin"}
+          </div>
           <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: "-0.02em" }}>
             CRM Dashboard
           </div>
@@ -463,8 +469,18 @@ export default function AdminPage() {
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="var(--stroke)" strokeDasharray="3 3" />
-              <XAxis dataKey="shortDate" stroke="var(--text-muted)" tickLine={false} axisLine={false} />
-              <YAxis stroke="var(--text-muted)" tickLine={false} axisLine={false} allowDecimals={false} />
+              <XAxis
+                dataKey="shortDate"
+                stroke="var(--text-muted)"
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                stroke="var(--text-muted)"
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+              />
               <Tooltip
                 contentStyle={{
                   background: "var(--surface)",
@@ -532,8 +548,18 @@ export default function AdminPage() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={callsTrend}>
               <CartesianGrid stroke="var(--stroke)" strokeDasharray="3 3" />
-              <XAxis dataKey="shortDate" stroke="var(--text-muted)" tickLine={false} axisLine={false} />
-              <YAxis stroke="var(--text-muted)" tickLine={false} axisLine={false} allowDecimals={false} />
+              <XAxis
+                dataKey="shortDate"
+                stroke="var(--text-muted)"
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                stroke="var(--text-muted)"
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+              />
               <Tooltip
                 contentStyle={{
                   background: "var(--surface)",
@@ -574,8 +600,18 @@ export default function AdminPage() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={pipelineBarData}>
               <CartesianGrid stroke="var(--stroke)" strokeDasharray="3 3" />
-              <XAxis dataKey="name" stroke="var(--text-muted)" tickLine={false} axisLine={false} />
-              <YAxis stroke="var(--text-muted)" tickLine={false} axisLine={false} allowDecimals={false} />
+              <XAxis
+                dataKey="name"
+                stroke="var(--text-muted)"
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                stroke="var(--text-muted)"
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+              />
               <Tooltip
                 contentStyle={{
                   background: "var(--surface)",
