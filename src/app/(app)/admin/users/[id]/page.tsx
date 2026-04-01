@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type Role = "ADMIN" | "CALLCENTER" | "MANAGER" | "SALES";
 
@@ -20,44 +21,60 @@ type UserRow = {
 
 const ROLES: Role[] = ["ADMIN", "CALLCENTER", "MANAGER", "SALES"];
 
-function normalizeErrorMessage(input: unknown) {
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null,
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
+function normalizeErrorMessage(
+  input: unknown,
+  t: (path: string) => string,
+) {
   const text = String(input || "");
 
   if (text.includes("You cannot delete your own account")) {
-    return "Kendi hesabınızı silemezsiniz.";
+    return t("adminUserDetail.errors.cannotDeleteSelf");
   }
   if (text.includes("You cannot force delete your own account")) {
-    return "Kendi hesabınızı zorla silemezsiniz.";
+    return t("adminUserDetail.errors.cannotForceDeleteSelf");
   }
   if (text.includes("User not found")) {
-    return "Kullanıcı bulunamadı.";
+    return t("adminUserDetail.errors.userNotFound");
   }
   if (text.includes("Another user already uses this email")) {
-    return "Bu e-posta adresi başka bir kullanıcı tarafından kullanılıyor.";
+    return t("adminUserDetail.errors.emailAlreadyUsed");
   }
   if (text.includes("Password must be at least 8 characters")) {
-    return "Şifre en az 8 karakter olmalıdır.";
+    return t("adminUserDetail.errors.passwordMin");
   }
   if (text.includes("Selected manager not found or inactive")) {
-    return "Seçilen yönetici bulunamadı veya pasif durumda.";
+    return t("adminUserDetail.errors.managerNotFound");
   }
   if (text.includes("managerId must belong to a MANAGER or ADMIN")) {
-    return "Seçilen yönetici MANAGER veya ADMIN rolünde olmalıdır.";
+    return t("adminUserDetail.errors.managerRoleInvalid");
   }
   if (text.includes("This user still has related business records")) {
-    return "Bu kullanıcıya ait ilişkili CRM kayıtları bulunduğu için silinemez. Önce bağlı kayıtlar temizlenmeli veya kullanıcı pasife alınmalıdır.";
+    return t("adminUserDetail.errors.relatedRecords");
   }
   if (text.includes("Force delete is only allowed for test users")) {
-    return "Zorla silme yalnızca test kullanıcıları için kullanılabilir.";
+    return t("adminUserDetail.errors.forceDeleteOnlyTest");
   }
   if (text.includes("Unauthorized")) {
-    return "Oturum süreniz dolmuş olabilir. Lütfen tekrar giriş yapın.";
+    return t("adminUserDetail.errors.unauthorized");
   }
 
   return text;
 }
 
-function formatDeleteBlockers(raw: string) {
+function formatDeleteBlockers(
+  raw: string,
+  t: (path: string) => string,
+) {
   try {
     const parsed = JSON.parse(raw);
     const payload = parsed?.message ?? parsed;
@@ -66,29 +83,31 @@ function formatDeleteBlockers(raw: string) {
       const b = payload.blockers;
 
       return [
-        "Bu kullanıcı silinemiyor. Bağlı kayıtlar bulundu:",
+        t("adminUserDetail.deleteBlockers.title"),
         "",
-        `• Call Center Lead: ${b.callcenterLeads ?? 0}`,
-        `• Manager Lead: ${b.managedLeads ?? 0}`,
-        `• Sales Lead: ${b.salesLeads ?? 0}`,
-        `• Aktivite: ${b.activities ?? 0}`,
-        `• Oluşturduğu Görev: ${b.tasksCreated ?? 0}`,
-        `• Atanan Görev: ${b.tasksAssigned ?? 0}`,
-        `• Audit Log: ${b.audits ?? 0}`,
-        `• Stage Change: ${b.stageChanges ?? 0}`,
-        `• Alt Kullanıcı (reps): ${b.reps ?? 0}`,
+        `• ${t("adminUserDetail.deleteBlockers.callcenterLeads")}: ${b.callcenterLeads ?? 0}`,
+        `• ${t("adminUserDetail.deleteBlockers.managedLeads")}: ${b.managedLeads ?? 0}`,
+        `• ${t("adminUserDetail.deleteBlockers.salesLeads")}: ${b.salesLeads ?? 0}`,
+        `• ${t("adminUserDetail.deleteBlockers.activities")}: ${b.activities ?? 0}`,
+        `• ${t("adminUserDetail.deleteBlockers.tasksCreated")}: ${b.tasksCreated ?? 0}`,
+        `• ${t("adminUserDetail.deleteBlockers.tasksAssigned")}: ${b.tasksAssigned ?? 0}`,
+        `• ${t("adminUserDetail.deleteBlockers.audits")}: ${b.audits ?? 0}`,
+        `• ${t("adminUserDetail.deleteBlockers.stageChanges")}: ${b.stageChanges ?? 0}`,
+        `• ${t("adminUserDetail.deleteBlockers.reps")}: ${b.reps ?? 0}`,
         "",
-        "Önce bu kayıtları temizleyin veya kullanıcıyı pasife alın.",
+        t("adminUserDetail.deleteBlockers.footer"),
       ].join("\n");
     }
   } catch {
     // ignore
   }
 
-  return normalizeErrorMessage(raw);
+  return normalizeErrorMessage(raw, t);
 }
 
 export default function AdminUserDetailPage() {
+  const { t, locale } = useLanguage();
+
   const params = useParams();
   const rawId = (params as any)?.id as string | string[] | undefined;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -117,7 +136,7 @@ export default function AdminUserDetailPage() {
 
   async function load() {
     if (!id) {
-      setErr("Kullanıcı ID bulunamadı.");
+      setErr(t("adminUserDetail.errors.missingUserId"));
       setLoading(false);
       return;
     }
@@ -145,7 +164,7 @@ export default function AdminUserDetailPage() {
       setManagers(managerList);
     } catch (e: any) {
       setUser(null);
-      setErr(normalizeErrorMessage(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, t));
     } finally {
       setLoading(false);
     }
@@ -171,9 +190,9 @@ export default function AdminUserDetailPage() {
 
       setPassword("");
       await load();
-      alert("Kullanıcı güncellendi.");
+      alert(t("adminUserDetail.alerts.updated"));
     } catch (e: any) {
-      setErr(normalizeErrorMessage(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, t));
     } finally {
       setSaving(false);
     }
@@ -181,7 +200,7 @@ export default function AdminUserDetailPage() {
 
   async function deactivateUser() {
     if (!user) return;
-    if (!confirm("Bu kullanıcı pasif hale getirilsin mi?")) return;
+    if (!confirm(t("adminUserDetail.confirmDeactivate"))) return;
 
     setErr(null);
     setSaving(true);
@@ -190,9 +209,9 @@ export default function AdminUserDetailPage() {
         method: "PATCH",
       });
       await load();
-      alert("Kullanıcı pasif hale getirildi.");
+      alert(t("adminUserDetail.alerts.deactivated"));
     } catch (e: any) {
-      setErr(normalizeErrorMessage(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, t));
     } finally {
       setSaving(false);
     }
@@ -200,7 +219,7 @@ export default function AdminUserDetailPage() {
 
   async function deleteUser() {
     if (!user) return;
-    if (!confirm("Bu kullanıcı kalıcı olarak silinsin mi? Bu işlem geri alınamaz.")) return;
+    if (!confirm(t("adminUserDetail.confirmDelete"))) return;
 
     setErr(null);
     setDeleting(true);
@@ -209,10 +228,10 @@ export default function AdminUserDetailPage() {
         method: "DELETE",
       });
 
-      alert("Kullanıcı silindi.");
+      alert(t("adminUserDetail.alerts.deleted"));
       window.location.href = "/admin/users";
     } catch (e: any) {
-      setErr(formatDeleteBlockers(String(e?.message || e)));
+      setErr(formatDeleteBlockers(String(e?.message || e), t));
     } finally {
       setDeleting(false);
     }
@@ -221,9 +240,7 @@ export default function AdminUserDetailPage() {
   async function forceDeleteUser() {
     if (!user) return;
 
-    const ok = confirm(
-      "Bu işlem test kullanıcıyı zorla silecektir. İlişkili görev, aktivite, audit ve atama kayıtları da temizlenebilir. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?"
-    );
+    const ok = confirm(t("adminUserDetail.confirmForceDelete"));
     if (!ok) return;
 
     setErr(null);
@@ -233,10 +250,10 @@ export default function AdminUserDetailPage() {
         method: "DELETE",
       });
 
-      alert("Kullanıcı zorla silindi.");
+      alert(t("adminUserDetail.alerts.forceDeleted"));
       window.location.href = "/admin/users";
     } catch (e: any) {
-      setErr(normalizeErrorMessage(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, t));
     } finally {
       setForceDeleting(false);
     }
@@ -255,26 +272,30 @@ export default function AdminUserDetailPage() {
 
   const managerRequired = useMemo(() => role === "SALES", [role]);
 
-  if (!mounted) return <div>Yükleniyor…</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   if (!isAdmin) {
     return (
       <div className="card">
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Yetkisiz Erişim</div>
-        <div className="muted">Bu sayfayı görüntülemek için ADMIN olmalısınız.</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>
+          {t("admin.unauthorizedTitle")}
+        </div>
+        <div className="muted">{t("adminUsers.unauthorizedText")}</div>
       </div>
     );
   }
 
   if (loading) {
-    return <div className="card">Kullanıcı yükleniyor…</div>;
+    return <div className="card">{t("adminUserDetail.loading")}</div>;
   }
 
   if (!user) {
     return (
       <div className="card">
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Kullanıcı Bulunamadı</div>
-        <div className="muted">{err || "Böyle bir kullanıcı yok."}</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>
+          {t("adminUserDetail.notFoundTitle")}
+        </div>
+        <div className="muted">{err || t("adminUserDetail.notFoundText")}</div>
       </div>
     );
   }
@@ -283,23 +304,32 @@ export default function AdminUserDetailPage() {
     <div style={{ display: "grid", gap: 14 }}>
       <div className="flex-between">
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
+          >
             <a href="/admin/users" style={{ fontWeight: 800 }}>
-              ← Kullanıcılara Dön
+              ← {t("adminUserDetail.backToUsers")}
             </a>
           </div>
 
           <div style={{ fontSize: 24, fontWeight: 900 }}>{user.name}</div>
           <div className="muted">
-            Oluşturulma: {user.createdAt ? new Date(user.createdAt).toLocaleString() : "-"}
+            {t("adminUserDetail.createdAt")}:{" "}
+            {user.createdAt
+              ? new Date(user.createdAt).toLocaleString(
+                  locale === "tr" ? "tr-TR" : "en-US"
+                )
+              : "-"}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <span className={`badge ${user.isActive ? "success" : "danger"}`}>
-            {user.isActive ? "Aktif" : "Pasif"}
+            {user.isActive ? t("adminUsers.active") : t("adminUsers.passive")}
           </span>
-          <span className="badge">{user.role}</span>
+          <span className="badge">
+            {safeTranslate(t, `roles.${user.role}`, user.role)}
+          </span>
         </div>
       </div>
 
@@ -317,7 +347,7 @@ export default function AdminUserDetailPage() {
       ) : null}
 
       <div className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 900 }}>Kullanıcı Bilgileri</div>
+        <div style={{ fontWeight: 900 }}>{t("adminUserDetail.userInfoTitle")}</div>
 
         <div
           style={{
@@ -327,44 +357,54 @@ export default function AdminUserDetailPage() {
           }}
         >
           <label style={{ display: "grid", gap: 6 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Ad Soyad</span>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {t("adminUsers.fields.name")}
+            </span>
             <input value={name} onChange={(e) => setName(e.target.value)} />
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
-            <span className="muted" style={{ fontSize: 12 }}>E-posta</span>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {t("adminUsers.fields.email")}
+            </span>
             <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Yeni Şifre</span>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {t("adminUserDetail.newPassword")}
+            </span>
             <input
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               type="password"
-              placeholder="Boş bırakırsanız değişmez"
+              placeholder={t("adminUserDetail.passwordPlaceholder")}
             />
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Rol</span>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {t("adminUsers.table.role")}
+            </span>
             <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
               {ROLES.map((r) => (
                 <option key={r} value={r}>
-                  {r}
+                  {safeTranslate(t, `roles.${r}`, r)}
                 </option>
               ))}
             </select>
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Yönetici</span>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {t("adminUserDetail.manager")}
+            </span>
             <select
               value={managerId}
               onChange={(e) => setManagerId(e.target.value)}
               disabled={!managerRequired}
             >
-              <option value="">Yönetici seç</option>
+              <option value="">{t("adminUsers.fields.selectManager")}</option>
               {managers.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({m.email})
@@ -374,19 +414,28 @@ export default function AdminUserDetailPage() {
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
-            <span className="muted" style={{ fontSize: 12 }}>Durum</span>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {t("adminUsers.table.status")}
+            </span>
             <select
               value={isActive ? "true" : "false"}
               onChange={(e) => setIsActive(e.target.value === "true")}
             >
-              <option value="true">Aktif</option>
-              <option value="false">Pasif</option>
+              <option value="true">{t("adminUsers.active")}</option>
+              <option value="false">{t("adminUsers.passive")}</option>
             </select>
           </label>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={load}>Sıfırla</button>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <button onClick={load}>{t("common.reset")}</button>
           <button
             className="primary"
             onClick={saveUser}
@@ -397,21 +446,21 @@ export default function AdminUserDetailPage() {
               (managerRequired && !managerId)
             }
           >
-            {saving ? "Kaydediliyor..." : "Kaydet"}
+            {saving ? t("common.saving") : t("common.save")}
           </button>
         </div>
       </div>
 
       <div className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 900 }}>Tehlikeli İşlemler</div>
+        <div style={{ fontWeight: 900 }}>{t("adminUserDetail.dangerZoneTitle")}</div>
 
         <div className="muted" style={{ fontSize: 13 }}>
-          Gerçek kullanıcılar için önce <b>Pasife Al</b> kullanmanız önerilir. Silme işlemi kalıcıdır.
+          {t("adminUserDetail.dangerZoneText")}
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={deactivateUser} disabled={saving || !user.isActive}>
-            Pasife Al
+            {t("adminUsers.deactivate")}
           </button>
 
           <button
@@ -419,7 +468,7 @@ export default function AdminUserDetailPage() {
             onClick={deleteUser}
             disabled={deleting || forceDeleting || isSelf}
           >
-            {deleting ? "Siliniyor..." : "Kullanıcıyı Sil"}
+            {deleting ? t("common.deleting") : t("adminUserDetail.deleteUser")}
           </button>
 
           <button
@@ -435,13 +484,15 @@ export default function AdminUserDetailPage() {
               fontWeight: 700,
             }}
           >
-            {forceDeleting ? "İşleniyor..." : "Test Kullanıcıyı Zorla Sil"}
+            {forceDeleting
+              ? t("adminUserDetail.processing")
+              : t("adminUserDetail.forceDeleteTestUser")}
           </button>
         </div>
 
         {isSelf ? (
           <div className="muted" style={{ fontSize: 12 }}>
-            Kendi hesabınızı silemezsiniz.
+            {t("adminUserDetail.errors.cannotDeleteSelf")}
           </div>
         ) : null}
       </div>

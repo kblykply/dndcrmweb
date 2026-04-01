@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -31,13 +32,8 @@ type CalendarItem = {
   meta?: Record<string, any>;
 };
 
-function typeLabel(type: string) {
-  if (type === "LEAD_FOLLOWUP") return "Lead Takibi";
-  if (type === "LEAD_CALL") return "Lead Araması";
-  if (type === "AGENCY_MEETING") return "Ajans Toplantısı";
-  if (type === "AGENCY_TASK") return "Ajans Görevi";
-  if (type === "PRESENTATION") return "Sunum";
-  return type;
+function typeLabel(type: string, t: (path: string) => string) {
+  return t(`eventTypes.${type}`);
 }
 
 function typeColor(type: string) {
@@ -58,12 +54,214 @@ function badgeClass(type: string) {
   return "";
 }
 
-function formatDateTime(date?: string | null) {
+function formatDateTime(date: string | null | undefined, locale: "tr" | "en") {
   if (!date) return "-";
-  return new Date(date).toLocaleString();
+  return new Date(date).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
+}
+
+function formatTime(date: string | null | undefined, locale: "tr" | "en") {
+  if (!date) return "-";
+  return new Date(date).toLocaleTimeString(locale === "tr" ? "tr-TR" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDay(date: string | null | undefined, locale: "tr" | "en") {
+  if (!date) return "-";
+  return new Date(date).toLocaleDateString(locale === "tr" ? "tr-TR" : "en-US", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
+function SummaryListCard({
+  title,
+  items,
+  loading,
+  onSelect,
+  t,
+  locale,
+}: {
+  title: string;
+  items: CalendarItem[];
+  loading: boolean;
+  onSelect: (item: CalendarItem) => void;
+  t: (path: string) => string;
+  locale: "tr" | "en";
+}) {
+  return (
+    <div className="card" style={{ display: "grid", gap: 14, padding: 18 }}>
+      <div style={{ fontWeight: 900, fontSize: 16 }}>{title}</div>
+
+      {loading ? (
+        <div className="muted">{t("common.loading")}</div>
+      ) : items.length === 0 ? (
+        <div className="muted">{t("common.noRecords")}</div>
+      ) : (
+        <div style={{ display: "grid", gap: 12 }}>
+          {items.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => onSelect(item)}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "100px 1fr",
+                gap: 14,
+                textAlign: "left",
+                padding: 0,
+                borderRadius: 20,
+                border: "1px solid var(--stroke)",
+                background: "var(--surface)",
+                cursor: "pointer",
+                overflow: "hidden",
+                alignItems: "stretch",
+              }}
+            >
+              <div
+                style={{
+                  background: "var(--surface-2)",
+                  borderRight: "1px solid var(--stroke)",
+                  padding: "16px 12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  minHeight: "100%",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    lineHeight: 1.3,
+                    color: "var(--text-muted)",
+                    fontWeight: 700,
+                  }}
+                >
+                  {formatDay(item.start, locale)}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 900,
+                    color: "var(--text-primary)",
+                    marginTop: 10,
+                  }}
+                >
+                  {formatTime(item.start, locale)}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: 14,
+                  display: "grid",
+                  gap: 10,
+                  minWidth: 0,
+                  alignContent: "start",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        fontSize: 14,
+                        color: "var(--text-primary)",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {item.title}
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: "var(--text-secondary)",
+                        marginTop: 2,
+                      }}
+                    >
+                      {item.entityLabel}
+                      {item.subtitle ? ` • ${item.subtitle}` : ""}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 6,
+                      flexWrap: "wrap",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <span className={`badge ${badgeClass(item.type)}`}>
+                      {typeLabel(item.type, t)}
+                    </span>
+
+                    {item.status ? (
+                      <span className="badge">
+                        {safeTranslate(t, `statuses.${item.status}`, item.status)}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {item.assignedUser ? (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    {t("common.assignedTo")}: {item.assignedUser}
+                  </div>
+                ) : null}
+
+                {item.notesPreview ? (
+                  <div
+                    style={{
+                      borderTop: "1px solid var(--stroke)",
+                      paddingTop: 10,
+                      fontSize: 13,
+                      color: "var(--text-secondary)",
+                      lineHeight: 1.5,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {item.notesPreview}
+                  </div>
+                ) : null}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function CalendarPage() {
+  const { t, locale } = useLanguage();
+
   const [items, setItems] = useState<CalendarItem[]>([]);
   const [todayItems, setTodayItems] = useState<CalendarItem[]>([]);
   const [upcomingItems, setUpcomingItems] = useState<CalendarItem[]>([]);
@@ -74,6 +272,8 @@ export default function CalendarPage() {
   const [type, setType] = useState("");
   const [currentRange, setCurrentRange] = useState<{ from: string; to: string } | null>(null);
   const [selected, setSelected] = useState<CalendarItem | null>(null);
+
+  const fullCalendarLocale = locale === "tr" ? "tr" : "en";
 
   const calendarEvents = useMemo(() => {
     return items.map((item) => ({
@@ -159,13 +359,13 @@ export default function CalendarPage() {
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-            CRM Takvim
+            {t("calendar.label")}
           </div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>
-            Operasyon Takvimi
+            {t("calendar.title")}
           </div>
           <div className="muted" style={{ fontSize: 13 }}>
-            Lead takipleri, ajans toplantıları, görevler, sunumlar ve aktiviteler
+            {t("calendar.subtitle")}
           </div>
         </div>
 
@@ -175,12 +375,12 @@ export default function CalendarPage() {
             onChange={(e) => setType(e.target.value)}
             style={{ minWidth: 180 }}
           >
-            <option value="">Tüm Kayıtlar</option>
-            <option value="LEAD_FOLLOWUP">Lead Takipleri</option>
-            <option value="LEAD_CALL">Lead Aramaları</option>
-            <option value="AGENCY_MEETING">Ajans Toplantıları</option>
-            <option value="AGENCY_TASK">Ajans Görevleri</option>
-            <option value="PRESENTATION">Sunumlar</option>
+            <option value="">{t("calendar.allRecords")}</option>
+            <option value="LEAD_FOLLOWUP">{t("calendar.leadFollowups")}</option>
+            <option value="LEAD_CALL">{t("calendar.leadCalls")}</option>
+            <option value="AGENCY_MEETING">{t("calendar.agencyMeetings")}</option>
+            <option value="AGENCY_TASK">{t("calendar.agencyTasks")}</option>
+            <option value="PRESENTATION">{t("calendar.presentations")}</option>
           </select>
 
           <button
@@ -191,7 +391,7 @@ export default function CalendarPage() {
             }}
             disabled={loading || summaryLoading}
           >
-            {loading || summaryLoading ? "Yükleniyor..." : "Takvimi Yenile"}
+            {loading || summaryLoading ? t("common.loading") : t("common.refresh")}
           </button>
         </div>
       </div>
@@ -212,16 +412,16 @@ export default function CalendarPage() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: selected ? "1.5fr .7fr" : "1fr",
+          gridTemplateColumns: selected ? "1.55fr .75fr" : "1fr",
           gap: 14,
           alignItems: "start",
         }}
       >
         <div className="card" style={{ padding: 18 }}>
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 900, fontSize: 16 }}>Takvim</div>
+            <div style={{ fontWeight: 900, fontSize: 16 }}>{t("calendar.calendar")}</div>
             <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 4 }}>
-              Varsayılan görünüm haftalık takvimdir. Görünür tarih aralığı kadar veri yüklenir.
+              {t("calendar.visibleRange")}
             </div>
           </div>
 
@@ -235,7 +435,7 @@ export default function CalendarPage() {
                 right: "dayGridMonth,timeGridWeek,timeGridDay",
               }}
               height="auto"
-              locale="tr"
+              locale={fullCalendarLocale}
               firstDay={1}
               nowIndicator={true}
               editable={false}
@@ -243,6 +443,10 @@ export default function CalendarPage() {
               events={calendarEvents}
               datesSet={handleDatesSet}
               eventClick={handleEventClick}
+              slotMinTime="08:00:00"
+              slotMaxTime="22:00:00"
+              scrollTime="08:00:00"
+              slotDuration="00:30:00"
               eventTimeFormat={{
                 hour: "2-digit",
                 minute: "2-digit",
@@ -255,7 +459,7 @@ export default function CalendarPage() {
 
           {loading ? (
             <div style={{ marginTop: 12, color: "var(--text-secondary)", fontSize: 13 }}>
-              Takvim verileri yükleniyor…
+              {t("common.loading")}
             </div>
           ) : null}
         </div>
@@ -266,18 +470,22 @@ export default function CalendarPage() {
               <div style={{ display: "grid", gap: 4 }}>
                 <div style={{ fontWeight: 900, fontSize: 16 }}>{selected.title}</div>
                 <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-                  {formatDateTime(selected.start)}
+                  {formatDateTime(selected.start, locale)}
                 </div>
               </div>
 
-              <button onClick={() => setSelected(null)}>Kapat</button>
+              <button onClick={() => setSelected(null)}>{t("common.close")}</button>
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <span className={`badge ${badgeClass(selected.type)}`}>
-                {typeLabel(selected.type)}
+                {typeLabel(selected.type, t)}
               </span>
-              {selected.status ? <span className="badge">{selected.status}</span> : null}
+              {selected.status ? (
+                <span className="badge">
+                  {safeTranslate(t, `statuses.${selected.status}`, selected.status)}
+                </span>
+              ) : null}
             </div>
 
             <div
@@ -291,7 +499,7 @@ export default function CalendarPage() {
               }}
             >
               <div style={{ fontSize: 13 }}>
-                <b>Kayıt:</b> {selected.entityLabel}
+                <b>{t("calendar.record")}:</b> {selected.entityLabel}
               </div>
 
               {selected.subtitle ? (
@@ -302,7 +510,7 @@ export default function CalendarPage() {
 
               {selected.assignedUser ? (
                 <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  Sorumlu: {selected.assignedUser}
+                  {t("common.assignedTo")}: {selected.assignedUser}
                 </div>
               ) : null}
             </div>
@@ -318,8 +526,15 @@ export default function CalendarPage() {
                   gap: 8,
                 }}
               >
-                <div style={{ fontWeight: 800, fontSize: 13 }}>Not / Detay</div>
-                <div style={{ fontSize: 13, color: "var(--text-secondary)", whiteSpace: "pre-wrap" }}>
+                <div style={{ fontWeight: 800, fontSize: 13 }}>{t("calendar.notes")}</div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: "var(--text-secondary)",
+                    whiteSpace: "pre-wrap",
+                    lineHeight: 1.6,
+                  }}
+                >
                   {selected.notesPreview}
                 </div>
               </div>
@@ -327,7 +542,7 @@ export default function CalendarPage() {
 
             {selected.href ? (
               <a href={selected.href} style={{ fontWeight: 800 }}>
-                Kaydı Aç →
+                {t("common.openRecord")} →
               </a>
             ) : null}
           </div>
@@ -342,81 +557,23 @@ export default function CalendarPage() {
           alignItems: "start",
         }}
       >
-        <div className="card" style={{ display: "grid", gap: 10 }}>
-          <div style={{ fontWeight: 900, fontSize: 16 }}>Bugün Olanlar</div>
+        <SummaryListCard
+          title={t("calendar.todayEvents")}
+          items={todayItems}
+          loading={summaryLoading}
+          onSelect={setSelected}
+          t={t}
+          locale={locale}
+        />
 
-          {summaryLoading ? (
-            <div className="muted">Yükleniyor…</div>
-          ) : todayItems.length === 0 ? (
-            <div className="muted">Bugün kayıt yok.</div>
-          ) : (
-            todayItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setSelected(item)}
-                style={{
-                  border: "1px solid var(--stroke)",
-                  borderRadius: 12,
-                  padding: 10,
-                  background: "var(--surface-2)",
-                  display: "grid",
-                  gap: 6,
-                  textAlign: "left",
-                  cursor: "pointer",
-                }}
-              >
-                <div className="flex-between" style={{ gap: 8 }}>
-                  <div style={{ fontWeight: 800, fontSize: 13 }}>{item.title}</div>
-                  <span className={`badge ${badgeClass(item.type)}`}>
-                    {typeLabel(item.type)}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                  {formatDateTime(item.start)}
-                </div>
-                <div style={{ fontSize: 12 }}>{item.entityLabel}</div>
-              </button>
-            ))
-          )}
-        </div>
-
-        <div className="card" style={{ display: "grid", gap: 10 }}>
-          <div style={{ fontWeight: 900, fontSize: 16 }}>Yaklaşanlar</div>
-
-          {summaryLoading ? (
-            <div className="muted">Yükleniyor…</div>
-          ) : upcomingItems.length === 0 ? (
-            <div className="muted">Yaklaşan kayıt yok.</div>
-          ) : (
-            upcomingItems.slice(0, 20).map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setSelected(item)}
-                style={{
-                  border: "1px solid var(--stroke)",
-                  borderRadius: 12,
-                  padding: 10,
-                  background: "var(--surface-2)",
-                  display: "grid",
-                  gap: 6,
-                  textAlign: "left",
-                  cursor: "pointer",
-                }}
-              >
-                <div className="flex-between" style={{ gap: 8 }}>
-                  <div style={{ fontWeight: 800, fontSize: 13 }}>{item.title}</div>
-                  <span className={`badge ${badgeClass(item.type)}`}>
-                    {typeLabel(item.type)}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                  {formatDateTime(item.start)}
-                </div>
-                <div style={{ fontSize: 12 }}>{item.entityLabel}</div>
-              </button>
-            ))
-          )}
-        </div>
+        <SummaryListCard
+          title={t("common.upcoming")}
+          items={upcomingItems.slice(0, 20)}
+          loading={summaryLoading}
+          onSelect={setSelected}
+          t={t}
+          locale={locale}
+        />
       </div>
 
       <style jsx global>{`
@@ -428,6 +585,11 @@ export default function CalendarPage() {
         .crm-calendar .fc-theme-standard th,
         .crm-calendar .fc-theme-standard .fc-scrollgrid {
           border-color: var(--stroke);
+        }
+
+        .crm-calendar .fc-toolbar {
+          gap: 10px;
+          flex-wrap: wrap;
         }
 
         .crm-calendar .fc-toolbar-title {
@@ -458,15 +620,28 @@ export default function CalendarPage() {
           color: var(--text-primary);
         }
 
+        .crm-calendar .fc-timegrid-slot-label-cushion,
+        .crm-calendar .fc-timegrid-axis-cushion {
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+
         .crm-calendar .fc-event {
           border-radius: 10px;
-          padding: 2px 4px;
+          padding: 2px 6px;
           cursor: pointer;
           font-weight: 700;
+          box-shadow: none;
         }
 
         .crm-calendar .fc-event-title {
           font-size: 12px;
+          line-height: 1.25;
+        }
+
+        .crm-calendar .fc-event-time {
+          font-size: 11px;
+          opacity: 0.95;
         }
 
         .crm-calendar .fc-day-today {
@@ -476,6 +651,10 @@ export default function CalendarPage() {
         .crm-calendar .fc-timegrid-slot,
         .crm-calendar .fc-daygrid-day {
           background: var(--surface);
+        }
+
+        .crm-calendar .fc-timegrid-now-indicator-line {
+          border-color: #ef4444;
         }
 
         .crm-calendar .fc-popover {

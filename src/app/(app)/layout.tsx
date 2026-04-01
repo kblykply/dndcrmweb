@@ -5,7 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import TopbarUser from "../_ui/TopbarUser";
 import Notifications from "../_ui/Notifications";
+import LanguageSwitcher from "../_ui/LanguageSwitcher";
 import { getUser } from "@/lib/auth";
+import { useLanguage } from "../_ui/LanguageProvider";
 
 function LeadsIcon() {
   return (
@@ -42,9 +44,7 @@ function UsersIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M3.5 18c1-3 3.7-4.5 5.5-4.5S13.5 15 14.5 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <circle cx="17" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M15.5 17.5c.7-1.9 2.2-3 4.2-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
@@ -79,14 +79,18 @@ function navItemStyle(active: boolean): React.CSSProperties {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [mounted, setMounted] = useState(false);
+  const { t } = useLanguage();
+
   const [me, setMe] = useState<any>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [mobile, setMobile] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     setMe(getUser());
+
+    function handleResize() {
+      setMobile(window.innerWidth <= 820);
+    }
 
     function resolveTheme() {
       const attr = document.documentElement.getAttribute("data-theme");
@@ -105,12 +109,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       setTheme(prefersDark ? "dark" : "light");
     }
 
-    function handleResize() {
-      setMobile(window.innerWidth <= 820);
-    }
-
-    resolveTheme();
     handleResize();
+    resolveTheme();
 
     const observer = new MutationObserver(() => {
       const attr = document.documentElement.getAttribute("data-theme");
@@ -203,60 +203,47 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <Link href="/leads" style={navItemStyle(pathname.startsWith("/leads"))}>
               <LeadsIcon />
-              Leadler
+              {t("nav.leads")}
             </Link>
 
             <Link href="/calendar" style={navItemStyle(pathname.startsWith("/calendar"))}>
-  <UsersIcon />
-  Takvim
-</Link>
+              <UsersIcon />
+              {t("nav.calendar")}
+            </Link>
 
-
-            {mounted && canSeeCRM ? (
+            {canSeeCRM ? (
               <Link href="/customers" style={navItemStyle(pathname.startsWith("/customers"))}>
                 <UsersIcon />
-                Müşteriler
+                {t("nav.customers")}
               </Link>
             ) : null}
 
-            {mounted && canSeeCRM ? (
+            {canSeeCRM ? (
               <Link href="/agencies" style={navItemStyle(pathname.startsWith("/agencies"))}>
                 <UsersIcon />
-                Ajanslar
+                {t("nav.agencies")}
               </Link>
             ) : null}
 
-            {mounted && isManager ? (
-
-
+            {isManager ? (
               <>
-
-              <Link href="/manager/queue" style={navItemStyle(pathname.startsWith("/manager"))}>
-                <ManagerIcon />
-                Yönetici Kuyruğu
-              </Link>
-
-  <Link href="/admin" style={navItemStyle(pathname === "/admin")}>
-                  <AdminIcon />
-                  Admin Panel
+                <Link href="/manager/queue" style={navItemStyle(pathname.startsWith("/manager"))}>
+                  <ManagerIcon />
+                  {t("nav.managerQueue")}
                 </Link>
 
-
-
+                <Link href="/admin" style={navItemStyle(pathname === "/admin")}>
+                  <AdminIcon />
+                  {t("nav.admin")}
+                </Link>
               </>
-
-
-
-
             ) : null}
 
-            {mounted && isAdmin ? (
+            {isAdmin ? (
               <>
-              
-
                 <Link href="/admin/users" style={navItemStyle(pathname.startsWith("/admin/users"))}>
                   <UsersIcon />
-                  Kullanıcılar
+                  {t("nav.users")}
                 </Link>
 
                 <Link href="/admin/leads" style={navItemStyle(pathname.startsWith("/admin/leads"))}>
@@ -276,20 +263,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               borderTop: "1px solid var(--stroke)",
             }}
           >
-            <Link
-              href="/help"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 12px",
-                borderRadius: 12,
-                color: "var(--text-secondary)",
-                textDecoration: "none",
-                border: "1px solid transparent",
-              }}
-            >
-              Yardım & Destek
+            <Link href="/help" style={navItemStyle(false)}>
+              {t("nav.help")}
             </Link>
           </div>
         </aside>
@@ -324,6 +299,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               gap: 10,
             }}
           >
+            <LanguageSwitcher />
             <Notifications />
             <TopbarUser />
           </div>

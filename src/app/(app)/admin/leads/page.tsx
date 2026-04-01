@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type LeadRow = {
   id: string;
@@ -16,21 +17,36 @@ type LeadRow = {
   lastActivityAt?: string | null;
 };
 
-function normalizeDeleteError(input: unknown) {
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null,
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
+function normalizeDeleteError(
+  input: unknown,
+  t: (path: string) => string,
+) {
   const text = String(input || "");
 
   if (text.includes("Silinecek lead seçilmedi")) {
-    return "Silmek için en az bir lead seçmelisiniz.";
+    return t("adminLeads.errors.selectAtLeastOne");
   }
 
   if (text.includes("Only admin can bulk delete leads")) {
-    return "Bu işlem yalnızca ADMIN kullanıcılar tarafından yapılabilir.";
+    return t("adminLeads.errors.onlyAdmin");
   }
 
   return text;
 }
 
 export default function AdminLeadsPage() {
+  const { t, locale } = useLanguage();
+
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
 
@@ -112,9 +128,11 @@ export default function AdminLeadsPage() {
   async function bulkDelete() {
     if (selectedIds.length === 0) return;
 
-    const ok = confirm(
-      `${selectedIds.length} lead kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`
-    );
+   const ok = confirm(
+  locale === "tr"
+    ? `${selectedIds.length} lead kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?`
+    : `${selectedIds.length} leads will be permanently deleted. This action cannot be undone. Do you want to continue?`
+);
     if (!ok) return;
 
     setErr(null);
@@ -126,22 +144,28 @@ export default function AdminLeadsPage() {
         body: JSON.stringify({ ids: selectedIds }),
       });
 
-      alert(`${res.deletedCount || 0} lead silindi.`);
+   alert(
+  locale === "tr"
+    ? `${res.deletedCount || 0} lead silindi.`
+    : `${res.deletedCount || 0} leads deleted.`
+);
       await load();
     } catch (e: any) {
-      setErr(normalizeDeleteError(e?.message || e));
+      setErr(normalizeDeleteError(e?.message || e, t));
     } finally {
       setDeleting(false);
     }
   }
 
-  if (!mounted) return <div>Yükleniyor…</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   if (!isAdmin) {
     return (
       <div className="card">
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Yetkisiz Erişim</div>
-        <div className="muted">Bu sayfa yalnızca ADMIN kullanıcılar içindir.</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>
+          {t("admin.unauthorizedTitle")}
+        </div>
+        <div className="muted">{t("adminLeads.unauthorizedText")}</div>
       </div>
     );
   }
@@ -150,16 +174,20 @@ export default function AdminLeadsPage() {
     <div style={{ display: "grid", gap: 14 }}>
       <div className="flex-between">
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Admin</div>
-          <div style={{ fontSize: 24, fontWeight: 900 }}>Lead Temizliği</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+            {t("roles.ADMIN")}
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 900 }}>
+            {t("adminLeads.title")}
+          </div>
           <div className="muted" style={{ fontSize: 13 }}>
-            Test leadlerini veya eski gereksiz kayıtları toplu olarak silebilirsiniz.
+            {t("adminLeads.subtitle")}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={load} disabled={loading}>
-            {loading ? "Yenileniyor..." : "Yenile"}
+            {loading ? t("common.refreshing") : t("common.refresh")}
           </button>
 
           <button
@@ -168,8 +196,8 @@ export default function AdminLeadsPage() {
             disabled={deleting || selectedIds.length === 0}
           >
             {deleting
-              ? "Siliniyor..."
-              : `Seçilileri Sil (${selectedIds.length})`}
+              ? t("common.deleting")
+              : `${t("adminLeads.deleteSelected")} (${selectedIds.length})`}
           </button>
         </div>
       </div>
@@ -185,7 +213,7 @@ export default function AdminLeadsPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Lead ara..."
+            placeholder={t("adminLeads.searchPlaceholder")}
           />
 
           <select
@@ -194,7 +222,9 @@ export default function AdminLeadsPage() {
           >
             {statuses.map((s) => (
               <option key={s} value={s}>
-                {s === "ALL" ? "Tüm Durumlar" : s}
+                {s === "ALL"
+                  ? t("adminLeads.allStatuses")
+                  : safeTranslate(t, `leadStatuses.${s}`, s)}
               </option>
             ))}
           </select>
@@ -226,13 +256,13 @@ export default function AdminLeadsPage() {
                   onChange={toggleAllVisible}
                 />
               </th>
-              <th>AD SOYAD</th>
-              <th>TELEFON</th>
-              <th>E-POSTA</th>
-              <th>KAYNAK</th>
-              <th>DURUM</th>
-              <th>SON AKTİVİTE</th>
-              <th>OLUŞTURULMA</th>
+              <th>{t("adminLeads.table.fullName")}</th>
+              <th>{t("adminLeads.table.phone")}</th>
+              <th>{t("adminLeads.table.email")}</th>
+              <th>{t("adminLeads.table.source")}</th>
+              <th>{t("adminLeads.table.status")}</th>
+              <th>{t("adminLeads.table.lastActivity")}</th>
+              <th>{t("adminLeads.table.createdAt")}</th>
             </tr>
           </thead>
 
@@ -266,15 +296,25 @@ export default function AdminLeadsPage() {
                 <td>{l.source || "-"}</td>
 
                 <td>
-                  <span className="badge">{l.status}</span>
+                  <span className="badge">
+                    {safeTranslate(t, `leadStatuses.${l.status}`, l.status)}
+                  </span>
                 </td>
 
                 <td>
-                  {l.lastActivityAt ? new Date(l.lastActivityAt).toLocaleString() : "-"}
+                  {l.lastActivityAt
+                    ? new Date(l.lastActivityAt).toLocaleString(
+                        locale === "tr" ? "tr-TR" : "en-US"
+                      )
+                    : "-"}
                 </td>
 
                 <td>
-                  {l.createdAt ? new Date(l.createdAt).toLocaleString() : "-"}
+                  {l.createdAt
+                    ? new Date(l.createdAt).toLocaleString(
+                        locale === "tr" ? "tr-TR" : "en-US"
+                      )
+                    : "-"}
                 </td>
               </tr>
             ))}
@@ -283,7 +323,7 @@ export default function AdminLeadsPage() {
 
         {filtered.length === 0 ? (
           <div style={{ padding: 14, color: "var(--text-secondary)" }}>
-            Lead bulunamadı.
+            {t("adminLeads.noLeads")}
           </div>
         ) : null}
       </div>

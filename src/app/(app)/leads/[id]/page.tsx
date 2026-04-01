@@ -1,39 +1,57 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import LeadAvatar from "@/app/_ui/LeadAvatar";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type UserLite = { id: string; name: string; email: string; role: string };
 
 const CALL_OUTCOMES = [
-  { key: "OPENED", label: "Açıldı / Bağlandı" },
-  { key: "NO_ANSWER", label: "Cevap vermedi" },
-  { key: "BUSY", label: "Meşgul" },
-  { key: "UNREACHABLE", label: "Ulaşılamıyor / Telefon kapalı" },
-  { key: "CALL_AGAIN", label: "Tekrar ara" },
-  { key: "INTERESTED", label: "İlgilendi" },
-  { key: "NOT_INTERESTED", label: "İlgilenmiyor" },
-  { key: "QUALIFIED", label: "Nitelikli (Satışa hazır)" },
-  { key: "WON", label: "Kazanıldı" },
-  { key: "LOST", label: "Kaybedildi" },
-  { key: "WRONG_NUMBER", label: "Yanlış numara" },
+  { key: "OPENED", labelKey: "leadOutcomes.OPENED", fallback: "Opened / Connected" },
+  { key: "NO_ANSWER", labelKey: "leadOutcomes.NO_ANSWER", fallback: "No answer" },
+  { key: "BUSY", labelKey: "leadOutcomes.BUSY", fallback: "Busy" },
+  { key: "UNREACHABLE", labelKey: "leadOutcomes.UNREACHABLE", fallback: "Unreachable / Phone off" },
+  { key: "CALL_AGAIN", labelKey: "leadOutcomes.CALL_AGAIN", fallback: "Call again" },
+  { key: "INTERESTED", labelKey: "leadOutcomes.INTERESTED", fallback: "Interested" },
+  { key: "NOT_INTERESTED", labelKey: "leadOutcomes.NOT_INTERESTED", fallback: "Not interested" },
+  { key: "QUALIFIED", labelKey: "leadOutcomes.QUALIFIED", fallback: "Qualified" },
+  { key: "WON", labelKey: "leadOutcomes.WON", fallback: "Won" },
+  { key: "LOST", labelKey: "leadOutcomes.LOST", fallback: "Lost" },
+  { key: "WRONG_NUMBER", labelKey: "leadOutcomes.WRONG_NUMBER", fallback: "Wrong number" },
 ] as const;
 
 function presetLocal(hoursFromNow: number) {
   const dt = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(
+    dt.getHours()
+  )}:${pad(dt.getMinutes())}`;
 }
 
-function formatDate(d?: string | null) {
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
+function formatDate(
+  d: string | null | undefined,
+  locale: "tr" | "en"
+) {
   if (!d) return "-";
-  return new Date(d).toLocaleString();
+  return new Date(d).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
 }
 
 export default function LeadDetailPage() {
+  const { t, locale } = useLanguage();
+
   const params = useParams();
   const rawId = (params as any)?.id as string | string[] | undefined;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -51,24 +69,21 @@ export default function LeadDetailPage() {
   const [managerId, setManagerId] = useState("");
   const [salesId, setSalesId] = useState("");
 
-  // Activity form
   const [actType, setActType] = useState("CALL");
   const [callOutcome, setCallOutcome] =
     useState<(typeof CALL_OUTCOMES)[number]["key"]>("NO_ANSWER");
-  const [actSummary, setActSummary] = useState("Arama yapıldı");
+const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"));
   const [actDetails, setActDetails] = useState("");
   const [nextFollowUpAt, setNextFollowUpAt] = useState("");
 
   const role = me?.role as string | undefined;
   const status = lead?.status as string | undefined;
 
-  // Role checks
   const isAdmin = role === "ADMIN";
   const isCallcenter = role === "CALLCENTER" || isAdmin;
   const isManager = role === "MANAGER" || isAdmin;
   const isSales = role === "SALES" || isAdmin;
 
-  // Status checks
   const isNew = status === "NEW";
   const isWorking = status === "WORKING";
   const isSalesReady = status === "SALES_READY";
@@ -76,7 +91,6 @@ export default function LeadDetailPage() {
   const isAssigned = status === "ASSIGNED";
   const isClosed = status === "WON" || status === "LOST";
 
-  // Allowed actions
   const canSetWorking = isCallcenter && (isNew || isSalesReady || isManagerReview);
   const canSetSalesReady = isCallcenter && (isWorking || isNew);
   const canSendToManager = isCallcenter && isSalesReady;
@@ -85,7 +99,7 @@ export default function LeadDetailPage() {
 
   async function load() {
     if (!id) {
-      setErr("Sayfa hatası: Lead ID bulunamadı.");
+      setErr(t("leadDetail.idMissing"));
       setLead(null);
       setLoading(false);
       return;
@@ -145,9 +159,10 @@ export default function LeadDetailPage() {
       };
 
       if (actType === "CALL") {
-        const outcomeLabel = CALL_OUTCOMES.find((x) => x.key === callOutcome)?.label || callOutcome;
+        const outcomeLabel =
+          safeTranslate(t, `leadOutcomes.${callOutcome}`, callOutcome);
         body.callOutcome = callOutcome;
-        body.summary = actSummary || `Arama: ${outcomeLabel}`;
+        body.summary = actSummary || `${t("leadDetail.callPrefix")}: ${outcomeLabel}`;
       }
 
       await authedFetch(`/leads/${id}/activity`, {
@@ -155,11 +170,14 @@ export default function LeadDetailPage() {
         body: JSON.stringify(body),
       });
 
-      // Optional auto moves
       if (actType === "CALL" && (callOutcome === "WON" || callOutcome === "LOST")) {
         await setStatus(callOutcome);
       }
-      if (actType === "CALL" && callOutcome === "QUALIFIED" && (status === "NEW" || status === "WORKING")) {
+      if (
+        actType === "CALL" &&
+        callOutcome === "QUALIFIED" &&
+        (status === "NEW" || status === "WORKING")
+      ) {
         await setStatus("SALES_READY");
       }
 
@@ -212,28 +230,32 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     if (actType !== "CALL") return;
-    const label = CALL_OUTCOMES.find((x) => x.key === callOutcome)?.label || callOutcome;
-    setActSummary(`Arama: ${label}`);
-  }, [callOutcome, actType]);
+    const label =
+      safeTranslate(t, `leadOutcomes.${callOutcome}`, callOutcome);
+    setActSummary(`${t("leadDetail.callPrefix")}: ${label}`);
+  }, [callOutcome, actType, t]);
 
-  if (!mounted) return <div>Yükleniyor…</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      {/* Breadcrumb / header row */}
       <div className="flex-between">
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <a href="/leads" style={{ fontWeight: 800 }}>← Aktif Leadler</a>
+          <a href="/leads" style={{ fontWeight: 800 }}>
+            ← {t("leadDetail.backToActiveLeads")}
+          </a>
           <span className="muted">/</span>
-          <span style={{ fontWeight: 900 }}>{lead?.fullName || "Lead"}</span>
+          <span style={{ fontWeight: 900 }}>{lead?.fullName || t("leads.title")}</span>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <span className="muted">Son Aktivite: {formatDate(lead?.lastActivityAt)}</span>
+          <span className="muted">
+            {t("leadDetail.lastActivity")}: {formatDate(lead?.lastActivityAt, locale)}
+          </span>
         </div>
       </div>
 
-      {loading ? <div className="card">Lead yükleniyor…</div> : null}
+      {loading ? <div className="card">{t("leadDetail.loadingLead")}</div> : null}
 
       {err ? (
         <pre className="card" style={{ whiteSpace: "pre-wrap", borderColor: "rgba(239,68,68,.35)" }}>
@@ -243,175 +265,321 @@ export default function LeadDetailPage() {
 
       {!loading && !err && lead ? (
         <>
-          {/* Profile header */}
-          <div className="card" style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+          <div
+            className="card"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 14,
+              flexWrap: "wrap",
+            }}
+          >
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-             <LeadAvatar avatarUrl={lead.avatarUrl} name={lead.fullName} size={44} />
+              <LeadAvatar avatarUrl={lead.avatarUrl} name={lead.fullName} size={44} />
               <div style={{ display: "grid", gap: 4 }}>
                 <div style={{ fontSize: 18, fontWeight: 900 }}>{lead.fullName}</div>
                 <div className="muted">
-                  Oluşturulma: {formatDate(lead.createdAt)} • {lead.phone} • {lead.email || "e-posta yok"}
+                  {t("leadDetail.createdAt")}: {formatDate(lead.createdAt, locale)} • {lead.phone} •{" "}
+                  {lead.email || t("leadDetail.noEmail")}
                 </div>
               </div>
             </div>
 
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <span className="badge">{lead.status}</span>
-              <a href={`tel:${lead.phone}`} className="badge">Ara</a>
-              <a href={`https://wa.me/${String(lead.phone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="badge">
+              <span className="badge">
+                {safeTranslate(t, `leadStatuses.${lead.status}`, lead.status)}
+              </span>
+              <a href={`tel:${lead.phone}`} className="badge">
+                {t("leads.call")}
+              </a>
+              <a
+                href={`https://wa.me/${String(lead.phone).replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noreferrer"
+                className="badge"
+              >
                 WhatsApp
               </a>
-              <button>Daha Fazla</button>
+              <button>{t("leadDetail.more")}</button>
             </div>
           </div>
 
-          {/* Tabs */}
-          <div style={{ borderBottom: "1px solid var(--stroke)", display: "flex", gap: 18, overflowX: "auto" }}>
-            <a style={{ padding: "12px 2px", fontWeight: 800, borderBottom: "2px solid var(--text-primary)" }}>Aktivite</a>
-            <a style={{ padding: "12px 2px", color: "var(--text-secondary)", fontWeight: 700 }}>Detaylar</a>
-            <a style={{ padding: "12px 2px", color: "var(--text-secondary)", fontWeight: 700 }}>Dokümanlar</a>
-            <a style={{ padding: "12px 2px", color: "var(--text-secondary)", fontWeight: 700 }}>Notlar</a>
+          <div
+            style={{
+              borderBottom: "1px solid var(--stroke)",
+              display: "flex",
+              gap: 18,
+              overflowX: "auto",
+            }}
+          >
+            <a
+              style={{
+                padding: "12px 2px",
+                fontWeight: 800,
+                borderBottom: "2px solid var(--text-primary)",
+              }}
+            >
+              {t("leadDetail.tabs.activity")}
+            </a>
+            <a
+              style={{
+                padding: "12px 2px",
+                color: "var(--text-secondary)",
+                fontWeight: 700,
+              }}
+            >
+              {t("leadDetail.tabs.details")}
+            </a>
+            <a
+              style={{
+                padding: "12px 2px",
+                color: "var(--text-secondary)",
+                fontWeight: 700,
+              }}
+            >
+              {t("leadDetail.tabs.documents")}
+            </a>
+            <a
+              style={{
+                padding: "12px 2px",
+                color: "var(--text-secondary)",
+                fontWeight: 700,
+              }}
+            >
+              {t("leadDetail.tabs.notes")}
+            </a>
           </div>
 
-          {/* Two-column content */}
           <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 14 }}>
-            {/* Left: Activity feed */}
             <div className="card" style={{ display: "grid", gap: 10 }}>
-              <div style={{ fontWeight: 900 }}>Son Aktiviteler</div>
+              <div style={{ fontWeight: 900 }}>{t("leadDetail.recentActivities")}</div>
 
               {(lead.activities || []).length === 0 ? (
-                <div className="muted">Henüz aktivite yok.</div>
+                <div className="muted">{t("leadDetail.noActivities")}</div>
               ) : (
                 <div style={{ display: "grid" }}>
                   {(lead.activities || []).map((a: any) => (
-                    <div key={a.id} style={{ padding: "10px 0", borderBottom: "1px solid var(--stroke-2)" }}>
+                    <div
+                      key={a.id}
+                      style={{
+                        padding: "10px 0",
+                        borderBottom: "1px solid var(--stroke-2)",
+                      }}
+                    >
                       <div className="flex-between" style={{ gap: 10 }}>
                         <div style={{ fontWeight: 800 }}>
-                          {a.type}
-                          {a.callOutcome ? <span className="muted"> • {a.callOutcome}</span> : null}
+                          {safeTranslate(t, `activityTypes.${a.type}`, a.type)}
+                          {a.callOutcome ? (
+                            <span className="muted">
+                              {" "}
+                              • {safeTranslate(t, `leadOutcomes.${a.callOutcome}`, a.callOutcome)}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="muted" style={{ fontSize: 12 }}>
-                          {new Date(a.createdAt).toLocaleString()}
+                          {formatDate(a.createdAt, locale)}
                         </div>
                       </div>
                       <div style={{ marginTop: 6 }}>{a.summary}</div>
-                      {a.details ? <div className="muted" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{a.details}</div> : null}
+                      {a.details ? (
+                        <div
+                          className="muted"
+                          style={{ marginTop: 6, whiteSpace: "pre-wrap" }}
+                        >
+                          {a.details}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Right: actions + add activity */}
             <div style={{ display: "grid", gap: 14 }}>
-              {/* Quick actions */}
               <div className="card" style={{ display: "grid", gap: 12 }}>
-                <div style={{ fontWeight: 900 }}>Hızlı İşlemler</div>
+                <div style={{ fontWeight: 900 }}>{t("leadDetail.quickActions")}</div>
 
                 <div style={{ display: "grid", gap: 10 }}>
-                  <div className="muted" style={{ fontSize: 12 }}>Atamalar</div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {t("leadDetail.assignments")}
+                  </div>
                   <div className="muted">
-                    Yönetici: <b>{lead.assignedManager?.email || "-"}</b> • Satış: <b>{lead.assignedSales?.email || "-"}</b>
+                    {t("leadDetail.manager")}: <b>{lead.assignedManager?.email || "-"}</b> •{" "}
+                    {t("leadDetail.sales")}: <b>{lead.assignedSales?.email || "-"}</b>
                   </div>
                 </div>
 
-                {/* CallCenter */}
                 {(isCallcenter || isAdmin) ? (
                   <div style={{ display: "grid", gap: 10 }}>
-                    <div className="muted" style={{ fontSize: 12 }}>Çağrı Merkezi</div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {t("leadDetail.callCenter")}
+                    </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button onClick={() => setStatus("WORKING")} disabled={!canSetWorking}>WORKING Yap</button>
-                      <button onClick={() => setStatus("SALES_READY")} disabled={!canSetSalesReady}>SALES_READY Yap</button>
+                      <button onClick={() => setStatus("WORKING")} disabled={!canSetWorking}>
+                        {t("leadDetail.setWorking")}
+                      </button>
+                      <button onClick={() => setStatus("SALES_READY")} disabled={!canSetSalesReady}>
+                        {t("leadDetail.setSalesReady")}
+                      </button>
                     </div>
 
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                      <select value={managerId} onChange={(e) => setManagerId(e.target.value)} disabled={!isCallcenter}>
-                        <option value="">Yönetici seç</option>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                      }}
+                    >
+                      <select
+                        value={managerId}
+                        onChange={(e) => setManagerId(e.target.value)}
+                        disabled={!isCallcenter}
+                      >
+                        <option value="">{t("leadDetail.selectManager")}</option>
                         {managers.map((u) => (
-                          <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.email})
+                          </option>
                         ))}
                       </select>
 
                       <button onClick={sendToManager} disabled={!canSendToManager || !managerId}>
-                        Yöneticiye Gönder
+                        {t("leadDetail.sendToManager")}
                       </button>
                     </div>
                   </div>
                 ) : null}
 
-                {/* Manager */}
                 {(isManager || isAdmin) ? (
                   <div style={{ display: "grid", gap: 10 }}>
-                    <div className="muted" style={{ fontSize: 12 }}>Yönetici</div>
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                      <select value={salesId} onChange={(e) => setSalesId(e.target.value)} disabled={!isManager}>
-                        <option value="">Satış temsilcisi seç</option>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {t("leadDetail.managerRole")}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                      }}
+                    >
+                      <select
+                        value={salesId}
+                        onChange={(e) => setSalesId(e.target.value)}
+                        disabled={!isManager}
+                      >
+                        <option value="">{t("leadDetail.selectSales")}</option>
                         {sales.map((u) => (
-                          <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.email})
+                          </option>
                         ))}
                       </select>
 
                       <button onClick={assignToSales} disabled={!canAssignToSales || !salesId}>
-                        {isAssigned ? "Yeniden Ata" : "Ata"}
+                        {isAssigned
+                          ? t("leadDetail.reassign")
+                          : t("leadDetail.assign")}
                       </button>
                     </div>
                   </div>
                 ) : null}
 
-                {/* Sales */}
                 {(isSales || isAdmin) ? (
                   <div style={{ display: "grid", gap: 10 }}>
-                    <div className="muted" style={{ fontSize: 12 }}>Satış</div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button className="primary" onClick={() => setStatus("WON")} disabled={!canClose}>Kazanıldı</button>
-                      <button className="danger" onClick={() => setStatus("LOST")} disabled={!canClose}>Kaybedildi</button>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {t("leadDetail.salesRole")}
                     </div>
-                    {isClosed ? <div className="muted">Bu lead kapatıldı.</div> : null}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        className="primary"
+                        onClick={() => setStatus("WON")}
+                        disabled={!canClose}
+                      >
+                        {t("leadDetail.markWon")}
+                      </button>
+                      <button
+                        className="danger"
+                        onClick={() => setStatus("LOST")}
+                        disabled={!canClose}
+                      >
+                        {t("leadDetail.markLost")}
+                      </button>
+                    </div>
+                    {isClosed ? (
+                      <div className="muted">{t("leadDetail.leadClosed")}</div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
 
-              {/* Add activity */}
               <div className="card" style={{ display: "grid", gap: 10 }}>
                 <div className="flex-between">
-                  <div style={{ fontWeight: 900 }}>Aktivite Ekle</div>
-                  <button onClick={addActivity} className="primary">Kaydet</button>
+                  <div style={{ fontWeight: 900 }}>{t("leadDetail.addActivity")}</div>
+                  <button onClick={addActivity} className="primary">
+                    {t("common.save")}
+                  </button>
                 </div>
 
                 <select value={actType} onChange={(e) => setActType(e.target.value)}>
-                  <option value="CALL">ARAMA</option>
-                  <option value="NOTE">NOT</option>
-                  <option value="MEETING">TOPLANTI</option>
-                  <option value="WHATSAPP">WHATSAPP</option>
-                  <option value="EMAIL">E-POSTA</option>
+                  <option value="CALL">{t("activityTypes.CALL")}</option>
+                  <option value="NOTE">{t("activityTypes.NOTE")}</option>
+                  <option value="MEETING">{t("activityTypes.MEETING")}</option>
+                  <option value="WHATSAPP">{t("activityTypes.WHATSAPP")}</option>
+                  <option value="EMAIL">{t("activityTypes.EMAIL")}</option>
                 </select>
 
                 {actType === "CALL" ? (
                   <div style={{ display: "grid", gap: 8 }}>
-                    <div className="muted" style={{ fontSize: 12 }}>Arama sonucu</div>
-                    <select value={callOutcome} onChange={(e) => setCallOutcome(e.target.value as any)}>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      {t("leadDetail.callOutcome")}
+                    </div>
+                    <select
+                      value={callOutcome}
+                      onChange={(e) => setCallOutcome(e.target.value as any)}
+                    >
                       {CALL_OUTCOMES.map((o) => (
                         <option key={o.key} value={o.key}>
-                          {o.label}
+                          {safeTranslate(t, o.labelKey, o.fallback)}
                         </option>
                       ))}
                     </select>
 
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button type="button" onClick={() => setNextFollowUpAt(presetLocal(24))}>+1g</button>
-                      <button type="button" onClick={() => setNextFollowUpAt(presetLocal(72))}>+3g</button>
-                      <button type="button" onClick={() => setNextFollowUpAt(presetLocal(168))}>+7g</button>
-                      <button type="button" onClick={() => setNextFollowUpAt(presetLocal(3))}>+3s</button>
+                      <button type="button" onClick={() => setNextFollowUpAt(presetLocal(24))}>
+                        +1{t("leads.dayShort")}
+                      </button>
+                      <button type="button" onClick={() => setNextFollowUpAt(presetLocal(72))}>
+                        +3{t("leads.dayShort")}
+                      </button>
+                      <button type="button" onClick={() => setNextFollowUpAt(presetLocal(168))}>
+                        +7{t("leads.dayShort")}
+                      </button>
+                      <button type="button" onClick={() => setNextFollowUpAt(presetLocal(3))}>
+                        +3{t("leadDetail.hourShort")}
+                      </button>
                     </div>
                   </div>
                 ) : null}
 
-                <input value={actSummary} onChange={(e) => setActSummary(e.target.value)} placeholder="Özet" />
+                <input
+                  value={actSummary}
+                  onChange={(e) => setActSummary(e.target.value)}
+                  placeholder={t("leadDetail.summary")}
+                />
 
-                <textarea value={actDetails} onChange={(e) => setActDetails(e.target.value)} rows={3} placeholder="Notlar (opsiyonel)" />
+                <textarea
+                  value={actDetails}
+                  onChange={(e) => setActDetails(e.target.value)}
+                  rows={3}
+                  placeholder={t("leadDetail.notesOptional")}
+                />
 
                 <label style={{ display: "grid", gap: 6 }}>
-                  <span className="muted" style={{ fontSize: 12 }}>Takip tarihi (opsiyonel)</span>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {t("leadDetail.followUpOptional")}
+                  </span>
                   <input
                     type="datetime-local"
                     value={nextFollowUpAt}
@@ -420,7 +588,7 @@ export default function LeadDetailPage() {
                 </label>
 
                 <div className="muted" style={{ fontSize: 12 }}>
-                  İpucu: <b>Nitelikli</b> → <b>SALES_READY</b> yapar. <b>Kazanıldı/Kaybedildi</b> lead'i kapatır.
+                  {t("leadDetail.tip")}
                 </div>
               </div>
             </div>

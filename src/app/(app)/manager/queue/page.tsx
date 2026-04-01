@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type SalesUser = { id: string; name: string; email: string; role: string };
 
@@ -25,7 +26,19 @@ function followTone(nextFollowUpAt?: string | null) {
   return "none" as const;
 }
 
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null,
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
 export default function ManagerQueue() {
+  const { t, locale } = useLanguage();
+
   const [mounted, setMounted] = useState(false);
 
   const [leads, setLeads] = useState<any[]>([]);
@@ -75,7 +88,7 @@ export default function ManagerQueue() {
   async function assign(leadId: string) {
     const salesId = assignById[leadId];
     if (!salesId) {
-      setErr("Önce bir satış temsilcisi seçin.");
+      setErr(t("managerQueue.selectSalesFirst"));
       return;
     }
 
@@ -104,8 +117,8 @@ export default function ManagerQueue() {
         method: "POST",
         body: JSON.stringify({
           type: "NOTE",
-          summary: "Çağrı Merkezine iade edildi",
-          details: "Yönetici, daha fazla bilgi/ön eleme için lead'i geri gönderdi.",
+          summary: t("managerQueue.returnedToCallCenter"),
+          details: t("managerQueue.returnedToCallCenterDetail"),
         }),
       });
 
@@ -140,36 +153,51 @@ export default function ManagerQueue() {
     });
   }, [leads, q]);
 
-  if (!mounted) return <div>Yükleniyor...</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div className="flex-between">
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Yönetici</div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>İnceleme Kuyruğu</div>
-            <span className="badge">{filtered.length} Lead</span>
+          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+            {t("roles.MANAGER")}
+          </div>
+          <div
+            style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
+          >
+            <div style={{ fontSize: 22, fontWeight: 900 }}>
+              {t("managerQueue.title")}
+            </div>
+            <span className="badge">
+              {filtered.length} {t("leads.leadCount")}
+            </span>
           </div>
         </div>
 
         <button onClick={load} disabled={loading}>
-          {loading ? "Yenileniyor..." : "Yenile"}
+          {loading ? t("common.refreshing") : t("common.refresh")}
         </button>
       </div>
 
       <div className="card" style={{ padding: 12 }}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
           <div style={{ flex: 1, minWidth: 260 }}>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="İsim / telefon ara..."
+              placeholder={t("managerQueue.searchPlaceholder")}
             />
           </div>
 
           <button onClick={load} disabled={loading}>
-            {loading ? "Yükleniyor..." : "Ara / Yenile"}
+            {loading ? t("common.loading") : t("common.searchRefresh")}
           </button>
         </div>
 
@@ -194,12 +222,12 @@ export default function ManagerQueue() {
         <table>
           <thead>
             <tr>
-              <th>LEAD</th>
-              <th>TELEFON</th>
-              <th>DURUM</th>
-              <th>TAKİP</th>
-              <th>SATIŞA ATA</th>
-              <th>İŞLEMLER</th>
+              <th>{t("managerQueue.table.lead")}</th>
+              <th>{t("managerQueue.table.phone")}</th>
+              <th>{t("managerQueue.table.status")}</th>
+              <th>{t("managerQueue.table.followUp")}</th>
+              <th>{t("managerQueue.table.assignToSales")}</th>
+              <th>{t("managerQueue.table.actions")}</th>
             </tr>
           </thead>
 
@@ -216,9 +244,11 @@ export default function ManagerQueue() {
                         {l.fullName}
                       </a>
                       <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-                        Son aktivite:{" "}
+                        {t("managerQueue.lastActivity")}:{" "}
                         {l.lastActivityAt
-                          ? new Date(l.lastActivityAt).toLocaleString()
+                          ? new Date(l.lastActivityAt).toLocaleString(
+                              locale === "tr" ? "tr-TR" : "en-US"
+                            )
                           : "-"}
                       </div>
                     </div>
@@ -227,15 +257,19 @@ export default function ManagerQueue() {
                   <td>{l.phone}</td>
 
                   <td>
-                    <span className="badge">{l.status}</span>
+                    <span className="badge">
+                      {safeTranslate(t, `leadStatuses.${l.status}`, l.status)}
+                    </span>
                   </td>
 
                   <td>
                     <div style={{ display: "grid", gap: 8 }}>
                       <span className={`badge ${tone}`}>
                         {l.nextFollowUpAt
-                          ? new Date(l.nextFollowUpAt).toLocaleString()
-                          : "Takip yok"}
+                          ? new Date(l.nextFollowUpAt).toLocaleString(
+                              locale === "tr" ? "tr-TR" : "en-US"
+                            )
+                          : t("leads.noFollowUp")}
                       </span>
                     </div>
                   </td>
@@ -256,7 +290,7 @@ export default function ManagerQueue() {
                         }
                         style={{ minWidth: 220 }}
                       >
-                        <option value="">Satış temsilcisi seç</option>
+                        <option value="">{t("managerQueue.selectSales")}</option>
                         {sales.map((s) => (
                           <option key={s.id} value={s.id}>
                             {s.name} ({s.email})
@@ -269,7 +303,7 @@ export default function ManagerQueue() {
                         onClick={() => assign(l.id)}
                         disabled={saving || !assignById[l.id]}
                       >
-                        {saving ? "Kaydediliyor..." : "Ata"}
+                        {saving ? t("leads.saving") : t("managerQueue.assign")}
                       </button>
                     </div>
                   </td>
@@ -277,10 +311,10 @@ export default function ManagerQueue() {
                   <td style={{ minWidth: 260 }}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button onClick={() => returnToCallCenter(l.id)} disabled={saving}>
-                        Çağrı Merkezine Gönder
+                        {t("managerQueue.sendToCallCenter")}
                       </button>
                       <a href={`/leads/${l.id}`} style={{ textDecoration: "underline" }}>
-                        Aç
+                        {t("common.open")}
                       </a>
                     </div>
                   </td>
@@ -292,7 +326,7 @@ export default function ManagerQueue() {
 
         {filtered.length === 0 ? (
           <div style={{ padding: 14, color: "var(--text-secondary)" }}>
-            MANAGER_REVIEW durumunda lead yok.
+            {t("managerQueue.noLeads")}
           </div>
         ) : null}
       </div>

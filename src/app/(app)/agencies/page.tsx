@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type AgencyStatus = "ACTIVE" | "PASSIVE" | "PROSPECT" | "DEALING" | "CLOSED";
 
@@ -50,7 +51,19 @@ function statusBadgeClass(status?: string) {
   return "";
 }
 
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null,
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
 export default function AgenciesPage() {
+  const { t, locale } = useLanguage();
+
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
 
@@ -173,7 +186,7 @@ export default function AgenciesPage() {
 
   async function deleteAgency(id: string, agencyName: string) {
     const ok = window.confirm(
-      `"${agencyName}" ajansını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+      t("agencies.deleteConfirm").replace("{name}", agencyName),
     );
     if (!ok) return;
 
@@ -217,25 +230,26 @@ export default function AgenciesPage() {
   }, [mounted, role, me?.id]);
 
   const pageInfo = useMemo(() => {
-    if (!total) return "Kayıt yok";
+    if (!total) return t("common.noRecords");
     const start = (page - 1) * pageSize + 1;
     const end = Math.min(page * pageSize, total);
     return `${start}-${end} / ${total}`;
-  }, [page, pageSize, total]);
+  }, [page, pageSize, total, t]);
 
-  if (!mounted) return <div>Yükleniyor…</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-            Ajans Yönetimi
+            {t("agencies.label")}
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>Ajanslar</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>
+            {t("agencies.title")}
+          </div>
           <div className="muted" style={{ fontSize: 13 }}>
-            Manager ve sales ekipleri için ajans kayıtları, notlar, toplantılar
-            ve görevler
+            {t("agencies.subtitle")}
           </div>
         </div>
 
@@ -244,7 +258,7 @@ export default function AgenciesPage() {
             onClick={() => load(page, status, q, pageSize)}
             disabled={loading}
           >
-            {loading ? "Yenileniyor..." : "Yenile"}
+            {loading ? t("common.loading") : t("common.refresh")}
           </button>
 
           {canCreate ? (
@@ -252,7 +266,7 @@ export default function AgenciesPage() {
               className="primary"
               onClick={() => setShowCreate((v) => !v)}
             >
-              {showCreate ? "Kapat" : "Yeni Ajans"}
+              {showCreate ? t("common.close") : t("agencies.newAgency")}
             </button>
           ) : null}
         </div>
@@ -260,7 +274,7 @@ export default function AgenciesPage() {
 
       {showCreate && canCreate ? (
         <div className="card" style={{ display: "grid", gap: 12 }}>
-          <div style={{ fontWeight: 900 }}>Yeni Ajans Oluştur</div>
+          <div style={{ fontWeight: 900 }}>{t("agencies.createTitle")}</div>
 
           <div
             style={{
@@ -272,54 +286,58 @@ export default function AgenciesPage() {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ajans adı"
+              placeholder={t("agencies.fields.name")}
             />
             <input
               value={contactName}
               onChange={(e) => setContactName(e.target.value)}
-              placeholder="Yetkili kişi"
+              placeholder={t("agencies.fields.contactName")}
             />
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="Telefon"
+              placeholder={t("agencies.fields.phone")}
             />
 
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="E-posta"
+              placeholder={t("agencies.fields.email")}
             />
             <input
               value={city}
               onChange={(e) => setCity(e.target.value)}
-              placeholder="Şehir"
+              placeholder={t("agencies.fields.city")}
             />
             <input
               value={country}
               onChange={(e) => setCountry(e.target.value)}
-              placeholder="Ülke"
+              placeholder={t("agencies.fields.country")}
             />
 
             <input
               value={website}
               onChange={(e) => setWebsite(e.target.value)}
-              placeholder="Website"
+              placeholder={t("agencies.fields.website")}
             />
             <input
               value={source}
               onChange={(e) => setSource(e.target.value)}
-              placeholder="Kaynak"
+              placeholder={t("agencies.fields.source")}
             />
 
             {isSales ? (
-              <input value={me?.name || ""} disabled placeholder="Sales" />
+              <input
+                value={me?.name || ""}
+                disabled
+                placeholder={t("agencies.fields.sales")}
+              />
             ) : (
               <select
                 value={assignedSalesId}
                 onChange={(e) => setAssignedSalesId(e.target.value)}
               >
-                <option value="">Sales temsilcisi seç</option>
+                <option value="">{t("agencies.fields.selectSales")}</option>
                 {salesUsers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name} ({s.email})
@@ -332,19 +350,21 @@ export default function AgenciesPage() {
           <textarea
             value={notesSummary}
             onChange={(e) => setNotesSummary(e.target.value)}
-            placeholder="Özet not"
+            placeholder={t("agencies.fields.notesSummary")}
           />
 
           <div
             style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}
           >
-            <button onClick={() => setShowCreate(false)}>Vazgeç</button>
+            <button onClick={() => setShowCreate(false)}>
+              {t("common.cancel")}
+            </button>
             <button
               className="primary"
               onClick={createAgency}
               disabled={saving || !name.trim()}
             >
-              {saving ? "Kaydediliyor..." : "Ajans Oluştur"}
+              {saving ? t("agencies.saving") : t("agencies.createAgency")}
             </button>
           </div>
         </div>
@@ -361,7 +381,7 @@ export default function AgenciesPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Ajans, yetkili, telefon, şehir ara..."
+            placeholder={t("agencies.searchPlaceholder")}
           />
 
           <select
@@ -370,7 +390,9 @@ export default function AgenciesPage() {
           >
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
-                {s === "ALL" ? "Tüm Durumlar" : s}
+                {s === "ALL"
+                  ? t("agencies.allStatuses")
+                  : safeTranslate(t, `agencyStatuses.${s}`, s)}
               </option>
             ))}
           </select>
@@ -379,16 +401,16 @@ export default function AgenciesPage() {
             value={pageSize}
             onChange={(e) => setPageSize(Number(e.target.value))}
           >
-            <option value={20}>20 / sayfa</option>
-            <option value={50}>50 / sayfa</option>
-            <option value={100}>100 / sayfa</option>
+            <option value={20}>20 / {t("agencies.perPage")}</option>
+            <option value={50}>50 / {t("agencies.perPage")}</option>
+            <option value={100}>100 / {t("agencies.perPage")}</option>
           </select>
 
           <button
             onClick={() => load(1, status, q, pageSize)}
             disabled={loading}
           >
-            Ara / Yenile
+            {t("agencies.searchAndRefresh")}
           </button>
         </div>
 
@@ -411,13 +433,13 @@ export default function AgenciesPage() {
         <table>
           <thead>
             <tr>
-              <th>AJANS</th>
-              <th>İLETİŞİM</th>
-              <th>SALES</th>
-              <th>DURUM</th>
-              <th>NOT / TOPLANTI / GÖREV</th>
-              <th>GÜNCELLEME</th>
-              {canDelete ? <th>İŞLEMLER</th> : null}
+              <th>{t("agencies.table.agency")}</th>
+              <th>{t("agencies.table.contact")}</th>
+              <th>{t("agencies.table.sales")}</th>
+              <th>{t("agencies.table.status")}</th>
+              <th>{t("agencies.table.counts")}</th>
+              <th>{t("agencies.table.updatedAt")}</th>
+              {canDelete ? <th>{t("agencies.table.actions")}</th> : null}
             </tr>
           </thead>
 
@@ -455,7 +477,7 @@ export default function AgenciesPage() {
 
                 <td>
                   <span className={`badge ${statusBadgeClass(a.status)}`}>
-                    {a.status}
+                    {safeTranslate(t, `agencyStatuses.${a.status}`, a.status)}
                   </span>
                 </td>
 
@@ -468,14 +490,18 @@ export default function AgenciesPage() {
                       fontSize: 12,
                     }}
                   >
-                    <span>Not: {a._count?.notes ?? 0}</span>
-                    <span>Toplantı: {a._count?.meetings ?? 0}</span>
-                    <span>Görev: {a._count?.tasks ?? 0}</span>
+                    <span>{t("agencies.counts.notes")}: {a._count?.notes ?? 0}</span>
+                    <span>{t("agencies.counts.meetings")}: {a._count?.meetings ?? 0}</span>
+                    <span>{t("agencies.counts.tasks")}: {a._count?.tasks ?? 0}</span>
                   </div>
                 </td>
 
                 <td>
-                  {a.updatedAt ? new Date(a.updatedAt).toLocaleString() : "-"}
+                  {a.updatedAt
+                    ? new Date(a.updatedAt).toLocaleString(
+                        locale === "tr" ? "tr-TR" : "en-US",
+                      )
+                    : "-"}
                 </td>
 
                 {canDelete ? (
@@ -485,7 +511,7 @@ export default function AgenciesPage() {
                       onClick={() => deleteAgency(a.id, a.name)}
                       disabled={deletingId === a.id}
                     >
-                      {deletingId === a.id ? "Siliniyor..." : "Sil"}
+                      {deletingId === a.id ? t("agencies.deleting") : t("common.delete")}
                     </button>
                   </td>
                 ) : null}
@@ -496,7 +522,7 @@ export default function AgenciesPage() {
 
         {items.length === 0 ? (
           <div style={{ padding: 14, color: "var(--text-secondary)" }}>
-            Ajans bulunamadı.
+            {t("agencies.noAgencies")}
           </div>
         ) : null}
       </div>
@@ -512,11 +538,11 @@ export default function AgenciesPage() {
               onClick={() => load(Math.max(1, page - 1), status, q, pageSize)}
               disabled={page <= 1 || loading}
             >
-              Önceki
+              {t("common.previous")}
             </button>
 
             <span style={{ fontSize: 13, fontWeight: 700 }}>
-              Sayfa {page} / {totalPages}
+              {t("agencies.page")} {page} / {totalPages}
             </span>
 
             <button
@@ -525,7 +551,7 @@ export default function AgenciesPage() {
               }
               disabled={page >= totalPages || loading}
             >
-              Sonraki
+              {t("common.next")}
             </button>
           </div>
         </div>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -23,6 +24,16 @@ import {
 function formatShortDate(v: string) {
   if (!v) return "";
   return v.slice(5);
+}
+
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null,
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
 }
 
 function DashboardCard({
@@ -201,6 +212,8 @@ function StatList({
 }
 
 export default function AdminPage() {
+  const { t } = useLanguage();
+
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
   const [data, setData] = useState<any>(null);
@@ -247,11 +260,11 @@ export default function AdminPage() {
     ];
 
     return (data?.leadsByStatus || []).map((r: any, i: number) => ({
-      name: r.status,
+      name: safeTranslate(t, `leadStatuses.${r.status}`, r.status),
       value: r.count,
       color: palette[i % palette.length],
     }));
-  }, [data]);
+  }, [data, t]);
 
   const usersByRoleRows = useMemo(() => {
     const colorMap: Record<string, string> = {
@@ -262,41 +275,41 @@ export default function AdminPage() {
     };
 
     return (data?.users?.byRole || []).map((r: any) => ({
-      label: r.role,
+      label: safeTranslate(t, `roles.${r.role}`, r.role),
       value: r.count,
       color: colorMap[r.role] || "#64748b",
     }));
-  }, [data]);
+  }, [data, t]);
 
   const flowRows = useMemo(() => {
     return [
       {
-        label: "Manager’a Gönderilen",
+        label: t("admin.flow.sentToManager"),
         value: data?.pipeline?.sentToManagerActivities ?? 0,
         color: "#8b5cf6",
       },
       {
-        label: "Sales’e Atanan",
+        label: t("admin.flow.assignedToSales"),
         value: data?.pipeline?.assignedToSalesActivities ?? 0,
         color: "#22c55e",
       },
     ];
-  }, [data]);
+  }, [data, t]);
 
   const callOutcomeRows = useMemo(() => {
     return [
       {
-        label: "Yanıtlanan",
+        label: t("admin.callSummary.answered"),
         value: data?.callOutcomes?.answeredCalls ?? 0,
         color: "#22c55e",
       },
       {
-        label: "Cevapsız / Ulaşılamadı",
+        label: t("admin.callSummary.unanswered"),
         value: data?.callOutcomes?.noAnswerCalls ?? 0,
         color: "#ef4444",
       },
     ];
-  }, [data]);
+  }, [data, t]);
 
   const leadsTrend = useMemo(() => {
     return (data?.charts?.leads14Days || []).map((d: any) => ({
@@ -314,29 +327,44 @@ export default function AdminPage() {
 
   const pipelineBarData = useMemo(() => {
     return [
-      { name: "Working", value: data?.pipeline?.workingLeads ?? 0 },
-      { name: "Review", value: data?.pipeline?.managerReviewLeads ?? 0 },
-      { name: "Assigned", value: data?.pipeline?.assignedLeads ?? 0 },
-      { name: "Won", value: data?.pipeline?.wonLeads ?? 0 },
-      { name: "Lost", value: data?.pipeline?.lostLeads ?? 0 },
+      {
+        name: safeTranslate(t, "leadStatuses.WORKING", "Working"),
+        value: data?.pipeline?.workingLeads ?? 0,
+      },
+      {
+        name: safeTranslate(t, "leadStatuses.MANAGER_REVIEW", "Manager Review"),
+        value: data?.pipeline?.managerReviewLeads ?? 0,
+      },
+      {
+        name: safeTranslate(t, "leadStatuses.ASSIGNED", "Assigned"),
+        value: data?.pipeline?.assignedLeads ?? 0,
+      },
+      {
+        name: safeTranslate(t, "leadStatuses.WON", "Won"),
+        value: data?.pipeline?.wonLeads ?? 0,
+      },
+      {
+        name: safeTranslate(t, "leadStatuses.LOST", "Lost"),
+        value: data?.pipeline?.lostLeads ?? 0,
+      },
     ];
-  }, [data]);
+  }, [data, t]);
 
-  if (!mounted) return <div>Yükleniyor…</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   if (!canSeeDashboard) {
     return (
       <div className="card">
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Yetkisiz Erişim</div>
-        <div className="muted">
-          Bu sayfayı yalnızca ADMIN ve MANAGER kullanıcıları görebilir.
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>
+          {t("admin.unauthorizedTitle")}
         </div>
+        <div className="muted">{t("admin.unauthorizedText")}</div>
       </div>
     );
   }
 
   if (loading && !data) {
-    return <div className="card">Dashboard yükleniyor…</div>;
+    return <div className="card">{t("admin.loadingDashboard")}</div>;
   }
 
   return (
@@ -344,18 +372,24 @@ export default function AdminPage() {
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-            {isManagerView ? "Manager" : "Admin"}
+            {isManagerView ? t("roles.MANAGER") : t("roles.ADMIN")}
           </div>
-          <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: "-0.02em" }}>
-            CRM Dashboard
+          <div
+            style={{
+              fontSize: 30,
+              fontWeight: 900,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            {t("admin.title")}
           </div>
           <div className="muted" style={{ fontSize: 13 }}>
-            Lead akışı, çağrı performansı, ekip yapısı ve takip görünümü
+            {t("admin.subtitle")}
           </div>
         </div>
 
         <button onClick={load} disabled={loading} className="primary">
-          {loading ? "Yenileniyor..." : "Dashboard Yenile"}
+          {loading ? t("common.refreshing") : t("admin.refresh")}
         </button>
       </div>
 
@@ -380,24 +414,24 @@ export default function AdminPage() {
         }}
       >
         <DashboardCard
-          title="Toplam Lead"
+          title={t("admin.cards.totalLeads")}
           value={data?.kpis?.totalLeads ?? 0}
-          sub={`Bugün: ${data?.kpis?.leadsToday ?? 0}`}
+          sub={`${t("admin.today")}: ${data?.kpis?.leadsToday ?? 0}`}
         />
         <DashboardCard
-          title="Son 7 Gün Lead"
+          title={t("admin.cards.last7DaysLeads")}
           value={data?.kpis?.leadsLast7 ?? 0}
-          sub={`Son 30 gün: ${data?.kpis?.leadsLast30 ?? 0}`}
+          sub={`${t("admin.last30Days")}: ${data?.kpis?.leadsLast30 ?? 0}`}
         />
         <DashboardCard
-          title="Toplam Arama"
+          title={t("admin.cards.totalCalls")}
           value={data?.kpis?.totalCalls ?? 0}
-          sub={`Bugün: ${data?.kpis?.callsToday ?? 0}`}
+          sub={`${t("admin.today")}: ${data?.kpis?.callsToday ?? 0}`}
         />
         <DashboardCard
-          title="Son 7 Gün Arama"
+          title={t("admin.cards.last7DaysCalls")}
           value={data?.kpis?.callsLast7 ?? 0}
-          sub={`Son 30 gün: ${data?.kpis?.callsLast30 ?? 0}`}
+          sub={`${t("admin.last30Days")}: ${data?.kpis?.callsLast30 ?? 0}`}
         />
       </div>
 
@@ -409,19 +443,19 @@ export default function AdminPage() {
         }}
       >
         <DashboardCard
-          title="Working Lead"
+          title={safeTranslate(t, "leadStatuses.WORKING", "Working")}
           value={data?.pipeline?.workingLeads ?? 0}
         />
         <DashboardCard
-          title="Manager Review"
+          title={safeTranslate(t, "leadStatuses.MANAGER_REVIEW", "Manager Review")}
           value={data?.pipeline?.managerReviewLeads ?? 0}
         />
         <DashboardCard
-          title="Assigned"
+          title={safeTranslate(t, "leadStatuses.ASSIGNED", "Assigned")}
           value={data?.pipeline?.assignedLeads ?? 0}
         />
         <DashboardCard
-          title="Won / Lost"
+          title={t("admin.cards.wonLost")}
           value={`${data?.pipeline?.wonLeads ?? 0} / ${data?.pipeline?.lostLeads ?? 0}`}
         />
       </div>
@@ -434,15 +468,15 @@ export default function AdminPage() {
         }}
       >
         <DashboardCard
-          title="Takibi Geciken"
+          title={t("admin.cards.overdueFollowups")}
           value={data?.followups?.overdue ?? 0}
         />
         <DashboardCard
-          title="Bugünkü Takip"
+          title={t("admin.cards.todayFollowups")}
           value={data?.followups?.today ?? 0}
         />
         <DashboardCard
-          title="Önümüzdeki 7 Gün"
+          title={t("admin.cards.next7Days")}
           value={data?.followups?.upcoming7Days ?? 0}
         />
       </div>
@@ -456,8 +490,8 @@ export default function AdminPage() {
         }}
       >
         <ChartCard
-          title="Son 14 Günde Yeni Lead"
-          subtitle="Gün bazlı yeni lead trendi"
+          title={t("admin.charts.newLeads14Days")}
+          subtitle={t("admin.charts.newLeads14DaysSub")}
           minHeight={340}
         >
           <ResponsiveContainer width="100%" height="100%">
@@ -501,8 +535,8 @@ export default function AdminPage() {
         </ChartCard>
 
         <ChartCard
-          title="Lead Statü Dağılımı"
-          subtitle="Pipeline durumlarının dağılımı"
+          title={t("admin.charts.leadStatusDistribution")}
+          subtitle={t("admin.charts.leadStatusDistributionSub")}
           minHeight={340}
         >
           <ResponsiveContainer width="100%" height="100%">
@@ -541,8 +575,8 @@ export default function AdminPage() {
         }}
       >
         <ChartCard
-          title="Son 14 Günde Arama"
-          subtitle="Çağrı aktivitesinin günlük trendi"
+          title={t("admin.charts.calls14Days")}
+          subtitle={t("admin.charts.calls14DaysSub")}
           minHeight={320}
         >
           <ResponsiveContainer width="100%" height="100%">
@@ -580,8 +614,8 @@ export default function AdminPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <StatList title="Aktif Kullanıcı Rolleri" rows={usersByRoleRows} />
-        <StatList title="Flow Özeti" rows={flowRows} />
+        <StatList title={t("admin.stats.activeUsersByRole")} rows={usersByRoleRows} />
+        <StatList title={t("admin.stats.flowSummary")} rows={flowRows} />
       </div>
 
       <div
@@ -593,8 +627,8 @@ export default function AdminPage() {
         }}
       >
         <ChartCard
-          title="Pipeline Özeti"
-          subtitle="Ana satış akışındaki lead sayıları"
+          title={t("admin.charts.pipelineSummary")}
+          subtitle={t("admin.charts.pipelineSummarySub")}
           minHeight={320}
         >
           <ResponsiveContainer width="100%" height="100%">
@@ -630,7 +664,7 @@ export default function AdminPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <StatList title="Arama Sonuç Özeti" rows={callOutcomeRows} />
+        <StatList title={t("admin.stats.callResultSummary")} rows={callOutcomeRows} />
       </div>
     </div>
   );

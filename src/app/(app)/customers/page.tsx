@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type CustomerType = "POTENTIAL" | "EXISTING";
 
@@ -29,11 +30,7 @@ type CustomerRow = {
   };
 };
 
-const TYPE_OPTIONS: Array<"ALL" | CustomerType> = [
-  "ALL",
-  "POTENTIAL",
-  "EXISTING",
-];
+const TYPE_OPTIONS: Array<"ALL" | CustomerType> = ["ALL", "POTENTIAL", "EXISTING"];
 
 function badgeClass(type?: string) {
   if (type === "EXISTING") return "success";
@@ -41,7 +38,19 @@ function badgeClass(type?: string) {
   return "";
 }
 
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
 export default function CustomersPage() {
+  const { t, locale } = useLanguage();
+
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
 
@@ -71,8 +80,7 @@ export default function CustomersPage() {
   const [agencyId, setAgencyId] = useState("");
 
   const role = me?.role as string | undefined;
-  const canCreate =
-    role === "MANAGER" || role === "ADMIN" || role === "SALES";
+  const canCreate = role === "MANAGER" || role === "ADMIN" || role === "SALES";
   const canDelete = role === "MANAGER" || role === "ADMIN";
 
   async function load() {
@@ -145,7 +153,7 @@ export default function CustomersPage() {
 
   async function deleteCustomer(id: string, name: string) {
     const ok = window.confirm(
-      `"${name}" müşterisini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+      t("customers.deleteConfirm").replace("{name}", name)
     );
     if (!ok) return;
 
@@ -189,25 +197,24 @@ export default function CustomersPage() {
     });
   }, [items, q, typeFilter]);
 
-  if (!mounted) return <div>Yükleniyor…</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-            Sunum & Müşteri Yönetimi
+            {t("customers.label")}
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>Müşteriler</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{t("customers.title")}</div>
           <div className="muted" style={{ fontSize: 13 }}>
-            Potansiyel ve mevcut müşteriler, sunum geçmişiyle birlikte burada
-            tutulur
+            {t("customers.subtitle")}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button onClick={load} disabled={loading}>
-            {loading ? "Yenileniyor..." : "Yenile"}
+            {loading ? t("common.loading") : t("common.refresh")}
           </button>
 
           {canCreate ? (
@@ -215,7 +222,7 @@ export default function CustomersPage() {
               className="primary"
               onClick={() => setShowCreate((v) => !v)}
             >
-              {showCreate ? "Kapat" : "Yeni Müşteri"}
+              {showCreate ? t("common.close") : t("customers.newCustomer")}
             </button>
           ) : null}
         </div>
@@ -223,7 +230,7 @@ export default function CustomersPage() {
 
       {showCreate && canCreate ? (
         <div className="card" style={{ display: "grid", gap: 12 }}>
-          <div style={{ fontWeight: 900 }}>Yeni Müşteri Oluştur</div>
+          <div style={{ fontWeight: 900 }}>{t("customers.createTitle")}</div>
 
           <div
             style={{
@@ -235,59 +242,63 @@ export default function CustomersPage() {
             <input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="Ad Soyad"
+              placeholder={t("customers.fields.fullName")}
             />
             <input
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="Şirket / Kurum"
+              placeholder={t("customers.fields.companyName")}
             />
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="Telefon"
+              placeholder={t("customers.fields.phone")}
             />
 
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="E-posta"
+              placeholder={t("customers.fields.email")}
             />
             <input
               value={city}
               onChange={(e) => setCity(e.target.value)}
-              placeholder="Şehir"
+              placeholder={t("customers.fields.city")}
             />
             <input
               value={country}
               onChange={(e) => setCountry(e.target.value)}
-              placeholder="Ülke"
+              placeholder={t("customers.fields.country")}
             />
 
             <input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Adres"
+              placeholder={t("customers.fields.address")}
             />
             <input
               value={source}
               onChange={(e) => setSource(e.target.value)}
-              placeholder="Kaynak"
+              placeholder={t("customers.fields.source")}
             />
 
             <select
               value={type}
               onChange={(e) => setType(e.target.value as CustomerType)}
             >
-              <option value="POTENTIAL">POTENTIAL</option>
-              <option value="EXISTING">EXISTING</option>
+              <option value="POTENTIAL">
+                {safeTranslate(t, "customerTypes.POTENTIAL", "POTENTIAL")}
+              </option>
+              <option value="EXISTING">
+                {safeTranslate(t, "customerTypes.EXISTING", "EXISTING")}
+              </option>
             </select>
 
             <select
               value={agencyId}
               onChange={(e) => setAgencyId(e.target.value)}
             >
-              <option value="">Ajans seç</option>
+              <option value="">{t("customers.fields.selectAgency")}</option>
               {agencies.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -299,17 +310,17 @@ export default function CustomersPage() {
           <textarea
             value={notesSummary}
             onChange={(e) => setNotesSummary(e.target.value)}
-            placeholder="Özet not"
+            placeholder={t("customers.fields.notesSummary")}
           />
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-            <button onClick={() => setShowCreate(false)}>Vazgeç</button>
+            <button onClick={() => setShowCreate(false)}>{t("common.cancel")}</button>
             <button
               className="primary"
               onClick={createCustomer}
               disabled={saving || !fullName.trim()}
             >
-              {saving ? "Kaydediliyor..." : "Müşteri Oluştur"}
+              {saving ? t("customers.saving") : t("customers.createCustomer")}
             </button>
           </div>
         </div>
@@ -326,22 +337,24 @@ export default function CustomersPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Müşteri, telefon, e-posta, ajans ara..."
+            placeholder={t("customers.searchPlaceholder")}
           />
 
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as any)}
           >
-            {TYPE_OPTIONS.map((t) => (
-              <option key={t} value={t}>
-                {t === "ALL" ? "Tüm Tipler" : t}
+            {TYPE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option === "ALL"
+                  ? t("customers.allTypes")
+                  : safeTranslate(t, `customerTypes.${option}`, option)}
               </option>
             ))}
           </select>
 
           <button onClick={load} disabled={loading}>
-            Ara / Yenile
+            {t("customers.searchAndRefresh")}
           </button>
         </div>
 
@@ -364,13 +377,13 @@ export default function CustomersPage() {
         <table>
           <thead>
             <tr>
-              <th>MÜŞTERİ</th>
-              <th>İLETİŞİM</th>
-              <th>AJANS</th>
-              <th>TİP</th>
-              <th>SUNUM SAYISI</th>
-              <th>GÜNCELLEME</th>
-              {canDelete ? <th>İŞLEMLER</th> : null}
+              <th>{t("customers.table.customer")}</th>
+              <th>{t("customers.table.contact")}</th>
+              <th>{t("customers.table.agency")}</th>
+              <th>{t("customers.table.type")}</th>
+              <th>{t("customers.table.presentations")}</th>
+              <th>{t("customers.table.updatedAt")}</th>
+              {canDelete ? <th>{t("customers.table.actions")}</th> : null}
             </tr>
           </thead>
 
@@ -408,14 +421,16 @@ export default function CustomersPage() {
 
                 <td>
                   <span className={`badge ${badgeClass(c.type)}`}>
-                    {c.type || "-"}
+                    {c.type ? safeTranslate(t, `customerTypes.${c.type}`, c.type) : "-"}
                   </span>
                 </td>
 
                 <td>{c._count?.presentations ?? 0}</td>
 
                 <td>
-                  {c.updatedAt ? new Date(c.updatedAt).toLocaleString() : "-"}
+                  {c.updatedAt
+                    ? new Date(c.updatedAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")
+                    : "-"}
                 </td>
 
                 {canDelete ? (
@@ -425,7 +440,7 @@ export default function CustomersPage() {
                       onClick={() => deleteCustomer(c.id, c.fullName)}
                       disabled={deletingId === c.id}
                     >
-                      {deletingId === c.id ? "Siliniyor..." : "Sil"}
+                      {deletingId === c.id ? t("customers.deleting") : t("common.delete")}
                     </button>
                   </td>
                 ) : null}
@@ -436,7 +451,7 @@ export default function CustomersPage() {
 
         {filtered.length === 0 ? (
           <div style={{ padding: 14, color: "var(--text-secondary)" }}>
-            Müşteri bulunamadı.
+            {t("customers.noCustomers")}
           </div>
         ) : null}
       </div>

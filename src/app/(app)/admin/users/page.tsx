@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type Role = "ADMIN" | "CALLCENTER" | "MANAGER" | "SALES";
 
@@ -19,7 +20,19 @@ type UserRow = {
 
 const ROLES: Role[] = ["ADMIN", "CALLCENTER", "MANAGER", "SALES"];
 
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null,
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
 export default function AdminUsersPage() {
+  const { t, locale } = useLanguage();
+
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
 
@@ -31,7 +44,6 @@ export default function AdminUsersPage() {
 
   const [q, setQ] = useState("");
 
-  // create user form
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,7 +100,7 @@ export default function AdminUsersPage() {
   }
 
   async function deactivateUser(userId: string) {
-    if (!confirm("Bu kullanıcı pasif hale getirilsin mi?")) return;
+    if (!confirm(t("adminUsers.confirmDeactivate"))) return;
 
     setErr(null);
     try {
@@ -119,13 +131,15 @@ export default function AdminUsersPage() {
     );
   }, [users, q]);
 
-  if (!mounted) return <div>Yükleniyor…</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   if (!isAdmin) {
     return (
       <div className="card">
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Yetkisiz Erişim</div>
-        <div className="muted">Bu sayfayı görüntülemek için ADMIN olmalısınız.</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>
+          {t("admin.unauthorizedTitle")}
+        </div>
+        <div className="muted">{t("adminUsers.unauthorizedText")}</div>
       </div>
     );
   }
@@ -134,17 +148,21 @@ export default function AdminUsersPage() {
     <div style={{ display: "grid", gap: 14 }}>
       <div className="flex-between">
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Admin</div>
-          <div style={{ fontSize: 24, fontWeight: 900 }}>Kullanıcı Yönetimi</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+            {t("roles.ADMIN")}
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 900 }}>
+            {t("adminUsers.title")}
+          </div>
         </div>
 
         <button onClick={load} disabled={loading}>
-          {loading ? "Yenileniyor..." : "Yenile"}
+          {loading ? t("common.refreshing") : t("common.refresh")}
         </button>
       </div>
 
       <div className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 900 }}>Yeni Kullanıcı Oluştur</div>
+        <div style={{ fontWeight: 900 }}>{t("adminUsers.createTitle")}</div>
 
         <div
           style={{
@@ -156,27 +174,27 @@ export default function AdminUsersPage() {
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Ad Soyad"
+            placeholder={t("adminUsers.fields.name")}
           />
 
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="E-posta"
+            placeholder={t("adminUsers.fields.email")}
             type="email"
           />
 
           <input
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Şifre"
+            placeholder={t("adminUsers.fields.password")}
             type="password"
           />
 
           <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
             {ROLES.map((r) => (
               <option key={r} value={r}>
-                {r}
+                {safeTranslate(t, `roles.${r}`, r)}
               </option>
             ))}
           </select>
@@ -186,7 +204,7 @@ export default function AdminUsersPage() {
             onChange={(e) => setManagerId(e.target.value)}
             disabled={role !== "SALES"}
           >
-            <option value="">Yönetici seç</option>
+            <option value="">{t("adminUsers.fields.selectManager")}</option>
             {managers.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
@@ -205,7 +223,7 @@ export default function AdminUsersPage() {
               (role === "SALES" && !managerId)
             }
           >
-            {saving ? "Oluşturuluyor..." : "Oluştur"}
+            {saving ? t("adminUsers.creating") : t("adminUsers.create")}
           </button>
         </div>
 
@@ -228,7 +246,7 @@ export default function AdminUsersPage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Kullanıcı ara..."
+          placeholder={t("adminUsers.searchPlaceholder")}
         />
       </div>
 
@@ -236,12 +254,12 @@ export default function AdminUsersPage() {
         <table>
           <thead>
             <tr>
-              <th>AD</th>
-              <th>E-POSTA</th>
-              <th>ROL</th>
-              <th>DURUM</th>
-              <th>OLUŞTURULMA</th>
-              <th>İŞLEM</th>
+              <th>{t("adminUsers.table.name")}</th>
+              <th>{t("adminUsers.table.email")}</th>
+              <th>{t("adminUsers.table.role")}</th>
+              <th>{t("adminUsers.table.status")}</th>
+              <th>{t("adminUsers.table.createdAt")}</th>
+              <th>{t("adminUsers.table.action")}</th>
             </tr>
           </thead>
           <tbody>
@@ -250,14 +268,22 @@ export default function AdminUsersPage() {
                 <td style={{ fontWeight: 800 }}>{u.name}</td>
                 <td>{u.email}</td>
                 <td>
-                  <span className="badge">{u.role}</span>
+                  <span className="badge">
+                    {safeTranslate(t, `roles.${u.role}`, u.role)}
+                  </span>
                 </td>
                 <td>
                   <span className={`badge ${u.isActive ? "success" : "danger"}`}>
-                    {u.isActive ? "Aktif" : "Pasif"}
+                    {u.isActive ? t("adminUsers.active") : t("adminUsers.passive")}
                   </span>
                 </td>
-                <td>{u.createdAt ? new Date(u.createdAt).toLocaleString() : "-"}</td>
+                <td>
+                  {u.createdAt
+                    ? new Date(u.createdAt).toLocaleString(
+                        locale === "tr" ? "tr-TR" : "en-US"
+                      )
+                    : "-"}
+                </td>
                 <td>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <a
@@ -277,11 +303,13 @@ export default function AdminUsersPage() {
                         color: "var(--text-primary)",
                       }}
                     >
-                      Düzenle
+                      {t("common.edit")}
                     </a>
 
                     {u.isActive ? (
-                      <button onClick={() => deactivateUser(u.id)}>Pasife Al</button>
+                      <button onClick={() => deactivateUser(u.id)}>
+                        {t("adminUsers.deactivate")}
+                      </button>
                     ) : (
                       <span className="muted">-</span>
                     )}
@@ -294,7 +322,7 @@ export default function AdminUsersPage() {
 
         {filtered.length === 0 ? (
           <div style={{ padding: 14, color: "var(--text-secondary)" }}>
-            Kullanıcı bulunamadı.
+            {t("adminUsers.noUsers")}
           </div>
         ) : null}
       </div>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import LeadAvatar from "../../_ui/LeadAvatar";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 const STATUSES = [
   "ALL",
@@ -17,17 +18,17 @@ const STATUSES = [
 ] as const;
 
 const OUTCOMES = [
-  { key: "OPENED", label: "Açıldı / Bağlandı" },
-  { key: "NO_ANSWER", label: "Cevap yok" },
-  { key: "BUSY", label: "Meşgul" },
-  { key: "UNREACHABLE", label: "Ulaşılamıyor" },
-  { key: "CALL_AGAIN", label: "Tekrar ara" },
-  { key: "INTERESTED", label: "İlgilendi" },
-  { key: "NOT_INTERESTED", label: "İlgilenmiyor" },
-  { key: "QUALIFIED", label: "Nitelikli (Satışa hazır)" },
-  { key: "WON", label: "Kazanıldı" },
-  { key: "LOST", label: "Kaybedildi" },
-  { key: "WRONG_NUMBER", label: "Yanlış numara" },
+  { key: "OPENED", labelKey: "leadOutcomes.OPENED", fallback: "Opened / Connected" },
+  { key: "NO_ANSWER", labelKey: "leadOutcomes.NO_ANSWER", fallback: "No answer" },
+  { key: "BUSY", labelKey: "leadOutcomes.BUSY", fallback: "Busy" },
+  { key: "UNREACHABLE", labelKey: "leadOutcomes.UNREACHABLE", fallback: "Unreachable" },
+  { key: "CALL_AGAIN", labelKey: "leadOutcomes.CALL_AGAIN", fallback: "Call again" },
+  { key: "INTERESTED", labelKey: "leadOutcomes.INTERESTED", fallback: "Interested" },
+  { key: "NOT_INTERESTED", labelKey: "leadOutcomes.NOT_INTERESTED", fallback: "Not interested" },
+  { key: "QUALIFIED", labelKey: "leadOutcomes.QUALIFIED", fallback: "Qualified" },
+  { key: "WON", labelKey: "leadOutcomes.WON", fallback: "Won" },
+  { key: "LOST", labelKey: "leadOutcomes.LOST", fallback: "Lost" },
+  { key: "WRONG_NUMBER", labelKey: "leadOutcomes.WRONG_NUMBER", fallback: "Wrong number" },
 ] as const;
 
 function normalizePhoneForWa(phone: string) {
@@ -62,12 +63,28 @@ function followTone(nextFollowUpAt?: string | null) {
   return "none" as const;
 }
 
-function formatFollowText(nextFollowUpAt?: string | null) {
-  if (!nextFollowUpAt) return "Takip yok";
-  return new Date(nextFollowUpAt).toLocaleString("tr-TR");
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
+function formatFollowText(
+  nextFollowUpAt: string | null | undefined,
+  locale: "tr" | "en",
+  t: (path: string) => string
+) {
+  if (!nextFollowUpAt) return t("leads.noFollowUp");
+  return new Date(nextFollowUpAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
 }
 
 export default function LeadsPage() {
+  const { t, locale } = useLanguage();
+
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
 
@@ -179,7 +196,11 @@ export default function LeadsPage() {
       const body: any = {
         type: "CALL",
         callOutcome: outcome,
-        summary: `Arama: ${outcome}`,
+        summary: `${t("leads.callSummary")}: ${safeTranslate(
+          t,
+          `leadOutcomes.${outcome}`,
+          outcome
+        )}`,
       };
 
       if (followLocal) {
@@ -221,19 +242,21 @@ export default function LeadsPage() {
   }, [mounted]);
 
   const pageInfoText = useMemo(() => {
-    if (!total) return "Kayıt yok";
+    if (!total) return t("common.noRecords");
     const start = (page - 1) * pageSize + 1;
     const end = Math.min(page * pageSize, total);
     return `${start}-${end} / ${total}`;
-  }, [page, pageSize, total]);
+  }, [page, pageSize, total, t]);
 
-  if (!mounted) return <div>Yükleniyor…</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div className="flex-between">
         <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>Kişiler</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+            {t("leads.label")}
+          </div>
           <div
             style={{
               display: "flex",
@@ -242,9 +265,9 @@ export default function LeadsPage() {
               flexWrap: "wrap",
             }}
           >
-            <div style={{ fontSize: 24, fontWeight: 900 }}>Leadler</div>
+            <div style={{ fontSize: 24, fontWeight: 900 }}>{t("leads.title")}</div>
             <span className="badge" style={{ fontWeight: 800 }}>
-              {total} Lead
+              {total} {t("leads.leadCount")}
             </span>
           </div>
         </div>
@@ -255,7 +278,7 @@ export default function LeadsPage() {
             className={canCreate ? "primary" : ""}
             disabled={!canCreate}
           >
-            {showCreate ? "Kapat" : "Yeni Lead"}
+            {showCreate ? t("common.close") : t("leads.newLead")}
           </button>
         </div>
       </div>
@@ -269,7 +292,7 @@ export default function LeadsPage() {
             borderBottom: "2px solid var(--text-primary)",
           }}
         >
-          Leadler
+          {t("leads.title")}
         </a>
         <span
           style={{
@@ -278,13 +301,13 @@ export default function LeadsPage() {
             color: "var(--text-secondary)",
           }}
         >
-          Referans Ortaklar
+          {t("leads.referencePartners")}
         </span>
       </div>
 
       {showCreate && canCreate ? (
         <div className="card" style={{ display: "grid", gap: 10 }}>
-          <div style={{ fontWeight: 900 }}>Lead Oluştur</div>
+          <div style={{ fontWeight: 900 }}>{t("leads.createTitle")}</div>
           <div
             style={{
               display: "grid",
@@ -295,24 +318,24 @@ export default function LeadsPage() {
             <input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="Ad Soyad"
+              placeholder={t("leads.fields.fullName")}
             />
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="Telefon"
+              placeholder={t("leads.fields.phone")}
             />
             <input
               value={source}
               onChange={(e) => setSource(e.target.value)}
-              placeholder="Kaynak"
+              placeholder={t("leads.fields.source")}
             />
             <button
               className="primary"
               onClick={createLead}
               disabled={!fullName.trim() || !phone.trim()}
             >
-              Oluştur
+              {t("common.create")}
             </button>
           </div>
           {err ? <pre style={{ whiteSpace: "pre-wrap" }}>{err}</pre> : null}
@@ -331,7 +354,7 @@ export default function LeadsPage() {
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="İsim, telefon, email veya kaynak ara…"
+            placeholder={t("leads.searchPlaceholder")}
             onKeyDown={(e) => {
               if (e.key === "Enter") runSearch();
             }}
@@ -343,7 +366,9 @@ export default function LeadsPage() {
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s === "ALL" ? "Tüm Durumlar" : s}
+                {s === "ALL"
+                  ? t("leads.allStatuses")
+                  : safeTranslate(t, `leadStatuses.${s}`, s)}
               </option>
             ))}
           </select>
@@ -352,13 +377,13 @@ export default function LeadsPage() {
             value={pageSize}
             onChange={(e) => setPageSize(Number(e.target.value))}
           >
-            <option value={25}>25 / sayfa</option>
-            <option value={50}>50 / sayfa</option>
-            <option value={100}>100 / sayfa</option>
+            <option value={25}>25 / {t("agencies.perPage")}</option>
+            <option value={50}>50 / {t("agencies.perPage")}</option>
+            <option value={100}>100 / {t("agencies.perPage")}</option>
           </select>
 
           <button onClick={runSearch} disabled={loading}>
-            {loading ? "Yükleniyor…" : "Ara"}
+            {loading ? t("common.loading") : t("common.search")}
           </button>
         </div>
 
@@ -374,12 +399,12 @@ export default function LeadsPage() {
               <th style={{ width: 44 }}>
                 <input type="checkbox" />
               </th>
-              <th>İSİM</th>
-              <th>İLETİŞİM</th>
-              <th>DURUM</th>
-              <th style={{ width: 260 }}>TAKİP</th>
-              <th style={{ width: 260 }}>ARAMA SONUCU</th>
-              <th style={{ width: 120 }}>KAYDET</th>
+              <th>{t("leads.table.name")}</th>
+              <th>{t("leads.table.contact")}</th>
+              <th>{t("leads.table.status")}</th>
+              <th style={{ width: 260 }}>{t("leads.table.followUp")}</th>
+              <th style={{ width: 260 }}>{t("leads.table.callResult")}</th>
+              <th style={{ width: 120 }}>{t("leads.table.save")}</th>
             </tr>
           </thead>
 
@@ -409,7 +434,7 @@ export default function LeadsPage() {
                         lineHeight: 1.45,
                       }}
                     >
-                      Kaynak: {l.source || "-"}
+                      {t("leads.sourceLabel")}: {l.source || "-"}
                     </div>
                   </td>
 
@@ -427,7 +452,7 @@ export default function LeadsPage() {
                           marginTop: 4,
                         }}
                       >
-                        <a href={`tel:${l.phone}`}>Ara</a>
+                        <a href={`tel:${l.phone}`}>{t("leads.call")}</a>
                         <a
                           href={`https://wa.me/${normalizePhoneForWa(l.phone)}`}
                           target="_blank"
@@ -440,7 +465,9 @@ export default function LeadsPage() {
                   </td>
 
                   <td>
-                    <span className="badge">{l.status}</span>
+                    <span className="badge">
+                      {safeTranslate(t, `leadStatuses.${l.status}`, l.status)}
+                    </span>
                   </td>
 
                   <td>
@@ -461,13 +488,13 @@ export default function LeadsPage() {
                           padding: "8px 12px",
                         }}
                       >
-                        {formatFollowText(l.nextFollowUpAt)}
+                        {formatFollowText(l.nextFollowUpAt, locale, t)}
                       </span>
 
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button onClick={() => preset(l.id, 24)}>+1g</button>
-                        <button onClick={() => preset(l.id, 72)}>+3g</button>
-                        <button onClick={() => preset(l.id, 168)}>+7g</button>
+                        <button onClick={() => preset(l.id, 24)}>+1{t("leads.dayShort")}</button>
+                        <button onClick={() => preset(l.id, 72)}>+3{t("leads.dayShort")}</button>
+                        <button onClick={() => preset(l.id, 168)}>+7{t("leads.dayShort")}</button>
                       </div>
                     </div>
                   </td>
@@ -482,7 +509,7 @@ export default function LeadsPage() {
                       >
                         {OUTCOMES.map((o) => (
                           <option key={o.key} value={o.key}>
-                            {o.label}
+                            {safeTranslate(t, o.labelKey, o.fallback)}
                           </option>
                         ))}
                       </select>
@@ -503,7 +530,7 @@ export default function LeadsPage() {
                       onClick={() => saveOutcome(l.id)}
                       disabled={saving}
                     >
-                      {saving ? "Kaydediliyor…" : "Kaydet"}
+                      {saving ? t("leads.saving") : t("common.save")}
                     </button>
                   </td>
                 </tr>
@@ -514,7 +541,7 @@ export default function LeadsPage() {
 
         {leads.length === 0 ? (
           <div style={{ padding: 14, color: "var(--text-secondary)" }}>
-            Lead bulunamadı.
+            {t("leads.noLeads")}
           </div>
         ) : null}
       </div>
@@ -538,18 +565,18 @@ export default function LeadsPage() {
               onClick={() => load(Math.max(1, page - 1), statusFilter, q, pageSize)}
               disabled={page <= 1 || loading}
             >
-              Önceki
+              {t("common.previous")}
             </button>
 
             <span style={{ fontSize: 13, fontWeight: 700 }}>
-              Sayfa {page} / {totalPages}
+              {t("agencies.page")} {page} / {totalPages}
             </span>
 
             <button
               onClick={() => load(Math.min(totalPages, page + 1), statusFilter, q, pageSize)}
               disabled={page >= totalPages || loading}
             >
-              Sonraki
+              {t("common.next")}
             </button>
           </div>
         </div>

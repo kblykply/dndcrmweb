@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type PresentationStatus =
   | "SCHEDULED"
@@ -112,7 +113,19 @@ function badgeClass(status?: string) {
   return "";
 }
 
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
 export default function CustomerDetailPage() {
+  const { t, locale } = useLanguage();
+
   const params = useParams();
   const rawId = (params as any)?.id as string | string[] | undefined;
   const customerId = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -146,7 +159,7 @@ export default function CustomerDetailPage() {
 
   async function loadCustomer() {
     if (!customerId) {
-      setErr("Müşteri ID bulunamadı.");
+      setErr(t("customerDetail.customerIdMissing"));
       setLoading(false);
       return;
     }
@@ -299,14 +312,16 @@ export default function CustomerDetailPage() {
     };
   }, [customer]);
 
-  if (!mounted) return <div>Yükleniyor…</div>;
-  if (loading) return <div className="card">Müşteri yükleniyor…</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
+  if (loading) return <div className="card">{t("customerDetail.loadingCustomer")}</div>;
 
   if (!customer) {
     return (
       <div className="card">
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Müşteri Bulunamadı</div>
-        <div className="muted">{err || "Böyle bir müşteri yok."}</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>
+          {t("customerDetail.notFoundTitle")}
+        </div>
+        <div className="muted">{err || t("customerDetail.notFoundText")}</div>
       </div>
     );
   }
@@ -316,11 +331,12 @@ export default function CustomerDetailPage() {
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <a href="/customers" style={{ fontWeight: 800 }}>
-            ← Müşterilere Dön
+            ← {t("customerDetail.backToCustomers")}
           </a>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{customer.fullName}</div>
           <div className="muted" style={{ fontSize: 13 }}>
-            {customer.companyName || "-"} • {customer.agency?.name || "Ajans yok"}
+            {customer.companyName || "-"} •{" "}
+            {customer.agency?.name || t("customerDetail.noAgency")}
           </div>
         </div>
 
@@ -329,7 +345,9 @@ export default function CustomerDetailPage() {
             customer.type === "EXISTING" ? "success" : "info"
           }`}
         >
-          {customer.type || "-"}
+          {customer.type
+            ? safeTranslate(t, `customerTypes.${customer.type}`, customer.type)
+            : "-"}
         </span>
       </div>
 
@@ -354,25 +372,25 @@ export default function CustomerDetailPage() {
         }}
       >
         <div className="card">
-          <div className="muted">Toplam Sunum</div>
+          <div className="muted">{t("customerDetail.stats.totalPresentations")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.total}</div>
         </div>
         <div className="card">
-          <div className="muted">Planlı</div>
+          <div className="muted">{t("customerDetail.stats.scheduled")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.scheduled}</div>
         </div>
         <div className="card">
-          <div className="muted">Tamamlanan</div>
+          <div className="muted">{t("customerDetail.stats.completed")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.completed}</div>
         </div>
         <div className="card">
-          <div className="muted">WON</div>
+          <div className="muted">{t("customerDetail.stats.won")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.won}</div>
         </div>
       </div>
 
       <div className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 900 }}>Müşteri Bilgileri</div>
+        <div style={{ fontWeight: 900 }}>{t("customerDetail.customerInfo")}</div>
 
         <div
           style={{
@@ -382,22 +400,22 @@ export default function CustomerDetailPage() {
           }}
         >
           <div>
-            <b>Telefon:</b> {customer.phone || "-"}
+            <b>{t("customerDetail.fields.phone")}:</b> {customer.phone || "-"}
           </div>
           <div>
-            <b>E-posta:</b> {customer.email || "-"}
+            <b>{t("customerDetail.fields.email")}:</b> {customer.email || "-"}
           </div>
           <div>
-            <b>Ajans:</b> {customer.agency?.name || "-"}
+            <b>{t("customerDetail.fields.agency")}:</b> {customer.agency?.name || "-"}
           </div>
           <div>
-            <b>Şehir:</b> {customer.city || "-"}
+            <b>{t("customerDetail.fields.city")}:</b> {customer.city || "-"}
           </div>
           <div>
-            <b>Ülke:</b> {customer.country || "-"}
+            <b>{t("customerDetail.fields.country")}:</b> {customer.country || "-"}
           </div>
           <div>
-            <b>Kaynak:</b> {customer.source || "-"}
+            <b>{t("customerDetail.fields.source")}:</b> {customer.source || "-"}
           </div>
         </div>
 
@@ -417,7 +435,7 @@ export default function CustomerDetailPage() {
 
       {canCreatePresentation ? (
         <div className="card" style={{ display: "grid", gap: 12 }}>
-          <div style={{ fontWeight: 900 }}>Yeni Sunum Ekle</div>
+          <div style={{ fontWeight: 900 }}>{t("customerDetail.newPresentation")}</div>
 
           <div
             style={{
@@ -429,12 +447,12 @@ export default function CustomerDetailPage() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Sunum başlığı"
+              placeholder={t("customerDetail.presentationFields.title")}
             />
             <input
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              placeholder="Proje adı"
+              placeholder={t("customerDetail.presentationFields.projectName")}
             />
             <input
               type="datetime-local"
@@ -444,7 +462,7 @@ export default function CustomerDetailPage() {
             <input
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              placeholder="Lokasyon"
+              placeholder={t("customerDetail.presentationFields.location")}
             />
 
             {isSales ? (
@@ -454,7 +472,9 @@ export default function CustomerDetailPage() {
                 value={assignedSalesId}
                 onChange={(e) => setAssignedSalesId(e.target.value)}
               >
-                <option value="">Sales temsilcisi seç</option>
+                <option value="">
+                  {t("customerDetail.presentationFields.selectSales")}
+                </option>
                 {salesUsers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -467,7 +487,7 @@ export default function CustomerDetailPage() {
           <textarea
             value={notesSummary}
             onChange={(e) => setNotesSummary(e.target.value)}
-            placeholder="Sunum özet notu"
+            placeholder={t("customerDetail.presentationFields.summaryNote")}
           />
 
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -481,14 +501,14 @@ export default function CustomerDetailPage() {
                 (!isSales && !assignedSalesId)
               }
             >
-              {saving ? "Kaydediliyor..." : "Sunum Oluştur"}
+              {saving ? t("customers.saving") : t("customerDetail.createPresentation")}
             </button>
           </div>
         </div>
       ) : null}
 
       <div className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 900 }}>Sunum Geçmişi</div>
+        <div style={{ fontWeight: 900 }}>{t("customerDetail.presentationHistory")}</div>
 
         {customer.presentations.length === 0 ? (
           <div
@@ -500,7 +520,7 @@ export default function CustomerDetailPage() {
               color: "var(--text-secondary)",
             }}
           >
-            Henüz sunum kaydı yok.
+            {t("customerDetail.noPresentations")}
           </div>
         ) : (
           <div style={{ display: "grid", gap: 12 }}>
@@ -521,28 +541,30 @@ export default function CustomerDetailPage() {
                     <div style={{ fontWeight: 900, fontSize: 16 }}>{p.title}</div>
                     <div className="muted" style={{ fontSize: 12 }}>
                       {p.projectName || "-"} •{" "}
-                      {new Date(p.presentationAt).toLocaleString()}
+                      {new Date(p.presentationAt).toLocaleString(
+                        locale === "tr" ? "tr-TR" : "en-US"
+                      )}
                     </div>
                     <div className="muted" style={{ fontSize: 12 }}>
-                      Sales: {p.assignedSales?.name || "-"} • Oluşturan:{" "}
-                      {p.createdBy?.name || "-"}
+                      {t("customerDetail.salesLabel")}: {p.assignedSales?.name || "-"} •{" "}
+                      {t("customerDetail.createdByLabel")}: {p.createdBy?.name || "-"}
                     </div>
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <span className={`badge ${badgeClass(p.status)}`}>
-                      {p.status}
+                      {safeTranslate(t, `presentationStatuses.${p.status}`, p.status)}
                     </span>
                     {p.outcome ? (
                       <span className={`badge ${badgeClass(p.outcome)}`}>
-                        {p.outcome}
+                        {safeTranslate(t, `presentationOutcomes.${p.outcome}`, p.outcome)}
                       </span>
                     ) : null}
                   </div>
                 </div>
 
                 <div style={{ fontSize: 13 }}>
-                  <b>Lokasyon:</b> {p.location || "-"}
+                  <b>{t("customerDetail.presentationFields.location")}:</b> {p.location || "-"}
                 </div>
 
                 {p.notesSummary ? (
@@ -571,7 +593,7 @@ export default function CustomerDetailPage() {
                   >
                     {STATUS_OPTIONS.map((s) => (
                       <option key={s} value={s}>
-                        {s}
+                        {safeTranslate(t, `presentationStatuses.${s}`, s)}
                       </option>
                     ))}
                   </select>
@@ -586,20 +608,20 @@ export default function CustomerDetailPage() {
                     disabled={saving}
                     style={{ width: 180 }}
                   >
-                    <option value="">Outcome seç</option>
+                    <option value="">{t("customerDetail.selectOutcome")}</option>
                     {OUTCOME_OPTIONS.map((o) => (
                       <option key={o} value={o}>
-                        {o}
+                        {safeTranslate(t, `presentationOutcomes.${o}`, o)}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div style={{ display: "grid", gap: 10 }}>
-                  <div style={{ fontWeight: 800 }}>Sunum Notları</div>
+                  <div style={{ fontWeight: 800 }}>{t("customerDetail.presentationNotes")}</div>
 
                   {p.notes.length === 0 ? (
-                    <div className="muted">Henüz not yok.</div>
+                    <div className="muted">{t("customerDetail.noNotes")}</div>
                   ) : (
                     p.notes.map((n) => (
                       <div
@@ -616,7 +638,9 @@ export default function CustomerDetailPage() {
                           style={{ fontSize: 12, marginBottom: 4 }}
                         >
                           {n.createdBy?.name || "-"} •{" "}
-                          {new Date(n.createdAt).toLocaleString()}
+                          {new Date(n.createdAt).toLocaleString(
+                            locale === "tr" ? "tr-TR" : "en-US"
+                          )}
                         </div>
                         <div>{n.note}</div>
                       </div>
@@ -632,7 +656,7 @@ export default function CustomerDetailPage() {
                           [p.id]: e.target.value,
                         }))
                       }
-                      placeholder="Bu sunuma not ekle..."
+                      placeholder={t("customerDetail.addNotePlaceholder")}
                     />
                     <div style={{ display: "flex", justifyContent: "flex-end" }}>
                       <button
@@ -640,7 +664,7 @@ export default function CustomerDetailPage() {
                         onClick={() => addPresentationNote(p.id)}
                         disabled={saving || !(noteByPresentationId[p.id] || "").trim()}
                       >
-                        Not Ekle
+                        {t("customerDetail.addNote")}
                       </button>
                     </div>
                   </div>

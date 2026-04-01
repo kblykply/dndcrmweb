@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type AgencyStatus = "ACTIVE" | "PASSIVE" | "PROSPECT" | "DEALING" | "CLOSED";
 type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
@@ -87,7 +88,19 @@ function badgeClass(status?: string) {
   return "";
 }
 
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null,
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
 export default function AgencyDetailPage() {
+  const { t, locale } = useLanguage();
+
   const params = useParams();
   const rawId = (params as any)?.id as string | string[] | undefined;
   const agencyId = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -133,7 +146,7 @@ export default function AgencyDetailPage() {
 
   async function load() {
     if (!agencyId) {
-      setErr("Ajans ID bulunamadı.");
+      setErr(t("agencyDetail.agencyIdMissing"));
       setLoading(false);
       return;
     }
@@ -200,7 +213,7 @@ export default function AgencyDetailPage() {
       });
 
       await load();
-      alert("Ajans güncellendi.");
+      alert(t("agencyDetail.updatedAlert"));
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
@@ -312,18 +325,23 @@ export default function AgencyDetailPage() {
       notes: agency?.notes?.length || 0,
       meetings: agency?.meetings?.length || 0,
       tasks: agency?.tasks?.length || 0,
-      openTasks: agency?.tasks?.filter((t) => t.status !== "DONE" && t.status !== "CANCELLED").length || 0,
+      openTasks:
+        agency?.tasks?.filter(
+          (t) => t.status !== "DONE" && t.status !== "CANCELLED",
+        ).length || 0,
     };
   }, [agency]);
 
-  if (!mounted) return <div>Yükleniyor…</div>;
-  if (loading) return <div className="card">Ajans yükleniyor…</div>;
+  if (!mounted) return <div>{t("common.loading")}</div>;
+  if (loading) return <div className="card">{t("agencyDetail.loadingAgency")}</div>;
 
   if (!agency) {
     return (
       <div className="card">
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Ajans Bulunamadı</div>
-        <div className="muted">{err || "Böyle bir ajans yok."}</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>
+          {t("agencyDetail.notFoundTitle")}
+        </div>
+        <div className="muted">{err || t("agencyDetail.notFoundText")}</div>
       </div>
     );
   }
@@ -333,15 +351,18 @@ export default function AgencyDetailPage() {
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <a href="/agencies" style={{ fontWeight: 800 }}>
-            ← Ajanslara Dön
+            ← {t("agencyDetail.backToAgencies")}
           </a>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{agency.name}</div>
           <div className="muted" style={{ fontSize: 13 }}>
-            Manager: {agency.manager?.name || "-"} • Sales: {agency.assignedSales?.name || "-"}
+            {t("agencyDetail.managerLabel")}: {agency.manager?.name || "-"} •{" "}
+            {t("agencyDetail.salesLabel")}: {agency.assignedSales?.name || "-"}
           </div>
         </div>
 
-        <span className={`badge ${badgeClass(agency.status)}`}>{agency.status}</span>
+        <span className={`badge ${badgeClass(agency.status)}`}>
+          {safeTranslate(t, `agencyStatuses.${agency.status}`, agency.status)}
+        </span>
       </div>
 
       {err ? (
@@ -364,14 +385,26 @@ export default function AgencyDetailPage() {
           gap: 14,
         }}
       >
-        <div className="card"><div className="muted">Not</div><div style={{ fontSize: 28, fontWeight: 900 }}>{stats.notes}</div></div>
-        <div className="card"><div className="muted">Toplantı</div><div style={{ fontSize: 28, fontWeight: 900 }}>{stats.meetings}</div></div>
-        <div className="card"><div className="muted">Görev</div><div style={{ fontSize: 28, fontWeight: 900 }}>{stats.tasks}</div></div>
-        <div className="card"><div className="muted">Açık Görev</div><div style={{ fontSize: 28, fontWeight: 900 }}>{stats.openTasks}</div></div>
+        <div className="card">
+          <div className="muted">{t("agencyDetail.stats.notes")}</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.notes}</div>
+        </div>
+        <div className="card">
+          <div className="muted">{t("agencyDetail.stats.meetings")}</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.meetings}</div>
+        </div>
+        <div className="card">
+          <div className="muted">{t("agencyDetail.stats.tasks")}</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.tasks}</div>
+        </div>
+        <div className="card">
+          <div className="muted">{t("agencyDetail.stats.openTasks")}</div>
+          <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.openTasks}</div>
+        </div>
       </div>
 
       <div className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 900 }}>Ajans Bilgileri</div>
+        <div style={{ fontWeight: 900 }}>{t("agencyDetail.agencyInfo")}</div>
 
         <div
           style={{
@@ -380,25 +413,69 @@ export default function AgencyDetailPage() {
             gap: 10,
           }}
         >
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ajans adı" />
-          <input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Yetkili kişi" />
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefon" />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("agencies.fields.name")}
+          />
+          <input
+            value={contactName}
+            onChange={(e) => setContactName(e.target.value)}
+            placeholder={t("agencies.fields.contactName")}
+          />
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder={t("agencies.fields.phone")}
+          />
 
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-posta" />
-          <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Şehir" />
-          <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Ülke" />
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={t("agencies.fields.email")}
+          />
+          <input
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            placeholder={t("agencies.fields.city")}
+          />
+          <input
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            placeholder={t("agencies.fields.country")}
+          />
 
-          <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="Website" />
-          <input value={source} onChange={(e) => setSource(e.target.value)} placeholder="Kaynak" />
-          <select value={status} onChange={(e) => setStatus(e.target.value as AgencyStatus)}>
+          <input
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            placeholder={t("agencies.fields.website")}
+          />
+          <input
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            placeholder={t("agencies.fields.source")}
+          />
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as AgencyStatus)}
+          >
             {AGENCY_STATUS_OPTIONS.map((s) => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s}>
+                {safeTranslate(t, `agencyStatuses.${s}`, s)}
+              </option>
             ))}
           </select>
 
-          <input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Adres" />
-          <select value={assignedSalesId} onChange={(e) => setAssignedSalesId(e.target.value)}>
-            <option value="">Sales temsilcisi seç</option>
+          <input
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder={t("agencies.fields.address")}
+          />
+          <select
+            value={assignedSalesId}
+            onChange={(e) => setAssignedSalesId(e.target.value)}
+          >
+            <option value="">{t("agencies.fields.selectSales")}</option>
             {salesUsers.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.email})
@@ -410,13 +487,17 @@ export default function AgencyDetailPage() {
         <textarea
           value={notesSummary}
           onChange={(e) => setNotesSummary(e.target.value)}
-          placeholder="Ajans özet notu"
+          placeholder={t("agencyDetail.summaryNote")}
         />
 
         {canManage ? (
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button className="primary" onClick={saveAgency} disabled={saving || !name.trim()}>
-              {saving ? "Kaydediliyor..." : "Ajansı Kaydet"}
+            <button
+              className="primary"
+              onClick={saveAgency}
+              disabled={saving || !name.trim()}
+            >
+              {saving ? t("agencies.saving") : t("agencyDetail.saveAgency")}
             </button>
           </div>
         ) : null}
@@ -431,18 +512,22 @@ export default function AgencyDetailPage() {
         }}
       >
         <div className="card" style={{ display: "grid", gap: 12 }}>
-          <div style={{ fontWeight: 900 }}>Notlar</div>
+          <div style={{ fontWeight: 900 }}>{t("agencyDetail.notesTitle")}</div>
 
           {canNote ? (
             <div style={{ display: "grid", gap: 10 }}>
               <textarea
                 value={newNote}
                 onChange={(e) => setNewNote(e.target.value)}
-                placeholder="Ajans notu ekle..."
+                placeholder={t("agencyDetail.addNotePlaceholder")}
               />
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button className="primary" onClick={addNote} disabled={saving || !newNote.trim()}>
-                  Not Ekle
+                <button
+                  className="primary"
+                  onClick={addNote}
+                  disabled={saving || !newNote.trim()}
+                >
+                  {t("agencyDetail.addNote")}
                 </button>
               </div>
             </div>
@@ -450,7 +535,7 @@ export default function AgencyDetailPage() {
 
           <div style={{ display: "grid", gap: 10 }}>
             {agency.notes.length === 0 ? (
-              <div className="muted">Henüz not yok.</div>
+              <div className="muted">{t("agencyDetail.noNotes")}</div>
             ) : (
               agency.notes.map((n) => (
                 <div
@@ -463,7 +548,10 @@ export default function AgencyDetailPage() {
                   }}
                 >
                   <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>
-                    {n.createdBy?.name || "-"} • {new Date(n.createdAt).toLocaleString()}
+                    {n.createdBy?.name || "-"} •{" "}
+                    {new Date(n.createdAt).toLocaleString(
+                      locale === "tr" ? "tr-TR" : "en-US",
+                    )}
                   </div>
                   <div>{n.note}</div>
                 </div>
@@ -473,14 +561,14 @@ export default function AgencyDetailPage() {
         </div>
 
         <div className="card" style={{ display: "grid", gap: 12 }}>
-          <div style={{ fontWeight: 900 }}>Toplantılar</div>
+          <div style={{ fontWeight: 900 }}>{t("agencyDetail.meetingsTitle")}</div>
 
           {canNote ? (
             <div style={{ display: "grid", gap: 10 }}>
               <input
                 value={meetingTitle}
                 onChange={(e) => setMeetingTitle(e.target.value)}
-                placeholder="Toplantı başlığı"
+                placeholder={t("agencyDetail.meetingFields.title")}
               />
               <input
                 type="datetime-local"
@@ -490,7 +578,7 @@ export default function AgencyDetailPage() {
               <textarea
                 value={meetingNotes}
                 onChange={(e) => setMeetingNotes(e.target.value)}
-                placeholder="Toplantı notu"
+                placeholder={t("agencyDetail.meetingFields.notes")}
               />
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button
@@ -498,7 +586,7 @@ export default function AgencyDetailPage() {
                   onClick={createMeeting}
                   disabled={saving || !meetingTitle.trim() || !meetingAt}
                 >
-                  Toplantı Ekle
+                  {t("agencyDetail.addMeeting")}
                 </button>
               </div>
             </div>
@@ -506,7 +594,7 @@ export default function AgencyDetailPage() {
 
           <div style={{ display: "grid", gap: 10 }}>
             {agency.meetings.length === 0 ? (
-              <div className="muted">Henüz toplantı yok.</div>
+              <div className="muted">{t("agencyDetail.noMeetings")}</div>
             ) : (
               agency.meetings.map((m) => (
                 <div
@@ -522,7 +610,10 @@ export default function AgencyDetailPage() {
                 >
                   <div style={{ fontWeight: 800 }}>{m.title}</div>
                   <div className="muted" style={{ fontSize: 12 }}>
-                    {new Date(m.meetingAt).toLocaleString()} • {m.createdBy?.name || "-"}
+                    {new Date(m.meetingAt).toLocaleString(
+                      locale === "tr" ? "tr-TR" : "en-US",
+                    )}{" "}
+                    • {m.createdBy?.name || "-"}
                   </div>
                   <div style={{ fontSize: 13 }}>{m.notes || "-"}</div>
                 </div>
@@ -533,7 +624,7 @@ export default function AgencyDetailPage() {
       </div>
 
       <div className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 900 }}>Görevler</div>
+        <div style={{ fontWeight: 900 }}>{t("agencyDetail.tasksTitle")}</div>
 
         {canManage ? (
           <div
@@ -546,44 +637,56 @@ export default function AgencyDetailPage() {
             <input
               value={taskTitle}
               onChange={(e) => setTaskTitle(e.target.value)}
-              placeholder="Görev başlığı"
+              placeholder={t("agencyDetail.taskFields.title")}
             />
             <input
               value={taskDescription}
               onChange={(e) => setTaskDescription(e.target.value)}
-              placeholder="Açıklama"
+              placeholder={t("agencyDetail.taskFields.description")}
             />
             <input
               type="datetime-local"
               value={taskDueAt}
               onChange={(e) => setTaskDueAt(e.target.value)}
             />
-            <select value={taskAssignedToId} onChange={(e) => setTaskAssignedToId(e.target.value)}>
-              <option value="">Sales temsilcisi seç</option>
+            <select
+              value={taskAssignedToId}
+              onChange={(e) => setTaskAssignedToId(e.target.value)}
+            >
+              <option value="">{t("agencies.fields.selectSales")}</option>
               {salesUsers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
             </select>
-            <select value={taskPriority} onChange={(e) => setTaskPriority(e.target.value as TaskPriority)}>
+            <select
+              value={taskPriority}
+              onChange={(e) => setTaskPriority(e.target.value as TaskPriority)}
+            >
               {TASK_PRIORITY_OPTIONS.map((p) => (
-                <option key={p} value={p}>{p}</option>
+                <option key={p} value={p}>
+                  {safeTranslate(t, `taskPriorities.${p}`, p)}
+                </option>
               ))}
             </select>
-            <button className="primary" onClick={createTask} disabled={saving || !taskTitle.trim()}>
-              Görev Ekle
+            <button
+              className="primary"
+              onClick={createTask}
+              disabled={saving || !taskTitle.trim()}
+            >
+              {t("agencyDetail.addTask")}
             </button>
           </div>
         ) : null}
 
         <div style={{ display: "grid", gap: 10 }}>
           {agency.tasks.length === 0 ? (
-            <div className="muted">Henüz görev yok.</div>
+            <div className="muted">{t("agencyDetail.noTasks")}</div>
           ) : (
-            agency.tasks.map((t) => (
+            agency.tasks.map((task) => (
               <div
-                key={t.id}
+                key={task.id}
                 style={{
                   border: "1px solid var(--stroke)",
                   borderRadius: 12,
@@ -595,28 +698,39 @@ export default function AgencyDetailPage() {
               >
                 <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
                   <div style={{ display: "grid", gap: 4 }}>
-                    <div style={{ fontWeight: 800 }}>{t.title}</div>
+                    <div style={{ fontWeight: 800 }}>{task.title}</div>
                     <div className="muted" style={{ fontSize: 12 }}>
-                      {t.assignedTo?.name || "Atanmamış"} • {t.dueAt ? new Date(t.dueAt).toLocaleString() : "Tarih yok"}
+                      {task.assignedTo?.name || t("agencyDetail.unassigned")} •{" "}
+                      {task.dueAt
+                        ? new Date(task.dueAt).toLocaleString(
+                            locale === "tr" ? "tr-TR" : "en-US",
+                          )
+                        : t("agencyDetail.noDate")}
                     </div>
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span className={`badge ${badgeClass(t.status)}`}>{t.status}</span>
-                    <span className="badge">{t.priority}</span>
+                    <span className={`badge ${badgeClass(task.status)}`}>
+                      {safeTranslate(t, `taskStatuses.${task.status}`, task.status)}
+                    </span>
+                    <span className="badge">
+                      {safeTranslate(t, `taskPriorities.${task.priority}`, task.priority)}
+                    </span>
                   </div>
                 </div>
 
-                {t.description ? <div style={{ fontSize: 13 }}>{t.description}</div> : null}
+                {task.description ? (
+                  <div style={{ fontSize: 13 }}>{task.description}</div>
+                ) : null}
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {TASK_STATUS_OPTIONS.map((s) => (
                     <button
                       key={s}
-                      onClick={() => updateTaskStatus(t.id, s)}
-                      disabled={saving || t.status === s}
+                      onClick={() => updateTaskStatus(task.id, s)}
+                      disabled={saving || task.status === s}
                     >
-                      {s}
+                      {safeTranslate(t, `taskStatuses.${s}`, s)}
                     </button>
                   ))}
                 </div>
