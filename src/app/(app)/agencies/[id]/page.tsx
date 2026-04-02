@@ -27,6 +27,8 @@ type AgencyDetail = {
   updatedAt?: string;
   manager?: { id: string; name: string; email: string };
   assignedSales?: { id: string; name: string; email: string } | null;
+  canSeeContactDetails?: boolean;
+  canEdit?: boolean;
   notes: Array<{
     id: string;
     note: string;
@@ -141,8 +143,31 @@ export default function AgencyDetailPage() {
   const [taskPriority, setTaskPriority] = useState<TaskPriority>("MEDIUM");
 
   const role = me?.role as string | undefined;
-  const canManage = role === "MANAGER" || role === "ADMIN";
-  const canNote = role === "MANAGER" || role === "ADMIN" || role === "SALES";
+  const isAdmin = role === "ADMIN";
+  const isManager = role === "MANAGER";
+  const isSales = role === "SALES";
+
+  const canManage = isManager || isAdmin;
+  const canNote = isManager || isAdmin || isSales;
+
+  const isOwnAgencyForSales =
+    !!agency && !!me?.id && agency.assignedSales?.id === me.id;
+
+  const canSeeContactDetails =
+    !isSales || agency?.canSeeContactDetails === true || isOwnAgencyForSales;
+
+  const canSalesEditAgency =
+    isSales && (agency?.canEdit === true || isOwnAgencyForSales);
+
+  const canEditAgencyInfo = canManage || canSalesEditAgency;
+
+  function hiddenText() {
+    return safeTranslate(
+      t,
+      "common.hidden",
+      locale === "tr" ? "Gizli" : "Hidden",
+    );
+  }
 
   async function load() {
     if (!agencyId) {
@@ -184,33 +209,44 @@ export default function AgencyDetailPage() {
   }
 
   async function saveAgency() {
-    if (!agency) return;
+    if (!agency || !canEditAgencyInfo) return;
+
     setErr(null);
     setSaving(true);
     try {
+      const body: any = {
+        name: name.trim(),
+        notesSummary: notesSummary.trim() || undefined,
+      };
+
+      if (canEditAgencyInfo && canSeeContactDetails) {
+        body.contactName = contactName.trim() || undefined;
+        body.phone = phone.trim() || undefined;
+        body.email = email.trim() || undefined;
+        body.city = city.trim() || undefined;
+        body.country = country.trim() || undefined;
+        body.address = address.trim() || undefined;
+        body.website = website.trim() || undefined;
+        body.source = source.trim() || undefined;
+      }
+
+      if (canManage) {
+        body.status = status;
+      }
+
       await authedFetch(`/agencies/${agency.id}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          name: name.trim(),
-          contactName: contactName.trim() || undefined,
-          phone: phone.trim() || undefined,
-          email: email.trim() || undefined,
-          city: city.trim() || undefined,
-          country: country.trim() || undefined,
-          address: address.trim() || undefined,
-          website: website.trim() || undefined,
-          source: source.trim() || undefined,
-          notesSummary: notesSummary.trim() || undefined,
-          status,
-        }),
+        body: JSON.stringify(body),
       });
 
-      await authedFetch(`/agencies/${agency.id}/assign-sales`, {
-        method: "POST",
-        body: JSON.stringify({
-          salesId: assignedSalesId || null,
-        }),
-      });
+      if (canManage) {
+        await authedFetch(`/agencies/${agency.id}/assign-sales`, {
+          method: "POST",
+          body: JSON.stringify({
+            salesId: assignedSalesId || null,
+          }),
+        });
+      }
 
       await load();
       alert(t("agencyDetail.updatedAlert"));
@@ -317,7 +353,6 @@ export default function AgencyDetailPage() {
   useEffect(() => {
     if (!mounted) return;
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, agencyId]);
 
   const stats = useMemo(() => {
@@ -327,7 +362,7 @@ export default function AgencyDetailPage() {
       tasks: agency?.tasks?.length || 0,
       openTasks:
         agency?.tasks?.filter(
-          (t) => t.status !== "DONE" && t.status !== "CANCELLED",
+          (task) => task.status !== "DONE" && task.status !== "CANCELLED",
         ).length || 0,
     };
   }, [agency]);
@@ -364,6 +399,24 @@ export default function AgencyDetailPage() {
           {safeTranslate(t, `agencyStatuses.${agency.status}`, agency.status)}
         </span>
       </div>
+
+      {isSales && !canSeeContactDetails ? (
+        <div
+          className="card"
+          style={{
+            border: "1px solid rgba(245,158,11,.35)",
+            background: "rgba(245,158,11,.08)",
+          }}
+        >
+          {safeTranslate(
+            t,
+            "agencyDetail.limitedAccessNotice",
+            locale === "tr"
+              ? "Bu ajans size atanmadığı için iletişim bilgileri gizlenmiştir. Düzenleme yapamazsınız."
+              : "Contact details are hidden because this agency is not assigned to you. You cannot edit it.",
+          )}
+        </div>
+      ) : null}
 
       {err ? (
         <div
@@ -417,47 +470,62 @@ export default function AgencyDetailPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t("agencies.fields.name")}
+            disabled={!canEditAgencyInfo}
           />
+
           <input
-            value={contactName}
+            value={canSeeContactDetails ? contactName || "" : hiddenText()}
             onChange={(e) => setContactName(e.target.value)}
             placeholder={t("agencies.fields.contactName")}
+            disabled={!canEditAgencyInfo || !canSeeContactDetails}
           />
+
           <input
-            value={phone}
+            value={canSeeContactDetails ? phone || "" : hiddenText()}
             onChange={(e) => setPhone(e.target.value)}
             placeholder={t("agencies.fields.phone")}
+            disabled={!canEditAgencyInfo || !canSeeContactDetails}
           />
 
           <input
-            value={email}
+            value={canSeeContactDetails ? email || "" : hiddenText()}
             onChange={(e) => setEmail(e.target.value)}
             placeholder={t("agencies.fields.email")}
-          />
-          <input
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            placeholder={t("agencies.fields.city")}
-          />
-          <input
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            placeholder={t("agencies.fields.country")}
+            disabled={!canEditAgencyInfo || !canSeeContactDetails}
           />
 
           <input
-            value={website}
+            value={canSeeContactDetails ? city || "" : hiddenText()}
+            onChange={(e) => setCity(e.target.value)}
+            placeholder={t("agencies.fields.city")}
+            disabled={!canEditAgencyInfo || !canSeeContactDetails}
+          />
+
+          <input
+            value={canSeeContactDetails ? country || "" : hiddenText()}
+            onChange={(e) => setCountry(e.target.value)}
+            placeholder={t("agencies.fields.country")}
+            disabled={!canEditAgencyInfo || !canSeeContactDetails}
+          />
+
+          <input
+            value={canSeeContactDetails ? website || "" : hiddenText()}
             onChange={(e) => setWebsite(e.target.value)}
             placeholder={t("agencies.fields.website")}
+            disabled={!canEditAgencyInfo || !canSeeContactDetails}
           />
+
           <input
-            value={source}
+            value={canSeeContactDetails ? source || "" : hiddenText()}
             onChange={(e) => setSource(e.target.value)}
             placeholder={t("agencies.fields.source")}
+            disabled={!canEditAgencyInfo || !canSeeContactDetails}
           />
+
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value as AgencyStatus)}
+            disabled={!canManage}
           >
             {AGENCY_STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
@@ -467,13 +535,16 @@ export default function AgencyDetailPage() {
           </select>
 
           <input
-            value={address}
+            value={canSeeContactDetails ? address || "" : hiddenText()}
             onChange={(e) => setAddress(e.target.value)}
             placeholder={t("agencies.fields.address")}
+            disabled={!canEditAgencyInfo || !canSeeContactDetails}
           />
+
           <select
             value={assignedSalesId}
             onChange={(e) => setAssignedSalesId(e.target.value)}
+            disabled={!canManage}
           >
             <option value="">{t("agencies.fields.selectSales")}</option>
             {salesUsers.map((s) => (
@@ -488,9 +559,10 @@ export default function AgencyDetailPage() {
           value={notesSummary}
           onChange={(e) => setNotesSummary(e.target.value)}
           placeholder={t("agencyDetail.summaryNote")}
+          disabled={!canEditAgencyInfo}
         />
 
-        {canManage ? (
+        {canEditAgencyInfo ? (
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <button
               className="primary"

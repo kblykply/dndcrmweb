@@ -40,6 +40,13 @@ type CustomerDetail = {
   type?: "POTENTIAL" | "EXISTING";
   notesSummary?: string | null;
   ownerId?: string | null;
+  owner?: {
+    id: string;
+    name: string;
+    email?: string | null;
+  } | null;
+  canSeeContactDetails?: boolean;
+  canEdit?: boolean;
   agency?: {
     id: string;
     name: string;
@@ -93,6 +100,11 @@ const OUTCOME_OPTIONS: PresentationOutcome[] = [
   "LOST",
 ];
 
+const CUSTOMER_TYPE_OPTIONS: Array<"POTENTIAL" | "EXISTING"> = [
+  "POTENTIAL",
+  "EXISTING",
+];
+
 function badgeClass(status?: string) {
   if (status === "COMPLETED" || status === "POSITIVE" || status === "WON") {
     return "success";
@@ -116,7 +128,7 @@ function badgeClass(status?: string) {
 function safeTranslate(
   t: (path: string) => string,
   path: string,
-  fallback?: string | null
+  fallback?: string | null,
 ) {
   const translated = t(path);
   if (translated === path) return fallback ?? path;
@@ -151,11 +163,65 @@ export default function CustomerDetailPage() {
     Record<string, string>
   >({});
 
+  // customer editable fields
+  const [fullName, setFullName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("");
+  const [address, setAddress] = useState("");
+  const [source, setSource] = useState("");
+  const [customerNotesSummary, setCustomerNotesSummary] = useState("");
+  const [customerType, setCustomerType] = useState<"POTENTIAL" | "EXISTING">(
+    "POTENTIAL",
+  );
+
   const role = me?.role as string | undefined;
   const isSales = role === "SALES";
   const isManagerOrAdmin = role === "MANAGER" || role === "ADMIN";
-  const canCreatePresentation =
-    role === "MANAGER" || role === "ADMIN" || role === "SALES";
+
+  const canSeeContactDetails = useMemo(() => {
+    if (!customer) return false;
+    if (isManagerOrAdmin) return true;
+    if (!isSales) return true;
+    return customer.canSeeContactDetails === true;
+  }, [customer, isManagerOrAdmin, isSales]);
+
+  const canEditCustomer = useMemo(() => {
+    if (!customer) return false;
+    if (isManagerOrAdmin) return true;
+    if (!isSales) return false;
+    return customer.canEdit === true;
+  }, [customer, isManagerOrAdmin, isSales]);
+
+  const canCreatePresentation = canEditCustomer;
+
+  function hiddenText() {
+    return safeTranslate(
+      t,
+      "common.hidden",
+      locale === "tr" ? "Gizli" : "Hidden",
+    );
+  }
+
+  function formatDateTime(date?: string | null) {
+    if (!date) return "-";
+    return new Date(date).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
+  }
+
+  function fillCustomerForm(data: CustomerDetail) {
+    setFullName(data.fullName || "");
+    setCompanyName(data.companyName || "");
+    setPhone(data.phone || "");
+    setEmail(data.email || "");
+    setCity(data.city || "");
+    setCountry(data.country || "");
+    setAddress(data.address || "");
+    setSource(data.source || "");
+    setCustomerNotesSummary(data.notesSummary || "");
+    setCustomerType((data.type as "POTENTIAL" | "EXISTING") || "POTENTIAL");
+  }
 
   async function loadCustomer() {
     if (!customerId) {
@@ -170,6 +236,7 @@ export default function CustomerDetailPage() {
     try {
       const customerData = await authedFetch(`/customers/${customerId}`);
       setCustomer(customerData);
+      fillCustomerForm(customerData);
     } catch (e: any) {
       setCustomer(null);
       setErr(String(e?.message || e));
@@ -192,12 +259,41 @@ export default function CustomerDetailPage() {
     }
   }
 
-  async function load() {
-    await Promise.all([loadCustomer(), loadSalesUsers()]);
+  async function saveCustomer() {
+    if (!customer || !canEditCustomer || !fullName.trim()) return;
+
+    setErr(null);
+    setSaving(true);
+
+    try {
+      await authedFetch(`/customers/${customer.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          companyName: companyName.trim() || null,
+          phone: phone.trim() || null,
+          email: email.trim() || null,
+          city: city.trim() || null,
+          country: country.trim() || null,
+          address: address.trim() || null,
+          source: source.trim() || null,
+          notesSummary: customerNotesSummary.trim() || null,
+          type: customerType,
+        }),
+      });
+
+      await loadCustomer();
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function createPresentation() {
-    if (!customer || !title.trim() || !presentationAt) return;
+    if (!customer || !title.trim() || !presentationAt || !canCreatePresentation) {
+      return;
+    }
 
     setErr(null);
     setSaving(true);
@@ -232,7 +328,7 @@ export default function CustomerDetailPage() {
 
   async function addPresentationNote(presentationId: string) {
     const note = (noteByPresentationId[presentationId] || "").trim();
-    if (!note) return;
+    if (!note || !canEditCustomer) return;
 
     setErr(null);
     setSaving(true);
@@ -263,6 +359,8 @@ export default function CustomerDetailPage() {
       outcome?: PresentationOutcome;
     },
   ) {
+    if (!canEditCustomer) return;
+
     setErr(null);
     setSaving(true);
 
@@ -351,6 +449,24 @@ export default function CustomerDetailPage() {
         </span>
       </div>
 
+      {isSales && !canSeeContactDetails ? (
+        <div
+          className="card"
+          style={{
+            border: "1px solid rgba(245,158,11,.35)",
+            background: "rgba(245,158,11,.08)",
+          }}
+        >
+          {safeTranslate(
+            t,
+            "customerDetail.limitedAccessNotice",
+            locale === "tr"
+              ? "Bu müşteri size ait olmadığı için iletişim bilgileri gizlenmiştir ve düzenleme yapamazsınız."
+              : "Contact details are hidden and you cannot edit this customer because it does not belong to you.",
+          )}
+        </div>
+      ) : null}
+
       {err ? (
         <div
           className="card"
@@ -390,36 +506,138 @@ export default function CustomerDetailPage() {
       </div>
 
       <div className="card" style={{ display: "grid", gap: 12 }}>
-        <div style={{ fontWeight: 900 }}>{t("customerDetail.customerInfo")}</div>
+        <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 900 }}>{t("customerDetail.customerInfo")}</div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 10,
-          }}
-        >
-          <div>
-            <b>{t("customerDetail.fields.phone")}:</b> {customer.phone || "-"}
-          </div>
-          <div>
-            <b>{t("customerDetail.fields.email")}:</b> {customer.email || "-"}
-          </div>
-          <div>
-            <b>{t("customerDetail.fields.agency")}:</b> {customer.agency?.name || "-"}
-          </div>
-          <div>
-            <b>{t("customerDetail.fields.city")}:</b> {customer.city || "-"}
-          </div>
-          <div>
-            <b>{t("customerDetail.fields.country")}:</b> {customer.country || "-"}
-          </div>
-          <div>
-            <b>{t("customerDetail.fields.source")}:</b> {customer.source || "-"}
-          </div>
+          {canEditCustomer ? (
+            <button
+              className="primary"
+              onClick={saveCustomer}
+              disabled={saving || !fullName.trim()}
+            >
+              {saving ? t("customerDetail.saving") : safeTranslate(t, "customerDetail.saveCustomer", locale === "tr" ? "Müşteriyi Kaydet" : "Save Customer")}
+            </button>
+          ) : null}
         </div>
 
-        {customer.notesSummary ? (
+        {canEditCustomer ? (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 10,
+            }}
+          >
+            <input
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.fullName", "Full Name")}
+            />
+            <input
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.companyName", "Company")}
+            />
+            <select
+              value={customerType}
+              onChange={(e) =>
+                setCustomerType(e.target.value as "POTENTIAL" | "EXISTING")
+              }
+            >
+              {CUSTOMER_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {safeTranslate(t, `customerTypes.${option}`, option)}
+                </option>
+              ))}
+            </select>
+
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.phone", "Phone")}
+            />
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.email", "Email")}
+            />
+            <input
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.source", "Source")}
+            />
+
+            <input
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.city", "City")}
+            />
+            <input
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.country", "Country")}
+            />
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.address", "Address")}
+            />
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 10,
+            }}
+          >
+            <div>
+              <b>{t("customerDetail.fields.phone")}:</b>{" "}
+              {canSeeContactDetails ? customer.phone || "-" : hiddenText()}
+            </div>
+            <div>
+              <b>{t("customerDetail.fields.email")}:</b>{" "}
+              {canSeeContactDetails ? customer.email || "-" : hiddenText()}
+            </div>
+            <div>
+              <b>{t("customerDetail.fields.agency")}:</b> {customer.agency?.name || "-"}
+            </div>
+            <div>
+              <b>{t("customerDetail.fields.city")}:</b>{" "}
+              {canSeeContactDetails ? customer.city || "-" : hiddenText()}
+            </div>
+            <div>
+              <b>{t("customerDetail.fields.country")}:</b>{" "}
+              {canSeeContactDetails ? customer.country || "-" : hiddenText()}
+            </div>
+            <div>
+              <b>{t("customerDetail.fields.source")}:</b> {customer.source || "-"}
+            </div>
+            <div>
+              <b>
+                {safeTranslate(
+                  t,
+                  "customerDetail.fields.ownerSales",
+                  locale === "tr" ? "Sorumlu Sales" : "Owner Sales",
+                )}
+                :
+              </b>{" "}
+              {customer.owner?.name || "-"}
+            </div>
+          </div>
+        )}
+
+        {canEditCustomer ? (
+          <textarea
+            value={customerNotesSummary}
+            onChange={(e) => setCustomerNotesSummary(e.target.value)}
+            placeholder={safeTranslate(
+              t,
+              "customers.fields.notesSummary",
+              locale === "tr" ? "Özet not" : "Summary note",
+            )}
+          />
+        ) : customer.notesSummary ? (
           <div
             style={{
               border: "1px solid var(--stroke)",
@@ -472,9 +690,7 @@ export default function CustomerDetailPage() {
                 value={assignedSalesId}
                 onChange={(e) => setAssignedSalesId(e.target.value)}
               >
-                <option value="">
-                  {t("customerDetail.presentationFields.selectSales")}
-                </option>
+                <option value="">{t("customerDetail.presentationFields.selectSales")}</option>
                 {salesUsers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -487,7 +703,7 @@ export default function CustomerDetailPage() {
           <textarea
             value={notesSummary}
             onChange={(e) => setNotesSummary(e.target.value)}
-            placeholder={t("customerDetail.presentationFields.summaryNote")}
+            placeholder={t("customerDetail.presentationFields.notesSummary")}
           />
 
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -501,7 +717,7 @@ export default function CustomerDetailPage() {
                 (!isSales && !assignedSalesId)
               }
             >
-              {saving ? t("customers.saving") : t("customerDetail.createPresentation")}
+              {saving ? t("customerDetail.saving") : t("customerDetail.createPresentation")}
             </button>
           </div>
         </div>
@@ -540,10 +756,7 @@ export default function CustomerDetailPage() {
                   <div style={{ display: "grid", gap: 4 }}>
                     <div style={{ fontWeight: 900, fontSize: 16 }}>{p.title}</div>
                     <div className="muted" style={{ fontSize: 12 }}>
-                      {p.projectName || "-"} •{" "}
-                      {new Date(p.presentationAt).toLocaleString(
-                        locale === "tr" ? "tr-TR" : "en-US"
-                      )}
+                      {p.projectName || "-"} • {formatDateTime(p.presentationAt)}
                     </div>
                     <div className="muted" style={{ fontSize: 12 }}>
                       {t("customerDetail.salesLabel")}: {p.assignedSales?.name || "-"} •{" "}
@@ -580,42 +793,44 @@ export default function CustomerDetailPage() {
                   </div>
                 ) : null}
 
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <select
-                    value={p.status}
-                    onChange={(e) =>
-                      updatePresentation(p.id, {
-                        status: e.target.value as PresentationStatus,
-                      })
-                    }
-                    disabled={saving}
-                    style={{ width: 180 }}
-                  >
-                    {STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>
-                        {safeTranslate(t, `presentationStatuses.${s}`, s)}
-                      </option>
-                    ))}
-                  </select>
+                {canEditCustomer ? (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <select
+                      value={p.status}
+                      onChange={(e) =>
+                        updatePresentation(p.id, {
+                          status: e.target.value as PresentationStatus,
+                        })
+                      }
+                      disabled={saving}
+                      style={{ width: 180 }}
+                    >
+                      {STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {safeTranslate(t, `presentationStatuses.${s}`, s)}
+                        </option>
+                      ))}
+                    </select>
 
-                  <select
-                    value={p.outcome || ""}
-                    onChange={(e) =>
-                      updatePresentation(p.id, {
-                        outcome: e.target.value as PresentationOutcome,
-                      })
-                    }
-                    disabled={saving}
-                    style={{ width: 180 }}
-                  >
-                    <option value="">{t("customerDetail.selectOutcome")}</option>
-                    {OUTCOME_OPTIONS.map((o) => (
-                      <option key={o} value={o}>
-                        {safeTranslate(t, `presentationOutcomes.${o}`, o)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <select
+                      value={p.outcome || ""}
+                      onChange={(e) =>
+                        updatePresentation(p.id, {
+                          outcome: e.target.value as PresentationOutcome,
+                        })
+                      }
+                      disabled={saving}
+                      style={{ width: 180 }}
+                    >
+                      <option value="">{t("customerDetail.selectOutcome")}</option>
+                      {OUTCOME_OPTIONS.map((o) => (
+                        <option key={o} value={o}>
+                          {safeTranslate(t, `presentationOutcomes.${o}`, o)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
 
                 <div style={{ display: "grid", gap: 10 }}>
                   <div style={{ fontWeight: 800 }}>{t("customerDetail.presentationNotes")}</div>
@@ -637,37 +852,36 @@ export default function CustomerDetailPage() {
                           className="muted"
                           style={{ fontSize: 12, marginBottom: 4 }}
                         >
-                          {n.createdBy?.name || "-"} •{" "}
-                          {new Date(n.createdAt).toLocaleString(
-                            locale === "tr" ? "tr-TR" : "en-US"
-                          )}
+                          {n.createdBy?.name || "-"} • {formatDateTime(n.createdAt)}
                         </div>
                         <div>{n.note}</div>
                       </div>
                     ))
                   )}
 
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <textarea
-                      value={noteByPresentationId[p.id] || ""}
-                      onChange={(e) =>
-                        setNoteByPresentationId((prev) => ({
-                          ...prev,
-                          [p.id]: e.target.value,
-                        }))
-                      }
-                      placeholder={t("customerDetail.addNotePlaceholder")}
-                    />
-                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                      <button
-                        className="primary"
-                        onClick={() => addPresentationNote(p.id)}
-                        disabled={saving || !(noteByPresentationId[p.id] || "").trim()}
-                      >
-                        {t("customerDetail.addNote")}
-                      </button>
+                  {canEditCustomer ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <textarea
+                        value={noteByPresentationId[p.id] || ""}
+                        onChange={(e) =>
+                          setNoteByPresentationId((prev) => ({
+                            ...prev,
+                            [p.id]: e.target.value,
+                          }))
+                        }
+                        placeholder={t("customerDetail.addPresentationNotePlaceholder")}
+                      />
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                        <button
+                          className="primary"
+                          onClick={() => addPresentationNote(p.id)}
+                          disabled={saving || !(noteByPresentationId[p.id] || "").trim()}
+                        >
+                          {t("customerDetail.addNote")}
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                 </div>
               </div>
             ))}

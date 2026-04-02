@@ -11,15 +11,57 @@ import { useLanguage } from "../_ui/LanguageProvider";
 
 function LeadsIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M4 6h16M4 12h10M4 18h7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="4" y="5" width="16" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 9h8M8 12h8M8 15h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 3.5v3M16 3.5v3M3.5 9h17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CustomersIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M4.5 18c.8-2.9 3.2-4.8 6-4.8s5.2 1.9 6 4.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="17.5" cy="9" r="2.2" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M16 13.5c2 .2 3.7 1.4 4.5 3.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function AgenciesIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M4 19.5h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M6 19.5V9.5l6-4 6 4v10" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M10 19.5v-4h4v4M9 11h.01M15 11h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TasksIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="4" y="4" width="16" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 9h8M8 13h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M8 17l1.5 1.5L13 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
 function ManagerIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.8" />
       <path d="M4 20c1.5-4 6-6 8-6s6.5 2 8 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
@@ -28,7 +70,7 @@ function ManagerIcon() {
 
 function AdminIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
         d="M12 3l2.3 2.3 3.2-.4.9 3.1 2.8 1.7-1.7 2.8.4 3.2-3.1.9L12 21l-2.3-2.3-3.2.4-.9-3.1-2.8-1.7 1.7-2.8-.4-3.2 3.1-.9L12 3Z"
         stroke="currentColor"
@@ -40,18 +82,9 @@ function AdminIcon() {
   );
 }
 
-function UsersIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="17" cy="9" r="2.5" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
 function DeleteIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M6 7l1 13h10l1-13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -75,6 +108,23 @@ function navItemStyle(active: boolean): React.CSSProperties {
     border: `1px solid ${active ? "var(--stroke)" : "transparent"}`,
     background: active ? "var(--surface-2)" : "transparent",
   };
+}
+
+function NavIconWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        width: 18,
+        height: 18,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flex: "0 0 18px",
+      }}
+    >
+      {children}
+    </span>
+  );
 }
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -202,38 +252,59 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             }}
           >
             <Link href="/leads" style={navItemStyle(pathname.startsWith("/leads"))}>
-              <LeadsIcon />
+              <NavIconWrap>
+                <LeadsIcon />
+              </NavIconWrap>
               {t("nav.leads")}
             </Link>
 
             <Link href="/calendar" style={navItemStyle(pathname.startsWith("/calendar"))}>
-              <UsersIcon />
+              <NavIconWrap>
+                <CalendarIcon />
+              </NavIconWrap>
               {t("nav.calendar")}
             </Link>
 
             {canSeeCRM ? (
               <Link href="/customers" style={navItemStyle(pathname.startsWith("/customers"))}>
-                <UsersIcon />
+                <NavIconWrap>
+                  <CustomersIcon />
+                </NavIconWrap>
                 {t("nav.customers")}
               </Link>
             ) : null}
 
             {canSeeCRM ? (
               <Link href="/agencies" style={navItemStyle(pathname.startsWith("/agencies"))}>
-                <UsersIcon />
+                <NavIconWrap>
+                  <AgenciesIcon />
+                </NavIconWrap>
                 {t("nav.agencies")}
+              </Link>
+            ) : null}
+
+            {canSeeCRM ? (
+              <Link href="/tasks" style={navItemStyle(pathname.startsWith("/tasks"))}>
+                <NavIconWrap>
+                  <TasksIcon />
+                </NavIconWrap>
+                {t("nav.tasks")}
               </Link>
             ) : null}
 
             {isManager ? (
               <>
                 <Link href="/manager/queue" style={navItemStyle(pathname.startsWith("/manager"))}>
-                  <ManagerIcon />
+                  <NavIconWrap>
+                    <ManagerIcon />
+                  </NavIconWrap>
                   {t("nav.managerQueue")}
                 </Link>
 
                 <Link href="/admin" style={navItemStyle(pathname === "/admin")}>
-                  <AdminIcon />
+                  <NavIconWrap>
+                    <AdminIcon />
+                  </NavIconWrap>
                   {t("nav.admin")}
                 </Link>
               </>
@@ -242,12 +313,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {isAdmin ? (
               <>
                 <Link href="/admin/users" style={navItemStyle(pathname.startsWith("/admin/users"))}>
-                  <UsersIcon />
+                  <NavIconWrap>
+                    <CustomersIcon />
+                  </NavIconWrap>
                   {t("nav.users")}
                 </Link>
 
                 <Link href="/admin/leads" style={navItemStyle(pathname.startsWith("/admin/leads"))}>
-                  <DeleteIcon />
+                  <NavIconWrap>
+                    <DeleteIcon />
+                  </NavIconWrap>
                   Lead Temizliği
                 </Link>
               </>
@@ -264,6 +339,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             }}
           >
             <Link href="/help" style={navItemStyle(false)}>
+              <NavIconWrap>
+                <TasksIcon />
+              </NavIconWrap>
               {t("nav.help")}
             </Link>
           </div>

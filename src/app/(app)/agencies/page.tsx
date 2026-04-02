@@ -101,6 +101,15 @@ export default function AgenciesPage() {
     role === "MANAGER" || role === "ADMIN" || role === "SALES";
   const canDelete = role === "MANAGER" || role === "ADMIN";
 
+  function hiddenText() {
+    return safeTranslate(t, "common.hidden", locale === "tr" ? "Gizli" : "Hidden");
+  }
+
+  function canSeeAgencyContact(a: AgencyRow) {
+    if (!isSales) return true;
+    return a.assignedSales?.id === me?.id;
+  }
+
   async function load(
     nextPage = page,
     nextStatus = status,
@@ -444,79 +453,87 @@ export default function AgenciesPage() {
           </thead>
 
           <tbody>
-            {items.map((a) => (
-              <tr key={a.id}>
-                <td>
-                  <div style={{ display: "grid", gap: 4 }}>
-                    <a href={`/agencies/${a.id}`} style={{ fontWeight: 900 }}>
-                      {a.name}
-                    </a>
-                    <div
-                      style={{ color: "var(--text-secondary)", fontSize: 12 }}
-                    >
-                      {a.contactName || "-"}
-                    </div>
-                  </div>
-                </td>
+            {items.map((a) => {
+              const canSeeContact = canSeeAgencyContact(a);
 
-                <td>
-                  <div style={{ display: "grid", gap: 4 }}>
-                    <div>{a.phone || "-"}</div>
-                    <div
-                      style={{ color: "var(--text-secondary)", fontSize: 12 }}
-                    >
-                      {a.email || "-"}
-                    </div>
-                    <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
-                      {[a.city, a.country].filter(Boolean).join(", ") || "-"}
-                    </div>
-                  </div>
-                </td>
-
-                <td>{a.assignedSales?.name || "-"}</td>
-
-                <td>
-                  <span className={`badge ${statusBadgeClass(a.status)}`}>
-                    {safeTranslate(t, `agencyStatuses.${a.status}`, a.status)}
-                  </span>
-                </td>
-
-                <td>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 10,
-                      flexWrap: "wrap",
-                      fontSize: 12,
-                    }}
-                  >
-                    <span>{t("agencies.counts.notes")}: {a._count?.notes ?? 0}</span>
-                    <span>{t("agencies.counts.meetings")}: {a._count?.meetings ?? 0}</span>
-                    <span>{t("agencies.counts.tasks")}: {a._count?.tasks ?? 0}</span>
-                  </div>
-                </td>
-
-                <td>
-                  {a.updatedAt
-                    ? new Date(a.updatedAt).toLocaleString(
-                        locale === "tr" ? "tr-TR" : "en-US",
-                      )
-                    : "-"}
-                </td>
-
-                {canDelete ? (
+              return (
+                <tr key={a.id}>
                   <td>
-                    <button
-                      className="danger"
-                      onClick={() => deleteAgency(a.id, a.name)}
-                      disabled={deletingId === a.id}
-                    >
-                      {deletingId === a.id ? t("agencies.deleting") : t("common.delete")}
-                    </button>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <a href={`/agencies/${a.id}`} style={{ fontWeight: 900 }}>
+                        {a.name}
+                      </a>
+                      <div
+                        style={{ color: "var(--text-secondary)", fontSize: 12 }}
+                      >
+                        {canSeeContact
+                          ? a.contactName || "-"
+                          : hiddenText()}
+                      </div>
+                    </div>
                   </td>
-                ) : null}
-              </tr>
-            ))}
+
+                  <td>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <div>
+                        {canSeeContact ? a.phone || "-" : hiddenText()}
+                      </div>
+                      <div
+                        style={{ color: "var(--text-secondary)", fontSize: 12 }}
+                      >
+                        {canSeeContact ? a.email || "-" : hiddenText()}
+                      </div>
+                      <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                        {[a.city, a.country].filter(Boolean).join(", ") || "-"}
+                      </div>
+                    </div>
+                  </td>
+
+                  <td>{a.assignedSales?.name || "-"}</td>
+
+                  <td>
+                    <span className={`badge ${statusBadgeClass(a.status)}`}>
+                      {safeTranslate(t, `agencyStatuses.${a.status}`, a.status)}
+                    </span>
+                  </td>
+
+                  <td>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        flexWrap: "wrap",
+                        fontSize: 12,
+                      }}
+                    >
+                      <span>{t("agencies.counts.notes")}: {a._count?.notes ?? 0}</span>
+                      <span>{t("agencies.counts.meetings")}: {a._count?.meetings ?? 0}</span>
+                      <span>{t("agencies.counts.tasks")}: {a._count?.tasks ?? 0}</span>
+                    </div>
+                  </td>
+
+                  <td>
+                    {a.updatedAt
+                      ? new Date(a.updatedAt).toLocaleString(
+                          locale === "tr" ? "tr-TR" : "en-US",
+                        )
+                      : "-"}
+                  </td>
+
+                  {canDelete ? (
+                    <td>
+                      <button
+                        className="danger"
+                        onClick={() => deleteAgency(a.id, a.name)}
+                        disabled={deletingId === a.id}
+                      >
+                        {deletingId === a.id ? t("agencies.deleting") : t("common.delete")}
+                      </button>
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 

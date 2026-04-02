@@ -34,6 +34,9 @@ create:  "Create",
     users: "Users",
     managerQueue: "Manager Queue",
     help: "Help & Support",
+      tasks: "Tasks"
+
+      
   },
   dashboard: {
     title: "CRM Dashboard",
@@ -126,6 +129,8 @@ customers: {
     source: "Source",
     notesSummary: "Summary note",
     selectAgency: "Select agency",
+    ownerSales: "Owner Sales",
+    selectOwnerSales: "Select owner sales"
   },
   table: {
     customer: "CUSTOMER",
@@ -135,7 +140,14 @@ customers: {
     presentations: "PRESENTATIONS",
     updatedAt: "UPDATED",
     actions: "ACTIONS",
+        ownerSales: "Owner Sales"
+
   },
+
+    limitedAccessNotice: "Contact details are hidden for customers that do not belong to you. On the detail page, you can only edit your own customers."
+
+
+
 },
 
 
@@ -191,6 +203,8 @@ customerDetail: {
     city: "City",
     country: "Country",
     source: "Source",
+        ownerSales: "Owner Sales"
+
   },
 
   presentationFields: {

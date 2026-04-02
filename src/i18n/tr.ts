@@ -40,6 +40,8 @@ create: "Oluştur" ,
     users: "Kullanıcılar",
     managerQueue: "Yönetici Kuyruğu",
     help: "Yardım & Destek",
+      tasks: "Görevler"
+
   },
   dashboard: {
     title: "CRM Dashboard",
@@ -126,6 +128,8 @@ customers: {
     source: "Kaynak",
     notesSummary: "Özet not",
     selectAgency: "Ajans seç",
+    ownerSales: "Sorumlu Sales",
+    selectOwnerSales: "Sorumlu sales seç"
   },
   table: {
     customer: "MÜŞTERİ",
@@ -135,7 +139,16 @@ customers: {
     presentations: "SUNUM SAYISI",
     updatedAt: "GÜNCELLEME",
     actions: "İŞLEMLER",
+        ownerSales: "Sorumlu Sales"
+
   },
+
+
+    limitedAccessNotice: "Size ait olmayan müşteriler için iletişim bilgileri gizlenmiştir. Detay sayfasında yalnızca kendi müşterilerinizi düzenleyebilirsiniz."
+
+
+
+
 },
 
 
@@ -192,6 +205,9 @@ customerDetail: {
     city: "Şehir",
     country: "Ülke",
     source: "Kaynak",
+        ownerSales: "Sorumlu Sales"
+
+
   },
 
   presentationFields: {

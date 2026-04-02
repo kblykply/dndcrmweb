@@ -12,6 +12,13 @@ type AgencyRow = {
   name: string;
 };
 
+type SalesRow = {
+  id: string;
+  name: string;
+  email?: string | null;
+  role?: string;
+};
+
 type CustomerRow = {
   id: string;
   fullName: string;
@@ -25,6 +32,12 @@ type CustomerRow = {
   createdAt?: string;
   updatedAt?: string;
   agency?: AgencyRow | null;
+  owner?: {
+    id: string;
+    name: string;
+    email?: string | null;
+  } | null;
+  canSeeContactDetails?: boolean;
   _count?: {
     presentations: number;
   };
@@ -56,6 +69,7 @@ export default function CustomersPage() {
 
   const [items, setItems] = useState<CustomerRow[]>([]);
   const [agencies, setAgencies] = useState<AgencyRow[]>([]);
+  const [salesUsers, setSalesUsers] = useState<SalesRow[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -78,10 +92,26 @@ export default function CustomersPage() {
   const [notesSummary, setNotesSummary] = useState("");
   const [type, setType] = useState<CustomerType>("POTENTIAL");
   const [agencyId, setAgencyId] = useState("");
+  const [ownerId, setOwnerId] = useState("");
 
   const role = me?.role as string | undefined;
+  const isSales = role === "SALES";
+  const isManagerOrAdmin = role === "MANAGER" || role === "ADMIN";
   const canCreate = role === "MANAGER" || role === "ADMIN" || role === "SALES";
   const canDelete = role === "MANAGER" || role === "ADMIN";
+
+  function hiddenText() {
+    return safeTranslate(
+      t,
+      "common.hidden",
+      locale === "tr" ? "Gizli" : "Hidden"
+    );
+  }
+
+  function canSeeContact(customer: CustomerRow) {
+    if (!isSales) return true;
+    return customer.canSeeContactDetails === true;
+  }
 
   async function load() {
     setErr(null);
@@ -106,6 +136,20 @@ export default function CustomersPage() {
     }
   }
 
+  async function loadSalesUsers() {
+    if (!isManagerOrAdmin) {
+      setSalesUsers([]);
+      return;
+    }
+
+    try {
+      const res = await authedFetch("/users?role=SALES");
+      setSalesUsers(Array.isArray(res) ? res : []);
+    } catch {
+      setSalesUsers([]);
+    }
+  }
+
   async function createCustomer() {
     setErr(null);
     setSaving(true);
@@ -123,6 +167,7 @@ export default function CustomersPage() {
         notesSummary: notesSummary.trim() || undefined,
         type,
         agencyId: agencyId || null,
+        ownerId: isSales ? undefined : ownerId || null,
       };
 
       await authedFetch("/customers", {
@@ -141,6 +186,7 @@ export default function CustomersPage() {
       setNotesSummary("");
       setType("POTENTIAL");
       setAgencyId("");
+      setOwnerId(isSales ? me?.id || "" : "");
       setShowCreate(false);
 
       await load();
@@ -184,6 +230,17 @@ export default function CustomersPage() {
     loadAgencies();
   }, [mounted]);
 
+  useEffect(() => {
+    if (!mounted) return;
+
+    if (isSales) {
+      setOwnerId(me?.id || "");
+      setSalesUsers([]);
+    } else {
+      loadSalesUsers();
+    }
+  }, [mounted, isSales, me?.id]);
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
 
@@ -191,11 +248,13 @@ export default function CustomersPage() {
       if (typeFilter !== "ALL" && c.type !== typeFilter) return false;
       if (!qq) return true;
 
-      return `${c.fullName || ""} ${c.companyName || ""} ${c.phone || ""} ${c.email || ""} ${c.city || ""} ${c.country || ""} ${c.agency?.name || ""}`
-        .toLowerCase()
-        .includes(qq);
+      const searchableText = canSeeContact(c)
+        ? `${c.fullName || ""} ${c.companyName || ""} ${c.phone || ""} ${c.email || ""} ${c.city || ""} ${c.country || ""} ${c.agency?.name || ""} ${c.owner?.name || ""}`
+        : `${c.fullName || ""} ${c.companyName || ""} ${c.agency?.name || ""} ${c.owner?.name || ""}`;
+
+      return searchableText.toLowerCase().includes(qq);
     });
-  }, [items, q, typeFilter]);
+  }, [items, q, typeFilter, isSales]);
 
   if (!mounted) return <div>{t("common.loading")}</div>;
 
@@ -227,6 +286,24 @@ export default function CustomersPage() {
           ) : null}
         </div>
       </div>
+
+      {isSales ? (
+        <div
+          className="card"
+          style={{
+            border: "1px solid rgba(245,158,11,.35)",
+            background: "rgba(245,158,11,.08)",
+          }}
+        >
+          {safeTranslate(
+            t,
+            "customers.limitedAccessNotice",
+            locale === "tr"
+              ? "Size ait olmayan müşteriler için iletişim bilgileri gizlenmiştir. Detay sayfasında yalnızca kendi müşterilerinizi düzenleyebilirsiniz."
+              : "Contact details are hidden for customers that do not belong to you. On the detail page, you can only edit your own customers."
+          )}
+        </div>
+      ) : null}
 
       {showCreate && canCreate ? (
         <div className="card" style={{ display: "grid", gap: 12 }}>
@@ -305,6 +382,36 @@ export default function CustomersPage() {
                 </option>
               ))}
             </select>
+
+            {isSales ? (
+              <input
+                value={me?.name || ""}
+                disabled
+                placeholder={safeTranslate(
+                  t,
+                  "customers.fields.ownerSales",
+                  locale === "tr" ? "Sorumlu Sales" : "Owner Sales"
+                )}
+              />
+            ) : (
+              <select
+                value={ownerId}
+                onChange={(e) => setOwnerId(e.target.value)}
+              >
+                <option value="">
+                  {safeTranslate(
+                    t,
+                    "customers.fields.selectOwnerSales",
+                    locale === "tr" ? "Sorumlu sales seç" : "Select owner sales"
+                  )}
+                </option>
+                {salesUsers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} {s.email ? `(${s.email})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <textarea
@@ -318,7 +425,7 @@ export default function CustomersPage() {
             <button
               className="primary"
               onClick={createCustomer}
-              disabled={saving || !fullName.trim()}
+              disabled={saving || !fullName.trim() || (!isSales && !ownerId)}
             >
               {saving ? t("customers.saving") : t("customers.createCustomer")}
             </button>
@@ -380,6 +487,13 @@ export default function CustomersPage() {
               <th>{t("customers.table.customer")}</th>
               <th>{t("customers.table.contact")}</th>
               <th>{t("customers.table.agency")}</th>
+              <th>
+                {safeTranslate(
+                  t,
+                  "customers.table.ownerSales",
+                  locale === "tr" ? "Sorumlu Sales" : "Owner Sales"
+                )}
+              </th>
               <th>{t("customers.table.type")}</th>
               <th>{t("customers.table.presentations")}</th>
               <th>{t("customers.table.updatedAt")}</th>
@@ -388,64 +502,72 @@ export default function CustomersPage() {
           </thead>
 
           <tbody>
-            {filtered.map((c) => (
-              <tr key={c.id}>
-                <td>
-                  <div style={{ display: "grid", gap: 4 }}>
-                    <a href={`/customers/${c.id}`} style={{ fontWeight: 900 }}>
-                      {c.fullName}
-                    </a>
-                    <div
-                      style={{ color: "var(--text-secondary)", fontSize: 12 }}
-                    >
-                      {c.companyName || "-"}
-                    </div>
-                  </div>
-                </td>
+            {filtered.map((c) => {
+              const visible = canSeeContact(c);
 
-                <td>
-                  <div style={{ display: "grid", gap: 4 }}>
-                    <div>{c.phone || "-"}</div>
-                    <div
-                      style={{ color: "var(--text-secondary)", fontSize: 12 }}
-                    >
-                      {c.email || "-"}
-                    </div>
-                    <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
-                      {[c.city, c.country].filter(Boolean).join(", ") || "-"}
-                    </div>
-                  </div>
-                </td>
-
-                <td>{c.agency?.name || "-"}</td>
-
-                <td>
-                  <span className={`badge ${badgeClass(c.type)}`}>
-                    {c.type ? safeTranslate(t, `customerTypes.${c.type}`, c.type) : "-"}
-                  </span>
-                </td>
-
-                <td>{c._count?.presentations ?? 0}</td>
-
-                <td>
-                  {c.updatedAt
-                    ? new Date(c.updatedAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")
-                    : "-"}
-                </td>
-
-                {canDelete ? (
+              return (
+                <tr key={c.id}>
                   <td>
-                    <button
-                      className="danger"
-                      onClick={() => deleteCustomer(c.id, c.fullName)}
-                      disabled={deletingId === c.id}
-                    >
-                      {deletingId === c.id ? t("customers.deleting") : t("common.delete")}
-                    </button>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <a href={`/customers/${c.id}`} style={{ fontWeight: 900 }}>
+                        {c.fullName}
+                      </a>
+                      <div
+                        style={{ color: "var(--text-secondary)", fontSize: 12 }}
+                      >
+                        {c.companyName || "-"}
+                      </div>
+                    </div>
                   </td>
-                ) : null}
-              </tr>
-            ))}
+
+                  <td>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <div>{visible ? c.phone || "-" : hiddenText()}</div>
+                      <div
+                        style={{ color: "var(--text-secondary)", fontSize: 12 }}
+                      >
+                        {visible ? c.email || "-" : hiddenText()}
+                      </div>
+                      <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
+                        {visible
+                          ? [c.city, c.country].filter(Boolean).join(", ") || "-"
+                          : hiddenText()}
+                      </div>
+                    </div>
+                  </td>
+
+                  <td>{c.agency?.name || "-"}</td>
+
+                  <td>{c.owner?.name || "-"}</td>
+
+                  <td>
+                    <span className={`badge ${badgeClass(c.type)}`}>
+                      {c.type ? safeTranslate(t, `customerTypes.${c.type}`, c.type) : "-"}
+                    </span>
+                  </td>
+
+                  <td>{c._count?.presentations ?? 0}</td>
+
+                  <td>
+                    {c.updatedAt
+                      ? new Date(c.updatedAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")
+                      : "-"}
+                  </td>
+
+                  {canDelete ? (
+                    <td>
+                      <button
+                        className="danger"
+                        onClick={() => deleteCustomer(c.id, c.fullName)}
+                        disabled={deletingId === c.id}
+                      >
+                        {deletingId === c.id ? t("customers.deleting") : t("common.delete")}
+                      </button>
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
