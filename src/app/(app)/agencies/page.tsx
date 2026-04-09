@@ -18,7 +18,7 @@ type AgencyRow = {
   status: AgencyStatus;
   createdAt?: string;
   updatedAt?: string;
-  manager?: { id: string; name: string; email: string };
+  manager?: { id: string; name: string; email: string } | null;
   assignedSales?: { id: string; name: string; email: string } | null;
   _count?: {
     notes: number;
@@ -59,6 +59,55 @@ function safeTranslate(
   const translated = t(path);
   if (translated === path) return fallback ?? path;
   return translated;
+}
+
+function normalizeErrorMessage(input: unknown, locale: "tr" | "en") {
+  const text = String(input || "");
+
+  if (
+    text.includes("Internal server error") ||
+    text.includes("P2028") ||
+    text.includes("Unable to start a transaction") ||
+    text.includes("Transaction API error") ||
+    text.includes("MaxClientsInSessionMode") ||
+    text.includes("max clients reached")
+  ) {
+    return locale === "tr"
+      ? "Sunucu şu anda yoğun, lütfen tekrar deneyin."
+      : "Server is busy right now, please try again.";
+  }
+
+  if (text.includes("Agency name is required")) {
+    return locale === "tr"
+      ? "Ajans adı zorunludur."
+      : "Agency name is required.";
+  }
+
+  if (text.includes("Assigned sales user is invalid")) {
+    return locale === "tr"
+      ? "Seçilen satış kullanıcısı geçersiz."
+      : "Selected sales user is invalid.";
+  }
+
+  if (text.includes("Agency not found")) {
+    return locale === "tr"
+      ? "Ajans bulunamadı."
+      : "Agency not found.";
+  }
+
+  if (text.includes("No access")) {
+    return locale === "tr"
+      ? "Bu işlem için yetkiniz yok."
+      : "You do not have access for this action.";
+  }
+
+  if (text.includes("Unauthorized")) {
+    return locale === "tr"
+      ? "Oturum süresi doldu."
+      : "Session expired.";
+  }
+
+  return text;
 }
 
 export default function AgenciesPage() {
@@ -102,12 +151,29 @@ export default function AgenciesPage() {
   const canDelete = role === "MANAGER" || role === "ADMIN";
 
   function hiddenText() {
-    return safeTranslate(t, "common.hidden", locale === "tr" ? "Gizli" : "Hidden");
+    return safeTranslate(
+      t,
+      "common.hidden",
+      locale === "tr" ? "Gizli" : "Hidden",
+    );
   }
 
   function canSeeAgencyContact(a: AgencyRow) {
     if (!isSales) return true;
     return a.assignedSales?.id === me?.id;
+  }
+
+  function resetCreateForm() {
+    setName("");
+    setContactName("");
+    setPhone("");
+    setEmail("");
+    setCity("");
+    setCountry("");
+    setWebsite("");
+    setSource("");
+    setNotesSummary("");
+    setAssignedSalesId(isSales ? me?.id || "" : "");
   }
 
   async function load(
@@ -118,21 +184,24 @@ export default function AgenciesPage() {
   ) {
     setErr(null);
     setLoading(true);
+
     try {
       const params = new URLSearchParams();
+
       if (nextQ.trim()) params.set("q", nextQ.trim());
       if (nextStatus !== "ALL") params.set("status", nextStatus);
       params.set("page", String(nextPage));
       params.set("pageSize", String(nextPageSize));
 
       const res = await authedFetch(`/agencies?${params.toString()}`);
+
       setItems(Array.isArray(res?.items) ? res.items : []);
       setPage(res?.page || nextPage);
       setPageSize(res?.pageSize || nextPageSize);
       setTotal(res?.total || 0);
       setTotalPages(res?.totalPages || 1);
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, locale));
       setItems([]);
     } finally {
       setLoading(false);
@@ -156,38 +225,32 @@ export default function AgenciesPage() {
   async function createAgency() {
     setErr(null);
     setSaving(true);
+
     try {
+      const payload = {
+        name: name.trim(),
+        contactName: contactName.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        city: city.trim() || undefined,
+        country: country.trim() || undefined,
+        website: website.trim() || undefined,
+        source: source.trim() || undefined,
+        notesSummary: notesSummary.trim() || undefined,
+        assignedSalesId: isSales ? undefined : assignedSalesId || null,
+      };
+
       await authedFetch("/agencies", {
         method: "POST",
-        body: JSON.stringify({
-          name: name.trim(),
-          contactName: contactName.trim() || undefined,
-          phone: phone.trim() || undefined,
-          email: email.trim() || undefined,
-          city: city.trim() || undefined,
-          country: country.trim() || undefined,
-          website: website.trim() || undefined,
-          source: source.trim() || undefined,
-          notesSummary: notesSummary.trim() || undefined,
-          assignedSalesId: isSales ? undefined : assignedSalesId || null,
-        }),
+        body: JSON.stringify(payload),
       });
 
-      setName("");
-      setContactName("");
-      setPhone("");
-      setEmail("");
-      setCity("");
-      setCountry("");
-      setWebsite("");
-      setSource("");
-      setNotesSummary("");
-      setAssignedSalesId("");
+      resetCreateForm();
       setShowCreate(false);
 
       await load(1, status, q, pageSize);
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, locale));
     } finally {
       setSaving(false);
     }
@@ -201,6 +264,7 @@ export default function AgenciesPage() {
 
     setErr(null);
     setDeletingId(id);
+
     try {
       await authedFetch(`/agencies/${id}`, {
         method: "DELETE",
@@ -212,7 +276,7 @@ export default function AgenciesPage() {
         await load(page, status, q, pageSize);
       }
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, locale));
     } finally {
       setDeletingId(null);
     }
@@ -232,6 +296,7 @@ export default function AgenciesPage() {
   useEffect(() => {
     if (!mounted) return;
     loadSalesUsers();
+
     if (isSales) {
       setAssignedSalesId(me?.id || "");
     }
@@ -273,7 +338,10 @@ export default function AgenciesPage() {
           {canCreate ? (
             <button
               className="primary"
-              onClick={() => setShowCreate((v) => !v)}
+              onClick={() => {
+                setShowCreate((v) => !v);
+                setErr(null);
+              }}
             >
               {showCreate ? t("common.close") : t("agencies.newAgency")}
             </button>
@@ -282,90 +350,156 @@ export default function AgenciesPage() {
       </div>
 
       {showCreate && canCreate ? (
-        <div className="card" style={{ display: "grid", gap: 12 }}>
+        <div className="card" style={{ display: "grid", gap: 14 }}>
           <div style={{ fontWeight: 900 }}>{t("agencies.createTitle")}</div>
 
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 10,
+              gap: 12,
             }}
           >
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t("agencies.fields.name")}
-            />
-            <input
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-              placeholder={t("agencies.fields.contactName")}
-            />
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder={t("agencies.fields.phone")}
-            />
-
-            <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={t("agencies.fields.email")}
-            />
-            <input
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder={t("agencies.fields.city")}
-            />
-            <input
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              placeholder={t("agencies.fields.country")}
-            />
-
-            <input
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder={t("agencies.fields.website")}
-            />
-            <input
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              placeholder={t("agencies.fields.source")}
-            />
-
-            {isSales ? (
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("agencies.fields.name")}
+              </span>
               <input
-                value={me?.name || ""}
-                disabled
-                placeholder={t("agencies.fields.sales")}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t("agencies.fields.name")}
               />
-            ) : (
-              <select
-                value={assignedSalesId}
-                onChange={(e) => setAssignedSalesId(e.target.value)}
-              >
-                <option value="">{t("agencies.fields.selectSales")}</option>
-                {salesUsers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.email})
-                  </option>
-                ))}
-              </select>
-            )}
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("agencies.fields.contactName")}
+              </span>
+              <input
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+                placeholder={t("agencies.fields.contactName")}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("agencies.fields.phone")}
+              </span>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder={t("agencies.fields.phone")}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("agencies.fields.email")}
+              </span>
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t("agencies.fields.email")}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("agencies.fields.city")}
+              </span>
+              <input
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder={t("agencies.fields.city")}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("agencies.fields.country")}
+              </span>
+              <input
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                placeholder={t("agencies.fields.country")}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("agencies.fields.website")}
+              </span>
+              <input
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder={t("agencies.fields.website")}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("agencies.fields.source")}
+              </span>
+              <input
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                placeholder={t("agencies.fields.source")}
+              />
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("agencies.fields.sales")}
+              </span>
+              {isSales ? (
+                <input
+                  value={me?.name || ""}
+                  disabled
+                  placeholder={t("agencies.fields.sales")}
+                />
+              ) : (
+                <select
+                  value={assignedSalesId}
+                  onChange={(e) => setAssignedSalesId(e.target.value)}
+                >
+                  <option value="">{t("agencies.fields.selectSales")}</option>
+                  {salesUsers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.email})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </label>
           </div>
 
-          <textarea
-            value={notesSummary}
-            onChange={(e) => setNotesSummary(e.target.value)}
-            placeholder={t("agencies.fields.notesSummary")}
-          />
+          <label style={{ display: "grid", gap: 6 }}>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {t("agencies.fields.notesSummary")}
+            </span>
+            <textarea
+              value={notesSummary}
+              onChange={(e) => setNotesSummary(e.target.value)}
+              placeholder={t("agencies.fields.notesSummary")}
+              style={{ minHeight: 110 }}
+            />
+          </label>
 
           <div
-            style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
           >
-            <button onClick={() => setShowCreate(false)}>
+            <button
+              onClick={() => {
+                setShowCreate(false);
+                setErr(null);
+              }}
+            >
               {t("common.cancel")}
             </button>
             <button
@@ -391,11 +525,16 @@ export default function AgenciesPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("agencies.searchPlaceholder")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                load(1, status, q, pageSize);
+              }
+            }}
           />
 
           <select
             value={status}
-            onChange={(e) => setStatus(e.target.value as any)}
+            onChange={(e) => setStatus(e.target.value as "ALL" | AgencyStatus)}
           >
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
@@ -466,18 +605,14 @@ export default function AgenciesPage() {
                       <div
                         style={{ color: "var(--text-secondary)", fontSize: 12 }}
                       >
-                        {canSeeContact
-                          ? a.contactName || "-"
-                          : hiddenText()}
+                        {canSeeContact ? a.contactName || "-" : hiddenText()}
                       </div>
                     </div>
                   </td>
 
                   <td>
                     <div style={{ display: "grid", gap: 4 }}>
-                      <div>
-                        {canSeeContact ? a.phone || "-" : hiddenText()}
-                      </div>
+                      <div>{canSeeContact ? a.phone || "-" : hiddenText()}</div>
                       <div
                         style={{ color: "var(--text-secondary)", fontSize: 12 }}
                       >
@@ -506,9 +641,15 @@ export default function AgenciesPage() {
                         fontSize: 12,
                       }}
                     >
-                      <span>{t("agencies.counts.notes")}: {a._count?.notes ?? 0}</span>
-                      <span>{t("agencies.counts.meetings")}: {a._count?.meetings ?? 0}</span>
-                      <span>{t("agencies.counts.tasks")}: {a._count?.tasks ?? 0}</span>
+                      <span>
+                        {t("agencies.counts.notes")}: {a._count?.notes ?? 0}
+                      </span>
+                      <span>
+                        {t("agencies.counts.meetings")}: {a._count?.meetings ?? 0}
+                      </span>
+                      <span>
+                        {t("agencies.counts.tasks")}: {a._count?.tasks ?? 0}
+                      </span>
                     </div>
                   </td>
 
@@ -527,7 +668,9 @@ export default function AgenciesPage() {
                         onClick={() => deleteAgency(a.id, a.name)}
                         disabled={deletingId === a.id}
                       >
-                        {deletingId === a.id ? t("agencies.deleting") : t("common.delete")}
+                        {deletingId === a.id
+                          ? t("agencies.deleting")
+                          : t("common.delete")}
                       </button>
                     </td>
                   ) : null}

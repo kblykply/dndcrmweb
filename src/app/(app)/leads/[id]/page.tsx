@@ -27,26 +27,54 @@ function presetLocal(hoursFromNow: number) {
   const dt = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(
-    dt.getHours()
+    dt.getHours(),
   )}:${pad(dt.getMinutes())}`;
 }
 
 function safeTranslate(
   t: (path: string) => string,
   path: string,
-  fallback?: string | null
+  fallback?: string | null,
 ) {
   const translated = t(path);
   if (translated === path) return fallback ?? path;
   return translated;
 }
 
-function formatDate(
-  d: string | null | undefined,
-  locale: "tr" | "en"
-) {
+function formatDate(d: string | null | undefined, locale: "tr" | "en") {
   if (!d) return "-";
   return new Date(d).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
+}
+
+function normalizeErrorMessage(input: unknown, locale: "tr" | "en") {
+  const text = String(input || "");
+
+  if (
+    text.includes("Internal server error") ||
+    text.includes("P2028") ||
+    text.includes("Unable to start a transaction") ||
+    text.includes("Transaction API error")
+  ) {
+    return locale === "tr"
+      ? "Sunucu şu anda yoğun, lütfen tekrar deneyin."
+      : "Server is busy right now, please try again.";
+  }
+
+  if (text.includes("Unauthorized")) {
+    return locale === "tr" ? "Oturum süresi doldu." : "Session expired.";
+  }
+
+  if (text.includes("Lead not found")) {
+    return locale === "tr" ? "Lead bulunamadı." : "Lead not found.";
+  }
+
+  if (text.includes("No access")) {
+    return locale === "tr"
+      ? "Bu kayıt için yetkiniz yok."
+      : "You do not have access to this record.";
+  }
+
+  return text;
 }
 
 export default function LeadDetailPage() {
@@ -62,6 +90,7 @@ export default function LeadDetailPage() {
   const [lead, setLead] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [managers, setManagers] = useState<UserLite[]>([]);
   const [sales, setSales] = useState<UserLite[]>([]);
@@ -72,7 +101,7 @@ export default function LeadDetailPage() {
   const [actType, setActType] = useState("CALL");
   const [callOutcome, setCallOutcome] =
     useState<(typeof CALL_OUTCOMES)[number]["key"]>("NO_ANSWER");
-const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"));
+  const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"));
   const [actDetails, setActDetails] = useState("");
   const [nextFollowUpAt, setNextFollowUpAt] = useState("");
 
@@ -84,16 +113,12 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
   const isManager = role === "MANAGER" || isAdmin;
   const isSales = role === "SALES" || isAdmin;
 
-  const isNew = status === "NEW";
-  const isWorking = status === "WORKING";
-  const isSalesReady = status === "SALES_READY";
   const isManagerReview = status === "MANAGER_REVIEW";
   const isAssigned = status === "ASSIGNED";
   const isClosed = status === "WON" || status === "LOST";
 
-  const canSetWorking = isCallcenter && (isNew || isSalesReady || isManagerReview);
-  const canSetSalesReady = isCallcenter && (isWorking || isNew);
-  const canSendToManager = isCallcenter && isSalesReady;
+  const canSendToManager =
+    isCallcenter && !isClosed && !isManagerReview && !isAssigned && !!managerId;
   const canAssignToSales = isManager && (isManagerReview || isAssigned);
   const canClose = isSales && isAssigned;
 
@@ -115,7 +140,7 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
       setSalesId(data?.assignedSalesId || "");
     } catch (e: any) {
       setLead(null);
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, locale));
     } finally {
       setLoading(false);
     }
@@ -124,9 +149,9 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
   async function loadUsers() {
     try {
       const mgrs = await authedFetch("/users?role=MANAGER");
-      setManagers(mgrs);
+      setManagers(Array.isArray(mgrs) ? mgrs : []);
       const reps = await authedFetch("/users?role=SALES");
-      setSales(reps);
+      setSales(Array.isArray(reps) ? reps : []);
     } catch {
       // ignore
     }
@@ -135,6 +160,8 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
   async function setStatus(to: string) {
     if (!id) return;
     setErr(null);
+    setActionLoading(`status:${to}`);
+
     try {
       await authedFetch(`/leads/${id}/status`, {
         method: "POST",
@@ -142,13 +169,16 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
       });
       await load();
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, locale));
+    } finally {
+      setActionLoading(null);
     }
   }
 
   async function addActivity() {
     if (!id) return;
     setErr(null);
+    setActionLoading("activity");
 
     try {
       const body: any = {
@@ -159,8 +189,7 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
       };
 
       if (actType === "CALL") {
-        const outcomeLabel =
-          safeTranslate(t, `leadOutcomes.${callOutcome}`, callOutcome);
+        const outcomeLabel = safeTranslate(t, `leadOutcomes.${callOutcome}`, callOutcome);
         body.callOutcome = callOutcome;
         body.summary = actSummary || `${t("leadDetail.callPrefix")}: ${outcomeLabel}`;
       }
@@ -173,25 +202,22 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
       if (actType === "CALL" && (callOutcome === "WON" || callOutcome === "LOST")) {
         await setStatus(callOutcome);
       }
-      if (
-        actType === "CALL" &&
-        callOutcome === "QUALIFIED" &&
-        (status === "NEW" || status === "WORKING")
-      ) {
-        await setStatus("SALES_READY");
-      }
 
       setActDetails("");
       setNextFollowUpAt("");
       await load();
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, locale));
+    } finally {
+      setActionLoading(null);
     }
   }
 
   async function sendToManager() {
     if (!id) return;
     setErr(null);
+    setActionLoading("sendToManager");
+
     try {
       await authedFetch(`/leads/${id}/send-to-manager`, {
         method: "POST",
@@ -199,13 +225,17 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
       });
       await load();
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, locale));
+    } finally {
+      setActionLoading(null);
     }
   }
 
   async function assignToSales() {
     if (!id) return;
     setErr(null);
+    setActionLoading("assignToSales");
+
     try {
       await authedFetch(`/leads/${id}/assign-to-sales`, {
         method: "POST",
@@ -213,7 +243,9 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
       });
       await load();
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, locale));
+    } finally {
+      setActionLoading(null);
     }
   }
 
@@ -223,15 +255,15 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
   }, []);
 
   useEffect(() => {
+    if (!mounted) return;
     load();
     loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [mounted, id]);
 
   useEffect(() => {
     if (actType !== "CALL") return;
-    const label =
-      safeTranslate(t, `leadOutcomes.${callOutcome}`, callOutcome);
+    const label = safeTranslate(t, `leadOutcomes.${callOutcome}`, callOutcome);
     setActSummary(`${t("leadDetail.callPrefix")}: ${label}`);
   }, [callOutcome, actType, t]);
 
@@ -239,7 +271,7 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <div className="flex-between">
+      <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <a href="/leads" style={{ fontWeight: 800 }}>
             ← {t("leadDetail.backToActiveLeads")}
@@ -258,7 +290,14 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
       {loading ? <div className="card">{t("leadDetail.loadingLead")}</div> : null}
 
       {err ? (
-        <pre className="card" style={{ whiteSpace: "pre-wrap", borderColor: "rgba(239,68,68,.35)" }}>
+        <pre
+          className="card"
+          style={{
+            whiteSpace: "pre-wrap",
+            borderColor: "rgba(239,68,68,.35)",
+            background: "rgba(239,68,68,.08)",
+          }}
+        >
           {err}
         </pre>
       ) : null}
@@ -350,7 +389,13 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
             </a>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "360px 1fr", gap: 14 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "360px 1fr",
+              gap: 14,
+            }}
+          >
             <div className="card" style={{ display: "grid", gap: 10 }}>
               <div style={{ fontWeight: 900 }}>{t("leadDetail.recentActivities")}</div>
 
@@ -399,7 +444,16 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
               <div className="card" style={{ display: "grid", gap: 12 }}>
                 <div style={{ fontWeight: 900 }}>{t("leadDetail.quickActions")}</div>
 
-                <div style={{ display: "grid", gap: 10 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    border: "1px solid var(--stroke)",
+                    borderRadius: 14,
+                    padding: 12,
+                    background: "var(--surface-2)",
+                  }}
+                >
                   <div className="muted" style={{ fontSize: 12 }}>
                     {t("leadDetail.assignments")}
                   </div>
@@ -410,49 +464,102 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
                 </div>
 
                 {(isCallcenter || isAdmin) ? (
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      {t("leadDetail.callCenter")}
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 12,
+                      border: "1px solid var(--stroke)",
+                      borderRadius: 14,
+                      padding: 14,
+                      background: "var(--surface-2)",
+                    }}
+                  >
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <div style={{ fontWeight: 800 }}>
+                        {t("leadDetail.callCenter")}
+                      </div>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {locale === "tr"
+                          ? "Manager seçip tek butonla bu lead’i yöneticiye gönderin. Sistem gerekli aşamayı otomatik ilerletir."
+                          : "Select a manager and send this lead with one button. The system will advance the required stage automatically."}
+                      </div>
                     </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button onClick={() => setStatus("WORKING")} disabled={!canSetWorking}>
-                        {t("leadDetail.setWorking")}
-                      </button>
-                      <button onClick={() => setStatus("SALES_READY")} disabled={!canSetSalesReady}>
-                        {t("leadDetail.setSalesReady")}
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(240px, 1fr) auto",
+                        gap: 10,
+                        alignItems: "end",
+                      }}
+                    >
+                      <label style={{ display: "grid", gap: 6 }}>
+                        <span className="muted" style={{ fontSize: 12 }}>
+                          {t("leadDetail.selectManager")}
+                        </span>
+                        <select
+                          value={managerId}
+                          onChange={(e) => setManagerId(e.target.value)}
+                          disabled={!isCallcenter || actionLoading === "sendToManager"}
+                        >
+                          <option value="">{t("leadDetail.selectManager")}</option>
+                          {managers.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name} ({u.email})
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <button
+                        className="primary"
+                        onClick={sendToManager}
+                        disabled={!canSendToManager || actionLoading === "sendToManager"}
+                        style={{
+                          minWidth: 190,
+                          height: 40,
+                          fontWeight: 800,
+                        }}
+                      >
+                        {actionLoading === "sendToManager"
+                          ? locale === "tr"
+                            ? "Gönderiliyor..."
+                            : "Sending..."
+                          : t("leadDetail.sendToManager")}
                       </button>
                     </div>
 
                     <div
                       style={{
                         display: "flex",
-                        gap: 10,
+                        gap: 8,
                         flexWrap: "wrap",
                         alignItems: "center",
                       }}
                     >
-                      <select
-                        value={managerId}
-                        onChange={(e) => setManagerId(e.target.value)}
-                        disabled={!isCallcenter}
-                      >
-                        <option value="">{t("leadDetail.selectManager")}</option>
-                        {managers.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.name} ({u.email})
-                          </option>
-                        ))}
-                      </select>
-
-                      <button onClick={sendToManager} disabled={!canSendToManager || !managerId}>
-                        {t("leadDetail.sendToManager")}
-                      </button>
+                      <span className="badge info">
+                        {safeTranslate(t, `leadStatuses.${lead.status}`, lead.status)}
+                      </span>
+                      <span className="muted" style={{ fontSize: 12 }}>
+                        {locale === "tr"
+                          ? "Tek işlemle yönetici incelemesine gider."
+                          : "Moves to manager review in one step."}
+                      </span>
                     </div>
                   </div>
                 ) : null}
 
                 {(isManager || isAdmin) ? (
-                  <div style={{ display: "grid", gap: 10 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 10,
+                      border: "1px solid var(--stroke)",
+                      borderRadius: 14,
+                      padding: 14,
+                      background: "var(--surface-2)",
+                    }}
+                  >
                     <div className="muted" style={{ fontSize: 12 }}>
                       {t("leadDetail.managerRole")}
                     </div>
@@ -467,7 +574,7 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
                       <select
                         value={salesId}
                         onChange={(e) => setSalesId(e.target.value)}
-                        disabled={!isManager}
+                        disabled={!isManager || actionLoading === "assignToSales"}
                       >
                         <option value="">{t("leadDetail.selectSales")}</option>
                         {sales.map((u) => (
@@ -477,8 +584,15 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
                         ))}
                       </select>
 
-                      <button onClick={assignToSales} disabled={!canAssignToSales || !salesId}>
-                        {isAssigned
+                      <button
+                        onClick={assignToSales}
+                        disabled={!canAssignToSales || !salesId || actionLoading === "assignToSales"}
+                      >
+                        {actionLoading === "assignToSales"
+                          ? locale === "tr"
+                            ? "İşleniyor..."
+                            : "Processing..."
+                          : isAssigned
                           ? t("leadDetail.reassign")
                           : t("leadDetail.assign")}
                       </button>
@@ -487,7 +601,16 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
                 ) : null}
 
                 {(isSales || isAdmin) ? (
-                  <div style={{ display: "grid", gap: 10 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 10,
+                      border: "1px solid var(--stroke)",
+                      borderRadius: 14,
+                      padding: 14,
+                      background: "var(--surface-2)",
+                    }}
+                  >
                     <div className="muted" style={{ fontSize: 12 }}>
                       {t("leadDetail.salesRole")}
                     </div>
@@ -495,16 +618,24 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
                       <button
                         className="primary"
                         onClick={() => setStatus("WON")}
-                        disabled={!canClose}
+                        disabled={!canClose || actionLoading === "status:WON"}
                       >
-                        {t("leadDetail.markWon")}
+                        {actionLoading === "status:WON"
+                          ? locale === "tr"
+                            ? "İşleniyor..."
+                            : "Processing..."
+                          : t("leadDetail.markWon")}
                       </button>
                       <button
                         className="danger"
                         onClick={() => setStatus("LOST")}
-                        disabled={!canClose}
+                        disabled={!canClose || actionLoading === "status:LOST"}
                       >
-                        {t("leadDetail.markLost")}
+                        {actionLoading === "status:LOST"
+                          ? locale === "tr"
+                            ? "İşleniyor..."
+                            : "Processing..."
+                          : t("leadDetail.markLost")}
                       </button>
                     </div>
                     {isClosed ? (
@@ -517,8 +648,16 @@ const [actSummary, setActSummary] = useState(t("leadDetail.defaultCallSummary"))
               <div className="card" style={{ display: "grid", gap: 10 }}>
                 <div className="flex-between">
                   <div style={{ fontWeight: 900 }}>{t("leadDetail.addActivity")}</div>
-                  <button onClick={addActivity} className="primary">
-                    {t("common.save")}
+                  <button
+                    onClick={addActivity}
+                    className="primary"
+                    disabled={actionLoading === "activity"}
+                  >
+                    {actionLoading === "activity"
+                      ? locale === "tr"
+                        ? "Kaydediliyor..."
+                        : "Saving..."
+                      : t("common.save")}
                   </button>
                 </div>
 

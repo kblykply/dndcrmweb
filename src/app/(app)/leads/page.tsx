@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import LeadAvatar from "../../_ui/LeadAvatar";
@@ -31,6 +32,18 @@ const OUTCOMES = [
   { key: "WRONG_NUMBER", labelKey: "leadOutcomes.WRONG_NUMBER", fallback: "Wrong number" },
 ] as const;
 
+type LeadRow = {
+  id: string;
+  fullName: string;
+  phone: string;
+  email?: string | null;
+  source?: string | null;
+  status: string;
+  nextFollowUpAt?: string | null;
+  lastActivityAt?: string | null;
+  avatarUrl?: string | null;
+};
+
 function normalizePhoneForWa(phone: string) {
   return String(phone || "").replace(/\D/g, "");
 }
@@ -39,7 +52,7 @@ function toDatetimeLocal(hoursFromNow: number) {
   const dt = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(
-    dt.getHours()
+    dt.getHours(),
   )}:${pad(dt.getMinutes())}`;
 }
 
@@ -51,6 +64,7 @@ function followTone(nextFollowUpAt?: string | null) {
 
   const startToday = new Date();
   startToday.setHours(0, 0, 0, 0);
+
   const endToday = new Date();
   endToday.setHours(23, 59, 59, 999);
 
@@ -66,7 +80,7 @@ function followTone(nextFollowUpAt?: string | null) {
 function safeTranslate(
   t: (path: string) => string,
   path: string,
-  fallback?: string | null
+  fallback?: string | null,
 ) {
   const translated = t(path);
   if (translated === path) return fallback ?? path;
@@ -76,10 +90,52 @@ function safeTranslate(
 function formatFollowText(
   nextFollowUpAt: string | null | undefined,
   locale: "tr" | "en",
-  t: (path: string) => string
+  t: (path: string) => string,
 ) {
   if (!nextFollowUpAt) return t("leads.noFollowUp");
   return new Date(nextFollowUpAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
+}
+
+function normalizeErrorMessage(
+  input: unknown,
+  t: (path: string) => string,
+  locale: "tr" | "en",
+) {
+  const text = String(input || "");
+
+  if (
+    text.includes("Internal server error") ||
+    text.includes('"statusCode":500') ||
+    text.includes("P2028") ||
+    text.includes("Unable to start a transaction in the given time") ||
+    text.includes("Transaction API error")
+  ) {
+    return locale === "tr"
+      ? "Sunucuda geçici bir yoğunluk oluştu. Lütfen tekrar deneyin."
+      : "The server is temporarily busy. Please try again.";
+  }
+
+  if (text.includes("Unauthorized")) {
+    return locale === "tr" ? "Oturum süresi doldu." : "Your session has expired.";
+  }
+
+  if (text.includes("fullName is required")) {
+    return locale === "tr" ? "Ad soyad zorunludur." : "Full name is required.";
+  }
+
+  if (text.includes("phone is required")) {
+    return locale === "tr" ? "Telefon zorunludur." : "Phone is required.";
+  }
+
+  if (text.includes("summary is required")) {
+    return locale === "tr" ? "Özet zorunludur." : "Summary is required.";
+  }
+
+  if (text.includes("Invalid nextFollowUpAt")) {
+    return locale === "tr" ? "Geçersiz takip tarihi." : "Invalid follow-up date.";
+  }
+
+  return text;
 }
 
 export default function LeadsPage() {
@@ -88,7 +144,7 @@ export default function LeadsPage() {
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
 
-  const [leads, setLeads] = useState<any[]>([]);
+  const [leads, setLeads] = useState<LeadRow[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -118,7 +174,7 @@ export default function LeadsPage() {
     nextPage = page,
     nextStatus = statusFilter,
     nextQ = q,
-    nextPageSize = pageSize
+    nextPageSize = pageSize,
   ) {
     setErr(null);
     setLoading(true);
@@ -133,13 +189,13 @@ export default function LeadsPage() {
       params.set("pageSize", String(nextPageSize));
 
       const res = await authedFetch(`/leads?${params.toString()}`);
-      const items = res.items || [];
+      const items = Array.isArray(res?.items) ? res.items : [];
 
       setLeads(items);
-      setTotal(res.total || 0);
-      setTotalPages(res.totalPages || 1);
-      setPage(res.page || nextPage);
-      setPageSize(res.pageSize || nextPageSize);
+      setTotal(Number(res?.total || 0));
+      setTotalPages(Math.max(1, Number(res?.totalPages || 1)));
+      setPage(Number(res?.page || nextPage));
+      setPageSize(Number(res?.pageSize || nextPageSize));
 
       setFollowById((prev) => {
         const next = { ...prev };
@@ -157,21 +213,35 @@ export default function LeadsPage() {
         return next;
       });
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, t, locale));
     } finally {
       setLoading(false);
     }
   }
 
   async function createLead() {
+    const cleanFullName = fullName.trim();
+    const cleanPhone = phone.trim();
+    const cleanSource = source.trim();
+
+    if (!cleanFullName || !cleanPhone) {
+      setErr(
+        locale === "tr"
+          ? "Ad soyad ve telefon zorunludur."
+          : "Full name and phone are required.",
+      );
+      return;
+    }
+
     setErr(null);
+
     try {
       await authedFetch("/leads", {
         method: "POST",
         body: JSON.stringify({
-          fullName: fullName.trim(),
-          phone: phone.trim(),
-          source: source.trim(),
+          fullName: cleanFullName,
+          phone: cleanPhone,
+          source: cleanSource || undefined,
         }),
       });
 
@@ -179,9 +249,10 @@ export default function LeadsPage() {
       setPhone("");
       setSource("Website");
       setShowCreate(false);
+
       await load(1, statusFilter, q, pageSize);
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, t, locale));
     }
   }
 
@@ -199,12 +270,16 @@ export default function LeadsPage() {
         summary: `${t("leads.callSummary")}: ${safeTranslate(
           t,
           `leadOutcomes.${outcome}`,
-          outcome
+          outcome,
         )}`,
       };
 
       if (followLocal) {
-        body.nextFollowUpAt = new Date(followLocal).toISOString();
+        const parsed = new Date(followLocal);
+        if (Number.isNaN(parsed.getTime())) {
+          throw new Error(locale === "tr" ? "Geçersiz takip tarihi." : "Invalid follow-up date.");
+        }
+        body.nextFollowUpAt = parsed.toISOString();
       }
 
       await authedFetch(`/leads/${leadId}/activity`, {
@@ -215,7 +290,7 @@ export default function LeadsPage() {
       setFollowById((p) => ({ ...p, [leadId]: "" }));
       await load(page, statusFilter, q, pageSize);
     } catch (e: any) {
-      setErr(String(e?.message || e));
+      setErr(normalizeErrorMessage(e?.message || e, t, locale));
     } finally {
       setSavingId(null);
     }
@@ -226,8 +301,10 @@ export default function LeadsPage() {
   }
 
   function runSearch() {
-    setQ(searchInput.trim());
-    load(1, statusFilter, searchInput.trim(), pageSize);
+    const nextQ = searchInput.trim();
+    setQ(nextQ);
+    setPage(1);
+    load(1, statusFilter, nextQ, pageSize);
   }
 
   useEffect(() => {
@@ -240,6 +317,13 @@ export default function LeadsPage() {
     load(1, statusFilter, q, pageSize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    setPage(1);
+    load(1, statusFilter, q, pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, pageSize]);
 
   const pageInfoText = useMemo(() => {
     if (!total) return t("common.noRecords");
@@ -284,16 +368,19 @@ export default function LeadsPage() {
       </div>
 
       <div style={{ borderBottom: "1px solid var(--stroke)", display: "flex", gap: 18 }}>
-        <a
+        <Link
           href="/leads"
           style={{
             padding: "12px 2px",
             fontWeight: 800,
             borderBottom: "2px solid var(--text-primary)",
+            textDecoration: "none",
+            color: "inherit",
           }}
         >
           {t("leads.title")}
-        </a>
+        </Link>
+
         <span
           style={{
             padding: "12px 2px",
@@ -308,6 +395,7 @@ export default function LeadsPage() {
       {showCreate && canCreate ? (
         <div className="card" style={{ display: "grid", gap: 10 }}>
           <div style={{ fontWeight: 900 }}>{t("leads.createTitle")}</div>
+
           <div
             style={{
               display: "grid",
@@ -338,6 +426,7 @@ export default function LeadsPage() {
               {t("common.create")}
             </button>
           </div>
+
           {err ? <pre style={{ whiteSpace: "pre-wrap" }}>{err}</pre> : null}
         </div>
       ) : null}
@@ -362,7 +451,7 @@ export default function LeadsPage() {
 
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
+            onChange={(e) => setStatusFilter(e.target.value as (typeof STATUSES)[number])}
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -397,7 +486,7 @@ export default function LeadsPage() {
           <thead>
             <tr>
               <th style={{ width: 44 }}>
-                <input type="checkbox" />
+                <input type="checkbox" readOnly />
               </th>
               <th>{t("leads.table.name")}</th>
               <th>{t("leads.table.contact")}</th>
@@ -416,16 +505,17 @@ export default function LeadsPage() {
               return (
                 <tr key={l.id}>
                   <td>
-                    <input type="checkbox" />
+                    <input type="checkbox" readOnly />
                   </td>
 
                   <td style={{ minWidth: 260 }}>
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                       <LeadAvatar avatarUrl={l.avatarUrl} name={l.fullName} size={30} />
-                      <a href={`/leads/${l.id}`} style={{ fontWeight: 800 }}>
+                      <Link href={`/leads/${l.id}`} style={{ fontWeight: 800 }}>
                         {l.fullName}
-                      </a>
+                      </Link>
                     </div>
+
                     <div
                       style={{
                         marginTop: 6,
@@ -444,6 +534,7 @@ export default function LeadsPage() {
                       <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
                         {l.phone}
                       </div>
+
                       <div
                         style={{
                           display: "flex",
@@ -477,10 +568,10 @@ export default function LeadsPage() {
                           tone === "danger"
                             ? "danger"
                             : tone === "warning"
-                            ? "warning"
-                            : tone === "info"
-                            ? "info"
-                            : ""
+                              ? "warning"
+                              : tone === "info"
+                                ? "info"
+                                : ""
                         }`}
                         style={{
                           justifySelf: "start",

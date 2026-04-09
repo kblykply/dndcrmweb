@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { io, Socket } from "socket.io-client";
 import { authedFetch } from "@/lib/authedFetch";
-import { getUser } from "@/lib/auth";
+import { getAccessToken, getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
@@ -53,6 +55,24 @@ type TaskRow = {
   customer?: CustomerLite | null;
 };
 
+type RealtimeNotification = {
+  id: string;
+  type: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  link?: string | null;
+  metaJson?: any;
+};
+
+function getApiBase() {
+  const raw =
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "";
+
+  return raw.replace(/\/$/, "");
+}
+
 function safeTranslate(
   t: (path: string) => string,
   path: string,
@@ -74,15 +94,6 @@ function priorityBadgeClass(priority?: string) {
   if (priority === "HIGH") return "danger";
   if (priority === "MEDIUM") return "warning";
   return "info";
-}
-
-function toDatetimeLocalValue(v?: string | null) {
-  if (!v) return "";
-  const d = new Date(v);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}`;
 }
 
 function isOverdue(task?: TaskRow | null) {
@@ -128,10 +139,11 @@ export default function TasksPage() {
   const [agencyId, setAgencyId] = useState("");
   const [customerId, setCustomerId] = useState("");
 
+  const socketRef = useRef<Socket | null>(null);
+
   const role = me?.role as string | undefined;
   const isAdmin = role === "ADMIN";
   const isManager = role === "MANAGER";
-  const isSales = role === "SALES";
   const canSeeTeam = isAdmin || isManager;
   const canCreate = isAdmin || isManager;
 
@@ -150,25 +162,33 @@ export default function TasksPage() {
     return safeTranslate(t, `taskPriorities.${value}`, value);
   }
 
-  async function loadMyTasks(nextStatus = status) {
+  async function loadMyTasks(nextStatus = status, nextSearch = q) {
     setLoadingMy(true);
     setErr(null);
+
     try {
       const params = new URLSearchParams();
       if (nextStatus !== "ALL") params.set("status", nextStatus);
-      if (q.trim()) params.set("search", q.trim());
+      if (nextSearch.trim()) params.set("search", nextSearch.trim());
 
       const res = await authedFetch(`/tasks/my?${params.toString()}`);
-      setMyTasks(Array.isArray(res) ? res : []);
+      const nextItems = Array.isArray(res) ? res : [];
+      setMyTasks(nextItems);
+
+      setSelected((prev) => {
+        if (!prev) return null;
+        return nextItems.find((x) => x.id === prev.id) || null;
+      });
     } catch (e: any) {
       setErr(String(e?.message || e));
       setMyTasks([]);
+      setSelected((prev) => (tab === "my" ? null : prev));
     } finally {
       setLoadingMy(false);
     }
   }
 
-  async function loadTeamTasks(nextStatus = status) {
+  async function loadTeamTasks(nextStatus = status, nextSearch = q) {
     if (!canSeeTeam) {
       setTeamTasks([]);
       return;
@@ -176,16 +196,24 @@ export default function TasksPage() {
 
     setLoadingTeam(true);
     setErr(null);
+
     try {
       const params = new URLSearchParams();
       if (nextStatus !== "ALL") params.set("status", nextStatus);
-      if (q.trim()) params.set("search", q.trim());
+      if (nextSearch.trim()) params.set("search", nextSearch.trim());
 
       const res = await authedFetch(`/tasks?${params.toString()}`);
-      setTeamTasks(Array.isArray(res) ? res : []);
+      const nextItems = Array.isArray(res) ? res : [];
+      setTeamTasks(nextItems);
+
+      setSelected((prev) => {
+        if (!prev) return null;
+        return nextItems.find((x) => x.id === prev.id) || null;
+      });
     } catch (e: any) {
       setErr(String(e?.message || e));
       setTeamTasks([]);
+      setSelected((prev) => (tab === "team" ? null : prev));
     } finally {
       setLoadingTeam(false);
     }
@@ -221,25 +249,26 @@ export default function TasksPage() {
     }
   }
 
-  async function refreshActive(nextStatus = status) {
+  async function refreshActive(nextStatus = status, nextSearch = q) {
     if (tab === "team" && canSeeTeam) {
-      await loadTeamTasks(nextStatus);
+      await loadTeamTasks(nextStatus, nextSearch);
     } else {
-      await loadMyTasks(nextStatus);
+      await loadMyTasks(nextStatus, nextSearch);
     }
   }
 
   async function markDone(taskId: string) {
     setSavingId(taskId);
     setErr(null);
+
     try {
       await authedFetch(`/tasks/${taskId}/done`, {
         method: "PATCH",
       });
 
       await Promise.all([
-        loadMyTasks(status),
-        canSeeTeam ? loadTeamTasks(status) : Promise.resolve(),
+        loadMyTasks(status, q),
+        canSeeTeam ? loadTeamTasks(status, q) : Promise.resolve(),
       ]);
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -251,14 +280,15 @@ export default function TasksPage() {
   async function cancelTask(taskId: string) {
     setSavingId(taskId);
     setErr(null);
+
     try {
       await authedFetch(`/tasks/${taskId}/cancel`, {
         method: "PATCH",
       });
 
       await Promise.all([
-        loadMyTasks(status),
-        canSeeTeam ? loadTeamTasks(status) : Promise.resolve(),
+        loadMyTasks(status, q),
+        canSeeTeam ? loadTeamTasks(status, q) : Promise.resolve(),
       ]);
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -269,6 +299,19 @@ export default function TasksPage() {
 
   async function createTask() {
     if (!title.trim() || !assignedToId) return;
+
+    if (!leadId && !customerId && !agencyId) {
+      setErr(
+        safeTranslate(
+          t,
+          "tasks.createNeedRelation",
+          locale === "tr"
+            ? "En az bir ilişki seçmelisiniz: lead, müşteri veya ajans."
+            : "You must select at least one relation: lead, customer, or agency.",
+        ),
+      );
+      return;
+    }
 
     setCreating(true);
     setErr(null);
@@ -299,8 +342,8 @@ export default function TasksPage() {
       setShowCreate(false);
 
       await Promise.all([
-        loadMyTasks(status),
-        canSeeTeam ? loadTeamTasks(status) : Promise.resolve(),
+        loadMyTasks(status, q),
+        canSeeTeam ? loadTeamTasks(status, q) : Promise.resolve(),
       ]);
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -317,22 +360,66 @@ export default function TasksPage() {
   useEffect(() => {
     if (!mounted) return;
     loadMyTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 
   useEffect(() => {
     if (!mounted || !canSeeTeam) return;
     loadTeamTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, canSeeTeam]);
 
   useEffect(() => {
     if (!mounted || !canCreate) return;
     loadRefs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, canCreate]);
 
   useEffect(() => {
     if (!mounted) return;
-    refreshActive(status);
+    refreshActive(status, q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, status]);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const token = getAccessToken();
+    if (!token) return;
+
+    const apiBase = getApiBase();
+    const socketUrl =
+      apiBase || (typeof window !== "undefined" ? window.location.origin : "");
+
+    const socket = io(socketUrl, {
+      transports: ["websocket"],
+      auth: { token },
+    });
+
+    socketRef.current = socket;
+
+    const handleTaskRealtime = async (payload: RealtimeNotification) => {
+      const isTaskEvent =
+        payload?.type === "TASK_ASSIGNED" ||
+        payload?.type === "TASK_UPDATED" ||
+        payload?.entityType === "CrmTask";
+
+      if (!isTaskEvent) return;
+
+      await Promise.all([
+        loadMyTasks(status, q),
+        canSeeTeam ? loadTeamTasks(status, q) : Promise.resolve(),
+      ]);
+    };
+
+    socket.on("notification:new", handleTaskRealtime);
+
+    return () => {
+      socket.off("notification:new", handleTaskRealtime);
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [mounted, canSeeTeam, status, q]);
 
   const activeTasks = useMemo(() => {
     const source = tab === "team" && canSeeTeam ? teamTasks : myTasks;
@@ -364,6 +451,7 @@ export default function TasksPage() {
 
   const counts = useMemo(() => {
     const source = tab === "team" && canSeeTeam ? teamTasks : myTasks;
+
     return {
       all: source.length,
       todo: source.filter((x) => x.status === "TODO").length,
@@ -414,7 +502,10 @@ export default function TasksPage() {
             <>
               <button
                 className={tab === "my" ? "primary" : ""}
-                onClick={() => setTab("my")}
+                onClick={() => {
+                  setTab("my");
+                  setSelected(null);
+                }}
               >
                 {safeTranslate(
                   t,
@@ -424,7 +515,10 @@ export default function TasksPage() {
               </button>
               <button
                 className={tab === "team" ? "primary" : ""}
-                onClick={() => setTab("team")}
+                onClick={() => {
+                  setTab("team");
+                  setSelected(null);
+                }}
               >
                 {safeTranslate(
                   t,
@@ -450,7 +544,7 @@ export default function TasksPage() {
             </button>
           ) : null}
 
-          <button onClick={() => refreshActive(status)} disabled={loadingMy || loadingTeam}>
+          <button onClick={() => refreshActive(status, q)} disabled={loadingMy || loadingTeam}>
             {loadingMy || loadingTeam ? t("common.loading") : t("common.refresh")}
           </button>
         </div>
@@ -690,6 +784,11 @@ export default function TasksPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                refreshActive(status, q);
+              }
+            }}
             placeholder={safeTranslate(
               t,
               "tasks.searchPlaceholder",
@@ -713,7 +812,7 @@ export default function TasksPage() {
             <option value="CANCELLED">{statusLabel("CANCELLED")}</option>
           </select>
 
-          <button onClick={() => refreshActive(status)} disabled={loadingMy || loadingTeam}>
+          <button onClick={() => refreshActive(status, q)} disabled={loadingMy || loadingTeam}>
             {safeTranslate(
               t,
               "tasks.searchAndRefresh",
@@ -762,6 +861,17 @@ export default function TasksPage() {
                   <tr key={task.id}>
                     <td>
                       <div style={{ display: "grid", gap: 4 }}>
+                        <Link
+                          href={`/tasks/${task.id}`}
+                          style={{
+                            fontWeight: 900,
+                            color: "var(--text-primary)",
+                            textDecoration: "none",
+                          }}
+                        >
+                          {task.title}
+                        </Link>
+
                         <button
                           onClick={() => setSelected(task)}
                           style={{
@@ -769,29 +879,26 @@ export default function TasksPage() {
                             padding: 0,
                             background: "transparent",
                             textAlign: "left",
-                            fontWeight: 900,
-                            color: "var(--text-primary)",
+                            color: "var(--text-secondary)",
+                            fontSize: 12,
                             cursor: "pointer",
                           }}
                         >
-                          {task.title}
-                        </button>
-                        <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
                           {task.description || "-"}
-                        </div>
+                        </button>
                       </div>
                     </td>
 
                     <td>
                       <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
                         {task.lead ? (
-                          <a href={`/leads/${task.lead.id}`}>{task.lead.fullName}</a>
+                          <Link href={`/leads/${task.lead.id}`}>{task.lead.fullName}</Link>
                         ) : null}
                         {task.customer ? (
-                          <a href={`/customers/${task.customer.id}`}>{task.customer.fullName}</a>
+                          <Link href={`/customers/${task.customer.id}`}>{task.customer.fullName}</Link>
                         ) : null}
                         {task.agency ? (
-                          <a href={`/agencies/${task.agency.id}`}>{task.agency.name}</a>
+                          <Link href={`/agencies/${task.agency.id}`}>{task.agency.name}</Link>
                         ) : null}
                         {!task.lead && !task.customer && !task.agency ? "-" : null}
                       </div>
@@ -890,9 +997,20 @@ export default function TasksPage() {
                 </div>
               </div>
 
-              <button onClick={() => setSelected(null)}>
-                {safeTranslate(t, "common.close", locale === "tr" ? "Kapat" : "Close")}
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Link href={`/tasks/${selected.id}`}>
+                  <button>
+                    {safeTranslate(
+                      t,
+                      "tasks.detail.openPage",
+                      locale === "tr" ? "Sayfayı Aç" : "Open Page",
+                    )}
+                  </button>
+                </Link>
+                <button onClick={() => setSelected(null)}>
+                  {safeTranslate(t, "common.close", locale === "tr" ? "Kapat" : "Close")}
+                </button>
+              </div>
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -948,7 +1066,7 @@ export default function TasksPage() {
               {selected.lead ? (
                 <div>
                   <b>{safeTranslate(t, "tasks.detail.lead", "Lead")}:</b>{" "}
-                  <a href={`/leads/${selected.lead.id}`}>{selected.lead.fullName}</a>
+                  <Link href={`/leads/${selected.lead.id}`}>{selected.lead.fullName}</Link>
                 </div>
               ) : null}
 
@@ -959,7 +1077,7 @@ export default function TasksPage() {
                     "tasks.detail.customer",
                     locale === "tr" ? "Müşteri" : "Customer",
                   )}:</b>{" "}
-                  <a href={`/customers/${selected.customer.id}`}>{selected.customer.fullName}</a>
+                  <Link href={`/customers/${selected.customer.id}`}>{selected.customer.fullName}</Link>
                 </div>
               ) : null}
 
@@ -970,7 +1088,7 @@ export default function TasksPage() {
                     "tasks.detail.agency",
                     locale === "tr" ? "Ajans" : "Agency",
                   )}:</b>{" "}
-                  <a href={`/agencies/${selected.agency.id}`}>{selected.agency.name}</a>
+                  <Link href={`/agencies/${selected.agency.id}`}>{selected.agency.name}</Link>
                 </div>
               ) : null}
             </div>

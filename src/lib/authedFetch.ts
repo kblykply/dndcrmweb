@@ -14,7 +14,7 @@ export async function authedFetch(path: string, init: RequestInit = {}) {
     cache: "no-store",
   });
 
-  // 🔐 If token expired or invalid → logout automatically
+  // 🔐 Auto logout on 401
   if (res.status === 401) {
     clearSession();
 
@@ -25,14 +25,33 @@ export async function authedFetch(path: string, init: RequestInit = {}) {
     throw new Error("Unauthorized");
   }
 
+  const contentType = res.headers.get("content-type");
+
+  // ❌ Handle errors properly (JSON FIRST)
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Request failed (${res.status})`);
+    let errorData: any = null;
+
+    try {
+      if (contentType?.includes("application/json")) {
+        errorData = await res.json();
+      } else {
+        const text = await res.text();
+        errorData = text;
+      }
+    } catch {
+      errorData = null;
+    }
+
+    // 👇 IMPORTANT: preserve JSON structure
+    if (errorData && typeof errorData === "object") {
+      throw new Error(JSON.stringify(errorData));
+    }
+
+    throw new Error(errorData || `Request failed (${res.status})`);
   }
 
-  // some endpoints return empty body
-  const contentType = res.headers.get("content-type");
-  if (contentType && contentType.includes("application/json")) {
+  // ✅ Success response
+  if (contentType?.includes("application/json")) {
     return res.json();
   }
 

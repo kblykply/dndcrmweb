@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
@@ -47,6 +48,9 @@ function normalizeErrorMessage(
     return t("adminUserDetail.errors.userNotFound");
   }
   if (text.includes("Another user already uses this email")) {
+    return t("adminUserDetail.errors.emailAlreadyUsed");
+  }
+  if (text.includes("A user with this email already exists")) {
     return t("adminUserDetail.errors.emailAlreadyUsed");
   }
   if (text.includes("Password must be at least 8 characters")) {
@@ -107,8 +111,9 @@ function formatDeleteBlockers(
 
 export default function AdminUserDetailPage() {
   const { t, locale } = useLanguage();
-
   const params = useParams();
+  const router = useRouter();
+
   const rawId = (params as any)?.id as string | string[] | undefined;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
 
@@ -120,6 +125,7 @@ export default function AdminUserDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [forceDeleting, setForceDeleting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -133,6 +139,11 @@ export default function AdminUserDetailPage() {
 
   const isAdmin = me?.role === "ADMIN";
   const isSelf = !!(me?.id && user?.id && me.id === user.id);
+
+  const managerRequired = useMemo(
+    () => role === "SALES" || role === "CALLCENTER",
+    [role],
+  );
 
   async function load() {
     if (!id) {
@@ -150,16 +161,19 @@ export default function AdminUserDetailPage() {
         authedFetch("/users?all=true"),
       ]);
 
-      setUser(userData);
-      setName(userData.name || "");
-      setEmail(userData.email || "");
-      setPassword("");
-      setRole(userData.role);
-      setManagerId(userData.managerId || "");
-      setIsActive(userData.isActive);
+      const nextUser = userData as UserRow;
+      const allRows = Array.isArray(allUsers) ? (allUsers as UserRow[]) : [];
 
-      const managerList = (allUsers as UserRow[]).filter(
-        (u) => u.role === "MANAGER" || u.role === "ADMIN"
+      setUser(nextUser);
+      setName(nextUser.name || "");
+      setEmail(nextUser.email || "");
+      setPassword("");
+      setRole(nextUser.role);
+      setManagerId(nextUser.managerId || "");
+      setIsActive(nextUser.isActive);
+
+      const managerList = allRows.filter(
+        (u) => (u.role === "MANAGER" || u.role === "ADMIN") && u.isActive,
       );
       setManagers(managerList);
     } catch (e: any) {
@@ -175,6 +189,7 @@ export default function AdminUserDetailPage() {
 
     setErr(null);
     setSaving(true);
+
     try {
       await authedFetch(`/users/${user.id}`, {
         method: "PATCH",
@@ -183,14 +198,14 @@ export default function AdminUserDetailPage() {
           email: email.trim(),
           password: password.trim() || undefined,
           role,
-          managerId: role === "SALES" ? managerId || null : null,
+          managerId: managerRequired ? managerId || null : null,
           isActive,
         }),
       });
 
       setPassword("");
       await load();
-      alert(t("adminUserDetail.alerts.updated"));
+      window.alert(t("adminUserDetail.alerts.updated"));
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, t));
     } finally {
@@ -200,36 +215,43 @@ export default function AdminUserDetailPage() {
 
   async function deactivateUser() {
     if (!user) return;
-    if (!confirm(t("adminUserDetail.confirmDeactivate"))) return;
+
+    const ok = window.confirm(t("adminUserDetail.confirmDeactivate"));
+    if (!ok) return;
 
     setErr(null);
-    setSaving(true);
+    setDeactivating(true);
+
     try {
       await authedFetch(`/users/${user.id}/deactivate`, {
         method: "PATCH",
       });
+
       await load();
-      alert(t("adminUserDetail.alerts.deactivated"));
+      window.alert(t("adminUserDetail.alerts.deactivated"));
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, t));
     } finally {
-      setSaving(false);
+      setDeactivating(false);
     }
   }
 
   async function deleteUser() {
     if (!user) return;
-    if (!confirm(t("adminUserDetail.confirmDelete"))) return;
+
+    const ok = window.confirm(t("adminUserDetail.confirmDelete"));
+    if (!ok) return;
 
     setErr(null);
     setDeleting(true);
+
     try {
       await authedFetch(`/users/${user.id}`, {
         method: "DELETE",
       });
 
-      alert(t("adminUserDetail.alerts.deleted"));
-      window.location.href = "/admin/users";
+      window.alert(t("adminUserDetail.alerts.deleted"));
+      router.push("/admin/users");
     } catch (e: any) {
       setErr(formatDeleteBlockers(String(e?.message || e), t));
     } finally {
@@ -240,18 +262,19 @@ export default function AdminUserDetailPage() {
   async function forceDeleteUser() {
     if (!user) return;
 
-    const ok = confirm(t("adminUserDetail.confirmForceDelete"));
+    const ok = window.confirm(t("adminUserDetail.confirmForceDelete"));
     if (!ok) return;
 
     setErr(null);
     setForceDeleting(true);
+
     try {
       await authedFetch(`/users/${user.id}/force`, {
         method: "DELETE",
       });
 
-      alert(t("adminUserDetail.alerts.forceDeleted"));
-      window.location.href = "/admin/users";
+      window.alert(t("adminUserDetail.alerts.forceDeleted"));
+      router.push("/admin/users");
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, t));
     } finally {
@@ -269,8 +292,6 @@ export default function AdminUserDetailPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, id]);
-
-  const managerRequired = useMemo(() => role === "SALES", [role]);
 
   if (!mounted) return <div>{t("common.loading")}</div>;
 
@@ -302,14 +323,14 @@ export default function AdminUserDetailPage() {
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <div className="flex-between">
+      <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <div
             style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
           >
-            <a href="/admin/users" style={{ fontWeight: 800 }}>
+            <Link href="/admin/users" style={{ fontWeight: 800 }}>
               ← {t("adminUserDetail.backToUsers")}
-            </a>
+            </Link>
           </div>
 
           <div style={{ fontSize: 24, fontWeight: 900 }}>{user.name}</div>
@@ -317,7 +338,7 @@ export default function AdminUserDetailPage() {
             {t("adminUserDetail.createdAt")}:{" "}
             {user.createdAt
               ? new Date(user.createdAt).toLocaleString(
-                  locale === "tr" ? "tr-TR" : "en-US"
+                  locale === "tr" ? "tr-TR" : "en-US",
                 )
               : "-"}
           </div>
@@ -367,7 +388,11 @@ export default function AdminUserDetailPage() {
             <span className="muted" style={{ fontSize: 12 }}>
               {t("adminUsers.fields.email")}
             </span>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+            />
           </label>
 
           <label style={{ display: "grid", gap: 6 }}>
@@ -459,8 +484,11 @@ export default function AdminUserDetailPage() {
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={deactivateUser} disabled={saving || !user.isActive}>
-            {t("adminUsers.deactivate")}
+          <button
+            onClick={deactivateUser}
+            disabled={deactivating || saving || !user.isActive}
+          >
+            {deactivating ? t("common.processing") : t("adminUsers.deactivate")}
           </button>
 
           <button

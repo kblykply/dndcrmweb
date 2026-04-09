@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import TopbarUser from "../_ui/TopbarUser";
@@ -23,7 +23,12 @@ function CalendarIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
       <path d="M8 3.5v3M16 3.5v3M3.5 9h17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      <path
+        d="M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -32,7 +37,12 @@ function CustomersIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M4.5 18c.8-2.9 3.2-4.8 6-4.8s5.2 1.9 6 4.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path
+        d="M4.5 18c.8-2.9 3.2-4.8 6-4.8s5.2 1.9 6 4.8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
       <circle cx="17.5" cy="9" r="2.2" stroke="currentColor" strokeWidth="1.8" />
       <path d="M16 13.5c2 .2 3.7 1.4 4.5 3.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
@@ -54,7 +64,13 @@ function TasksIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <rect x="4" y="4" width="16" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
       <path d="M8 9h8M8 13h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M8 17l1.5 1.5L13 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M8 17l1.5 1.5L13 15"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -93,6 +109,21 @@ function DeleteIcon() {
   );
 }
 
+function HelpIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M9.8 9.3a2.7 2.7 0 1 1 4.2 2.2c-.9.6-1.5 1.1-1.5 2.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path d="M12 17.2h.01" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function navItemStyle(active: boolean): React.CSSProperties {
   return {
     display: "flex",
@@ -113,6 +144,7 @@ function navItemStyle(active: boolean): React.CSSProperties {
 function NavIconWrap({ children }: { children: React.ReactNode }) {
   return (
     <span
+      aria-hidden="true"
       style={{
         width: 18,
         height: 18,
@@ -120,6 +152,7 @@ function NavIconWrap({ children }: { children: React.ReactNode }) {
         alignItems: "center",
         justifyContent: "center",
         flex: "0 0 18px",
+        lineHeight: 0,
       }}
     >
       {children}
@@ -193,6 +226,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", handleResize);
+
       if (media.removeEventListener) {
         media.removeEventListener("change", onMediaChange);
       } else {
@@ -204,9 +238,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const role = me?.role as string | undefined;
   const isManager = role === "MANAGER" || role === "ADMIN";
   const isAdmin = role === "ADMIN";
-  const canSeeCRM = role === "ADMIN" || role === "MANAGER" || role === "SALES";
+  const canSeeCRM =
+    role === "ADMIN" || role === "MANAGER" || role === "SALES" || role === "CALLCENTER";
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
+
+  const isTasksActive = useMemo(
+    () => pathname === "/tasks" || pathname.startsWith("/tasks/"),
+    [pathname],
+  );
+
+  const isManagerQueueActive = useMemo(
+    () => pathname === "/manager/queue" || pathname.startsWith("/manager/queue/"),
+    [pathname],
+  );
+
+  const isAdminRootActive = useMemo(
+    () => pathname === "/admin",
+    [pathname],
+  );
 
   return (
     <div
@@ -240,7 +290,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <img
               src={logoSrc}
               alt="Logo"
-              style={{ width: 100, objectFit: "contain" }}
+              style={{ width: 100, objectFit: "contain", display: "block" }}
             />
           </div>
 
@@ -284,7 +334,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             ) : null}
 
             {canSeeCRM ? (
-              <Link href="/tasks" style={navItemStyle(pathname.startsWith("/tasks"))}>
+              <Link href="/tasks" style={navItemStyle(isTasksActive)}>
                 <NavIconWrap>
                   <TasksIcon />
                 </NavIconWrap>
@@ -294,14 +344,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
             {isManager ? (
               <>
-                <Link href="/manager/queue" style={navItemStyle(pathname.startsWith("/manager"))}>
+                <Link href="/manager/queue" style={navItemStyle(isManagerQueueActive)}>
                   <NavIconWrap>
                     <ManagerIcon />
                   </NavIconWrap>
                   {t("nav.managerQueue")}
                 </Link>
 
-                <Link href="/admin" style={navItemStyle(pathname === "/admin")}>
+                <Link href="/admin" style={navItemStyle(isAdminRootActive)}>
                   <NavIconWrap>
                     <AdminIcon />
                   </NavIconWrap>
@@ -338,9 +388,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               borderTop: "1px solid var(--stroke)",
             }}
           >
-            <Link href="/help" style={navItemStyle(false)}>
+            <Link href="/help" style={navItemStyle(pathname.startsWith("/help"))}>
               <NavIconWrap>
-                <TasksIcon />
+                <HelpIcon />
               </NavIconWrap>
               {t("nav.help")}
             </Link>
