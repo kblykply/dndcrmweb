@@ -34,8 +34,8 @@ create:  "Create",
     users: "Users",
     managerQueue: "Manager Queue",
     help: "Help & Support",
-      tasks: "Tasks"
-
+      tasks: "Tasks",
+meetings: "Meetings"
       
   },
   dashboard: {
@@ -221,8 +221,8 @@ customerDetail: {
 agencyStatuses: {
   ACTIVE: "Active",
   PASSIVE: "Passive",
-  PROSPECT: "Prospect",
-  DEALING: "Dealing",
+  PROSPECT: "Potantial",
+  DEALING: "In Progress",
   CLOSED: "Closed",
 },
 
@@ -655,6 +655,7 @@ adminLeads: {
 
   confirmDelete: "{{count}} leads will be permanently deleted. This action cannot be undone. Do you want to continue?",
   deletedAlert: "{{count}} leads deleted.",
+  
 },
 
 } as const;

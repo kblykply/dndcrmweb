@@ -102,6 +102,7 @@ function isOverdue(task?: TaskRow | null) {
   return new Date(task.dueAt).getTime() < Date.now();
 }
 
+
 export default function TasksPage() {
   const { t, locale } = useLanguage();
 
@@ -141,11 +142,23 @@ export default function TasksPage() {
 
   const socketRef = useRef<Socket | null>(null);
 
-  const role = me?.role as string | undefined;
-  const isAdmin = role === "ADMIN";
-  const isManager = role === "MANAGER";
-  const canSeeTeam = isAdmin || isManager;
-  const canCreate = isAdmin || isManager;
+ const role = me?.role as string | undefined;
+const isAdmin = role === "ADMIN";
+const isManager = role === "MANAGER";
+const isSales = role === "SALES";
+const canSeeTeam = isAdmin || isManager;
+const canCreate = isAdmin || isManager || isSales;
+
+
+
+useEffect(() => {
+  if (!mounted || !me?.id) return;
+
+  if (isSales && !assignedToId) {
+    setAssignedToId(me.id);
+  }
+}, [mounted, isSales, me?.id, assignedToId]);
+
 
   function formatDateTime(v?: string | null) {
     if (!v) return "-";
@@ -297,60 +310,47 @@ export default function TasksPage() {
     }
   }
 
-  async function createTask() {
-    if (!title.trim() || !assignedToId) return;
+ async function createTask() {
+  if (!title.trim() || !assignedToId) return;
 
-    if (!leadId && !customerId && !agencyId) {
-      setErr(
-        safeTranslate(
-          t,
-          "tasks.createNeedRelation",
-          locale === "tr"
-            ? "En az bir ilişki seçmelisiniz: lead, müşteri veya ajans."
-            : "You must select at least one relation: lead, customer, or agency.",
-        ),
-      );
-      return;
-    }
+  setCreating(true);
+  setErr(null);
 
-    setCreating(true);
-    setErr(null);
+  try {
+    await authedFetch("/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        priority,
+        dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+        assignedToId,
+        leadId: leadId || null,
+        agencyId: agencyId || null,
+        customerId: customerId || null,
+      }),
+    });
 
-    try {
-      await authedFetch("/tasks", {
-        method: "POST",
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          priority,
-          dueAt: dueAt ? new Date(dueAt).toISOString() : null,
-          assignedToId,
-          leadId: leadId || null,
-          agencyId: agencyId || null,
-          customerId: customerId || null,
-        }),
-      });
+    setTitle("");
+    setDescription("");
+    setPriority("MEDIUM");
+    setDueAt("");
+    setAssignedToId("");
+    setLeadId("");
+    setAgencyId("");
+    setCustomerId("");
+    setShowCreate(false);
 
-      setTitle("");
-      setDescription("");
-      setPriority("MEDIUM");
-      setDueAt("");
-      setAssignedToId("");
-      setLeadId("");
-      setAgencyId("");
-      setCustomerId("");
-      setShowCreate(false);
-
-      await Promise.all([
-        loadMyTasks(status, q),
-        canSeeTeam ? loadTeamTasks(status, q) : Promise.resolve(),
-      ]);
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setCreating(false);
-    }
+    await Promise.all([
+      loadMyTasks(status, q),
+      canSeeTeam ? loadTeamTasks(status, q) : Promise.resolve(),
+    ]);
+  } catch (e: any) {
+    setErr(String(e?.message || e));
+  } finally {
+    setCreating(false);
   }
+}
 
   useEffect(() => {
     setMounted(true);
@@ -578,10 +578,10 @@ export default function TasksPage() {
             />
 
             <select
-              value={assignedToId}
-              onChange={(e) => setAssignedToId(e.target.value)}
-              disabled={loadingRefs}
-            >
+  value={assignedToId}
+  onChange={(e) => setAssignedToId(e.target.value)}
+  disabled={loadingRefs || isSales}
+>
               <option value="">
                 {safeTranslate(
                   t,

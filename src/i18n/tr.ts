@@ -41,7 +41,8 @@ create: "Oluştur" ,
     managerQueue: "Yönetici Kuyruğu",
     help: "Yardım & Destek",
       tasks: "Görevler"
-
+,
+meetings: "Toplantılar"
   },
   dashboard: {
     title: "CRM Dashboard",

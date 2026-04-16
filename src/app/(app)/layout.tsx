@@ -9,6 +9,22 @@ import LanguageSwitcher from "../_ui/LanguageSwitcher";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "../_ui/LanguageProvider";
 
+
+
+
+function MeetingsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 3.5v3M16 3.5v3M3.5 9h17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M8 13h3M8 17h8M15.5 13.5l1.2 1.2 2.3-2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+
+
+
 function LeadsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -247,7 +263,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     () => pathname === "/tasks" || pathname.startsWith("/tasks/"),
     [pathname],
   );
-
+const isMeetingsActive = useMemo(
+  () => pathname === "/meetings" || pathname.startsWith("/meetings/"),
+  [pathname],
+);
   const isManagerQueueActive = useMemo(
     () => pathname === "/manager/queue" || pathname.startsWith("/manager/queue/"),
     [pathname],
@@ -341,6 +360,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 {t("nav.tasks")}
               </Link>
             ) : null}
+
+
+
+{canSeeCRM ? (
+  <Link href="/meetings" style={navItemStyle(isMeetingsActive)}>
+    <NavIconWrap>
+      <MeetingsIcon />
+    </NavIconWrap>
+    {t("nav.meetings")}
+  </Link>
+) : null}
+
 
             {isManager ? (
               <>
