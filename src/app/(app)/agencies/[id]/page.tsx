@@ -188,7 +188,7 @@ const [tasks, setTasks] = useState<any[]>([]);
   authedFetch(`/agencies/${agencyId}`),
   authedFetch("/users?role=SALES"),
   authedFetch(`/meetings?kind=AGENCY&agencyId=${agencyId}`),
-  authedFetch(`/tasks?agencyId=${agencyId}`),
+  isSales ? Promise.resolve([]) : authedFetch(`/tasks?agencyId=${agencyId}`),
 ]);
 
 setAgency(agencyData);
