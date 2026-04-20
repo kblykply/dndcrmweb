@@ -126,6 +126,7 @@ export default function AgenciesPage() {
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"ALL" | AgencyStatus>("ALL");
+  const [createStatus, setCreateStatus] = useState<AgencyStatus>("ACTIVE");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
@@ -174,7 +175,7 @@ export default function AgenciesPage() {
     setSource("");
     setNotesSummary("");
     setAssignedSalesId(isSales ? me?.id || "" : "");
-    setStatus("ACTIVE");
+setCreateStatus("ACTIVE");
   }
 
   async function load(
@@ -238,9 +239,11 @@ export default function AgenciesPage() {
   website: website.trim() || undefined,
   source: source.trim() || undefined,
   notesSummary: notesSummary.trim() || undefined,
-  status,
+  status: createStatus,
   assignedSalesId: isSales ? undefined : assignedSalesId || null,
 };
+
+
 
       await authedFetch("/agencies", {
         method: "POST",
@@ -480,16 +483,16 @@ export default function AgenciesPage() {
   <span className="muted" style={{ fontSize: 12 }}>
     {t("agencies.fields.status")}
   </span>
-  <select
-    value={status}
-    onChange={(e) => setStatus(e.target.value as AgencyStatus)}
-  >
-    {STATUS_OPTIONS.filter((s): s is AgencyStatus => s !== "ALL").map((s) => (
-      <option key={s} value={s}>
-        {safeTranslate(t, `agencyStatuses.${s}`, s)}
-      </option>
-    ))}
-  </select>
+<select
+  value={createStatus}
+  onChange={(e) => setCreateStatus(e.target.value as AgencyStatus)}
+>
+  {STATUS_OPTIONS.filter((s): s is AgencyStatus => s !== "ALL").map((s) => (
+    <option key={s} value={s}>
+      {safeTranslate(t, `agencyStatuses.${s}`, s)}
+    </option>
+  ))}
+</select>
 </label>
 
 

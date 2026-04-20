@@ -161,6 +161,12 @@ export default function AgencyDetailPage() {
 
   const canEditAgencyInfo = canManage || canSalesEditAgency;
 
+
+
+  const canCreateTask = canManage || isSales;
+const canUpdateTaskStatus = canManage || isSales;
+ 
+
  const [meetings, setMeetings] = useState<any[]>([]);
 const [tasks, setTasks] = useState<any[]>([]);
 
@@ -188,7 +194,7 @@ const [tasks, setTasks] = useState<any[]>([]);
   authedFetch(`/agencies/${agencyId}`),
   authedFetch("/users?role=SALES"),
   authedFetch(`/meetings?kind=AGENCY&agencyId=${agencyId}`),
-  isSales ? Promise.resolve([]) : authedFetch(`/tasks?agencyId=${agencyId}`),
+authedFetch(`/tasks?agencyId=${agencyId}`),
 ]);
 
 setAgency(agencyData);
@@ -315,6 +321,10 @@ agencyId: agency.id,
     setSaving(true);
     setErr(null);
     try {
+
+
+      const finalAssignedToId = isSales ? me?.id || null : taskAssignedToId || null;
+
      await authedFetch(`/tasks`, {
   method: "POST",
   body: JSON.stringify({
@@ -322,7 +332,7 @@ agencyId: agency.id,
     title: taskTitle.trim(),
     description: taskDescription.trim() || undefined,
     dueAt: taskDueAt ? new Date(taskDueAt).toISOString() : undefined,
-    assignedToId: taskAssignedToId || null,
+assignedToId: finalAssignedToId,
     priority: taskPriority,
   }),
 });
@@ -708,7 +718,7 @@ meetings.map((m) => (
       <div className="card" style={{ display: "grid", gap: 12 }}>
         <div style={{ fontWeight: 900 }}>{t("agencyDetail.tasksTitle")}</div>
 
-        {canManage ? (
+        {canCreateTask ? ( 
           <div
             style={{
               display: "grid",
@@ -731,17 +741,21 @@ meetings.map((m) => (
               value={taskDueAt}
               onChange={(e) => setTaskDueAt(e.target.value)}
             />
-            <select
-              value={taskAssignedToId}
-              onChange={(e) => setTaskAssignedToId(e.target.value)}
-            >
-              <option value="">{t("agencies.fields.selectSales")}</option>
-              {salesUsers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+           <select
+  value={taskAssignedToId}
+  onChange={(e) => setTaskAssignedToId(e.target.value)}
+>
+  <option value="">{t("agencies.fields.selectSales")}</option>
+  {isSales ? (
+    <option value={me?.id || ""}>{me?.name || "-"}</option>
+  ) : (
+    salesUsers.map((s) => (
+      <option key={s.id} value={s.id}>
+        {s.name}
+      </option>
+    ))
+  )}
+</select>
             <select
               value={taskPriority}
               onChange={(e) => setTaskPriority(e.target.value as TaskPriority)}
@@ -805,7 +819,7 @@ tasks.map((task) => (
                   <div style={{ fontSize: 13 }}>{task.description}</div>
                 ) : null}
 
-               {canManage ? (
+            {canUpdateTaskStatus ? (
   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
     {TASK_STATUS_OPTIONS.map((s) => (
       <button
