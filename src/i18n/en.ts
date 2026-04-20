@@ -35,7 +35,9 @@ create:  "Create",
     managerQueue: "Manager Queue",
     help: "Help & Support",
       tasks: "Tasks",
-meetings: "Meetings"
+meetings: "Meetings",
+    orgChart: "Organizational Chart"
+
       
   },
   dashboard: {
@@ -655,8 +657,42 @@ adminLeads: {
 
   confirmDelete: "{{count}} leads will be permanently deleted. This action cannot be undone. Do you want to continue?",
   deletedAlert: "{{count}} leads deleted.",
+
+
+
   
+  orgChart: {
+  title: "Organizational Chart",
+  subtitle: "View and manage company structure",
+
+  totalNodes: "Total Nodes",
+  rootNodes: "Root Nodes",
+
+  newNode: "New Node",
+  createNode: "Create Node",
+  editNode: "Edit Node",
+  saving: "Saving...",
+
+  fields: {
+    name: "Name / Title",
+    type: "Type",
+    order: "Order",
+    parent: "Parent Node",
+    noParent: "No parent"
+  },
+
+  table: {
+    name: "Name",
+    type: "Type",
+    parent: "Parent",
+    order: "Order",
+    actions: "Actions"
+  }
+}
 },
+
+
+
 
 } as const;
 

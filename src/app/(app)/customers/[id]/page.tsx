@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
-import { getUser } from "@/lib/auth";
+import { getUser, getAccessToken } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type PresentationStatus =
@@ -27,7 +27,49 @@ type SalesUser = {
   role: string;
 };
 
+
+type Gender = "MALE" | "FEMALE" | "OTHER";
+type ProjectType =
+  | "LA_JOYA"
+  | "LA_JOYA_PERLA"
+  | "LA_JOYA_PERLA_II"
+  | "LAGOON_VERDE";
+
+type CustomerDocumentType = "ID" | "PASSPORT" | "OTHER";
+
+
+
 type CustomerDetail = {
+
+
+
+    language?: string | null;
+  nationality?: string | null;
+  gender?: Gender | null;
+  birthday?: string | null;
+  job?: string | null;
+  project?: ProjectType | null;
+  idDocumentUrl?: string | null;
+  idDocumentName?: string | null;
+
+  unitSelections?: Array<{
+    id: string;
+    project: ProjectType;
+    unitNumber: string;
+    createdAt?: string;
+  }>;
+
+documents?: Array<{
+  id: string;
+  type: CustomerDocumentType;
+  fileName: string;
+  storagePath: string;
+  mimeType?: string | null;
+  createdAt?: string;
+}>;
+
+
+
   id: string;
   fullName: string;
   companyName?: string | null;
@@ -83,6 +125,13 @@ type CustomerDetail = {
     }>;
   }>;
 };
+
+
+
+
+
+
+
 
 const STATUS_OPTIONS: PresentationStatus[] = [
   "SCHEDULED",
@@ -177,6 +226,24 @@ export default function CustomerDetailPage() {
     "POTENTIAL",
   );
 
+  const [language, setLanguage] = useState("");
+  const [nationality, setNationality] = useState("");
+  const [gender, setGender] = useState<"" | Gender>("");
+  const [birthday, setBirthday] = useState("");
+  const [job, setJob] = useState("");
+  const [project, setProject] = useState<"" | ProjectType>("");
+
+  const [unitProject, setUnitProject] = useState<"" | ProjectType>("");
+  const [unitNumber, setUnitNumber] = useState("");
+  const [unitSelections, setUnitSelections] = useState<
+    Array<{ project: ProjectType; unitNumber: string }>
+  >([]);
+
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
+
+
+
   const role = me?.role as string | undefined;
   const isSales = role === "SALES";
   const isManagerOrAdmin = role === "MANAGER" || role === "ADMIN";
@@ -197,6 +264,13 @@ export default function CustomerDetailPage() {
 
   const canCreatePresentation = canEditCustomer;
 
+
+
+    
+
+
+
+
   function hiddenText() {
     return safeTranslate(
       t,
@@ -211,6 +285,7 @@ export default function CustomerDetailPage() {
   }
 
   function fillCustomerForm(data: CustomerDetail) {
+    
     setFullName(data.fullName || "");
     setCompanyName(data.companyName || "");
     setPhone(data.phone || "");
@@ -221,7 +296,50 @@ export default function CustomerDetailPage() {
     setSource(data.source || "");
     setCustomerNotesSummary(data.notesSummary || "");
     setCustomerType((data.type as "POTENTIAL" | "EXISTING") || "POTENTIAL");
+
+
+
+        setLanguage(data.language || "");
+    setNationality(data.nationality || "");
+    setGender((data.gender as "" | Gender) || "");
+    setBirthday(data.birthday ? String(data.birthday).slice(0, 10) : "");
+    setJob(data.job || "");
+    setProject((data.project as "" | ProjectType) || "");
+    setUnitSelections(
+      Array.isArray(data.unitSelections)
+        ? data.unitSelections.map((u) => ({
+            project: u.project,
+            unitNumber: u.unitNumber,
+          }))
+        : []
+    );
+
+
+
   }
+
+
+async function openCustomerDocument(documentId: string) {
+  if (!customer) return;
+
+  setErr(null);
+
+  try {
+    const res = await authedFetch(
+      `/customers/${customer.id}/documents/${documentId}/url`
+    );
+
+    if (!res?.url) {
+      throw new Error("Document URL not found");
+    }
+
+    window.open(res.url, "_blank", "noopener,noreferrer");
+  } catch (e: any) {
+    setErr(String(e?.message || e));
+  }
+}
+
+  
 
   async function loadCustomer() {
     if (!customerId) {
@@ -237,6 +355,14 @@ export default function CustomerDetailPage() {
       const customerData = await authedFetch(`/customers/${customerId}`);
       setCustomer(customerData);
       fillCustomerForm(customerData);
+
+
+      if (!isSales && customerData?.ownerId) {
+  setAssignedSalesId(customerData.ownerId);
+}
+
+
+
     } catch (e: any) {
       setCustomer(null);
       setErr(String(e?.message || e));
@@ -279,6 +405,18 @@ export default function CustomerDetailPage() {
           source: source.trim() || null,
           notesSummary: customerNotesSummary.trim() || null,
           type: customerType,
+
+
+                    language: language.trim() || null,
+          nationality: nationality.trim() || null,
+          gender: gender || null,
+          birthday: birthday ? new Date(birthday).toISOString() : null,
+          job: job.trim() || null,
+          project: project || null,
+          unitSelections,
+
+
+
         }),
       });
 
@@ -316,7 +454,7 @@ export default function CustomerDetailPage() {
       setPresentationAt("");
       setLocation("");
       setNotesSummary("");
-      setAssignedSalesId(isSales ? me?.id || "" : "");
+      setAssignedSalesId(isSales ? me?.id || "" : customer?.ownerId || "");
 
       await loadCustomer();
     } catch (e: any) {
@@ -378,15 +516,130 @@ export default function CustomerDetailPage() {
     }
   }
 
+
+
+
+
+function projectLabel(project?: string | null) {
+  switch (project) {
+      case "LA_JOYA":
+        return "La Joya";
+      case "LA_JOYA_PERLA":
+        return "La Joya Perla";
+      case "LA_JOYA_PERLA_II":
+        return "La Joya Perla II";
+      case "LAGOON_VERDE":
+        return "Lagoon Verde";
+      default:
+        return "-";
+    }
+  }
+
+  function addUnitSelection() {
+    if (!unitProject || !unitNumber.trim()) return;
+
+    const normalizedUnit = unitNumber.trim();
+
+    const exists = unitSelections.some(
+      (u) =>
+        u.project === unitProject &&
+        u.unitNumber.toLowerCase() === normalizedUnit.toLowerCase()
+    );
+    if (exists) return;
+
+    setUnitSelections((prev) => [
+      ...prev,
+      {
+        project: unitProject,
+        unitNumber: normalizedUnit,
+      },
+    ]);
+
+    setUnitProject("");
+    setUnitNumber("");
+  }
+
+  function removeUnitSelection(index: number) {
+    setUnitSelections((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function uploadCustomerDocument(file: File, type: CustomerDocumentType = "ID") {
+    if (!customer) return;
+
+    setErr(null);
+    setUploadingDoc(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", type);
+
+const token = getAccessToken();
+      const apiBase =
+        process.env.NEXT_PUBLIC_API_URL ||
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        "";
+
+
+        if (!apiBase) {
+  throw new Error("API base URL is missing");
+}
+
+
+      const res = await fetch(
+        `${apiBase}/customers/${customer.id}/documents/upload`,
+        {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          body: formData,
+        }
+      );
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || "Upload failed");
+      }
+
+      await loadCustomer();
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setUploadingDoc(false);
+    }
+  }
+
+  async function deleteCustomerDocument(documentId: string) {
+    if (!customer) return;
+
+    setErr(null);
+    setDeletingDocId(documentId);
+
+    try {
+      await authedFetch(`/customers/${customer.id}/documents/${documentId}`, {
+        method: "DELETE",
+      });
+
+      await loadCustomer();
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setDeletingDocId(null);
+    }
+  }
+
+
+
+
+
   useEffect(() => {
     setMounted(true);
     setMe(getUser());
   }, []);
 
-  useEffect(() => {
-    if (!mounted) return;
-    loadCustomer();
-  }, [mounted, customerId]);
+ useEffect(() => {
+  if (!mounted) return;
+  loadCustomer();
+}, [mounted, customerId, isSales]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -582,6 +835,62 @@ export default function CustomerDetailPage() {
               onChange={(e) => setAddress(e.target.value)}
               placeholder={safeTranslate(t, "customers.fields.address", "Address")}
             />
+
+
+
+
+                        <input
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.language", "Language")}
+            />
+            <input
+              value={nationality}
+              onChange={(e) => setNationality(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.nationality", "Nationality")}
+            />
+            <select
+              value={gender}
+              onChange={(e) => setGender(e.target.value as "" | Gender)}
+            >
+              <option value="">
+                {safeTranslate(t, "customers.fields.gender", "Gender")}
+              </option>
+              <option value="MALE">
+                {safeTranslate(t, "genders.MALE", "Male")}
+              </option>
+              <option value="FEMALE">
+                {safeTranslate(t, "genders.FEMALE", "Female")}
+              </option>
+              <option value="OTHER">
+                {safeTranslate(t, "genders.OTHER", "Other")}
+              </option>
+            </select>
+
+            <input
+              type="date"
+              value={birthday}
+              onChange={(e) => setBirthday(e.target.value)}
+            />
+            <input
+              value={job}
+              onChange={(e) => setJob(e.target.value)}
+              placeholder={safeTranslate(t, "customers.fields.job", "Job")}
+            />
+            <select
+              value={project}
+              onChange={(e) => setProject(e.target.value as "" | ProjectType)}
+            >
+              <option value="">
+                {safeTranslate(t, "customers.fields.project", "Project")}
+              </option>
+              <option value="LA_JOYA">La Joya</option>
+              <option value="LA_JOYA_PERLA">La Joya Perla</option>
+              <option value="LA_JOYA_PERLA_II">La Joya Perla II</option>
+              <option value="LAGOON_VERDE">Lagoon Verde</option>
+            </select>
+
+
           </div>
         ) : (
           <div
@@ -624,6 +933,36 @@ export default function CustomerDetailPage() {
               </b>{" "}
               {customer.owner?.name || "-"}
             </div>
+
+
+
+                        <div>
+              <b>{safeTranslate(t, "customers.fields.language", "Language")}:</b> {customer.language || "-"}
+            </div>
+            <div>
+              <b>{safeTranslate(t, "customers.fields.nationality", "Nationality")}:</b> {customer.nationality || "-"}
+            </div>
+            <div>
+              <b>{safeTranslate(t, "customers.fields.gender", "Gender")}:</b> {customer.gender
+  ? safeTranslate(t, `genders.${customer.gender}`, customer.gender)
+  : "-"}
+            </div>
+            <div>
+              <b>{safeTranslate(t, "customers.fields.job", "Job")}:</b> {customer.job || "-"}
+            </div>
+            <div>
+              <b>{safeTranslate(t, "customers.fields.project", "Project")}:</b> {projectLabel(customer.project)}
+            </div>
+            <div>
+              <b>{safeTranslate(t, "customers.fields.birthday", "Birthday")}:</b>{" "}
+{customer.birthday
+  ? new Date(customer.birthday).toLocaleDateString(
+      locale === "tr" ? "tr-TR" : "en-US"
+    )
+  : "-"}            </div>
+
+
+
           </div>
         )}
 
@@ -721,6 +1060,7 @@ export default function CustomerDetailPage() {
             </button>
           </div>
         </div>
+
       ) : null}
 
       <div className="card" style={{ display: "grid", gap: 12 }}>
@@ -888,6 +1228,192 @@ export default function CustomerDetailPage() {
           </div>
         )}
       </div>
+
+
+            <div className="card" style={{ display: "grid", gap: 12 }}>
+        <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 900 }}>
+            {safeTranslate(t, "customers.fields.unitSelections", "Unit Selections")}
+          </div>
+        </div>
+
+        {canEditCustomer ? (
+          <>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "220px 1fr auto",
+                gap: 10,
+              }}
+            >
+              <select
+                value={unitProject}
+                onChange={(e) => setUnitProject(e.target.value as "" | ProjectType)}
+              >
+                <option value="">
+                  {safeTranslate(t, "customers.fields.selectProject", "Select project")}
+                </option>
+                <option value="LA_JOYA">La Joya</option>
+                <option value="LA_JOYA_PERLA">La Joya Perla</option>
+                <option value="LA_JOYA_PERLA_II">La Joya Perla II</option>
+                <option value="LAGOON_VERDE">Lagoon Verde</option>
+              </select>
+
+              <input
+                value={unitNumber}
+                onChange={(e) => setUnitNumber(e.target.value)}
+                placeholder={safeTranslate(t, "customers.fields.unitNumber", "Unit No")}
+              />
+
+              <button type="button" onClick={addUnitSelection}>
+                {safeTranslate(t, "common.add", "Add")}
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {unitSelections.map((u, i) => (
+                <div
+                  key={`${u.project}-${u.unitNumber}-${i}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 10px",
+                    borderRadius: 999,
+                    border: "1px solid var(--stroke)",
+                    background: "var(--surface-2)",
+                  }}
+                >
+                  <span style={{ fontSize: 13 }}>
+                    {projectLabel(u.project)} / {u.unitNumber}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeUnitSelection(i)}
+                    style={{
+                      border: 0,
+                      background: "transparent",
+                      cursor: "pointer",
+                      fontWeight: 900,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {(customer.unitSelections || []).length > 0 ? (
+              (customer.unitSelections || []).map((u) => (
+                <div
+                  key={u.id}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 999,
+                    border: "1px solid var(--stroke)",
+                    background: "var(--surface-2)",
+                    fontSize: 13,
+                  }}
+                >
+                  {projectLabel(u.project)} / {u.unitNumber}
+                </div>
+              ))
+            ) : (
+              <div className="muted">
+                {safeTranslate(t, "customers.fields.noUnitSelections", "No units added yet.")}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+
+            <div className="card" style={{ display: "grid", gap: 12 }}>
+        <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 900 }}>
+            {safeTranslate(t, "customers.fields.documents", "Documents")}
+          </div>
+        </div>
+
+        {canEditCustomer ? (
+          <div style={{ display: "grid", gap: 10 }}>
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) uploadCustomerDocument(file, "ID");
+              }}
+              disabled={uploadingDoc}
+            />
+
+            {uploadingDoc ? (
+              <div className="muted">
+                {safeTranslate(t, "customerDetail.uploadingDocument", "Uploading document...")}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {(customer.documents || []).length > 0 ? (
+          <div style={{ display: "grid", gap: 10 }}>
+            {(customer.documents || []).map((doc) => (
+              <div
+                key={doc.id}
+                style={{
+                  border: "1px solid var(--stroke)",
+                  borderRadius: 12,
+                  padding: 12,
+                  background: "var(--surface-2)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div style={{ fontWeight: 700 }}>{doc.fileName}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                    {doc.type} • {formatDateTime(doc.createdAt)}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+  type="button"
+  onClick={() => openCustomerDocument(doc.id)}
+>
+  {safeTranslate(t, "common.open", "Open")}
+</button>
+
+                  {canEditCustomer ? (
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => deleteCustomerDocument(doc.id)}
+                      disabled={deletingDocId === doc.id}
+                    >
+                      {deletingDocId === doc.id
+                        ? safeTranslate(t, "common.deleting", "Deleting...")
+                        : safeTranslate(t, "common.delete", "Delete")}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="muted">
+            {safeTranslate(t, "customers.fields.noDocuments", "No documents uploaded yet.")}
+          </div>
+        )}
+      </div>
+
+
+
     </div>
   );
 }

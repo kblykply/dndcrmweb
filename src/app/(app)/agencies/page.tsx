@@ -174,6 +174,7 @@ export default function AgenciesPage() {
     setSource("");
     setNotesSummary("");
     setAssignedSalesId(isSales ? me?.id || "" : "");
+    setStatus("ACTIVE");
   }
 
   async function load(
@@ -228,17 +229,18 @@ export default function AgenciesPage() {
 
     try {
       const payload = {
-        name: name.trim(),
-        contactName: contactName.trim() || undefined,
-        phone: phone.trim() || undefined,
-        email: email.trim() || undefined,
-        city: city.trim() || undefined,
-        country: country.trim() || undefined,
-        website: website.trim() || undefined,
-        source: source.trim() || undefined,
-        notesSummary: notesSummary.trim() || undefined,
-        assignedSalesId: isSales ? undefined : assignedSalesId || null,
-      };
+  name: name.trim(),
+  contactName: contactName.trim() || undefined,
+  phone: phone.trim() || undefined,
+  email: email.trim() || undefined,
+  city: city.trim() || undefined,
+  country: country.trim() || undefined,
+  website: website.trim() || undefined,
+  source: source.trim() || undefined,
+  notesSummary: notesSummary.trim() || undefined,
+  status,
+  assignedSalesId: isSales ? undefined : assignedSalesId || null,
+};
 
       await authedFetch("/agencies", {
         method: "POST",
@@ -473,6 +475,25 @@ export default function AgenciesPage() {
               )}
             </label>
           </div>
+
+<label style={{ display: "grid", gap: 6 }}>
+  <span className="muted" style={{ fontSize: 12 }}>
+    {t("agencies.fields.status")}
+  </span>
+  <select
+    value={status}
+    onChange={(e) => setStatus(e.target.value as AgencyStatus)}
+  >
+    {STATUS_OPTIONS.filter((s): s is AgencyStatus => s !== "ALL").map((s) => (
+      <option key={s} value={s}>
+        {safeTranslate(t, `agencyStatuses.${s}`, s)}
+      </option>
+    ))}
+  </select>
+</label>
+
+
+
 
           <label style={{ display: "grid", gap: 6 }}>
             <span className="muted" style={{ fontSize: 12 }}>

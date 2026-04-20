@@ -35,15 +35,15 @@ type AgencyDetail = {
     createdAt: string;
     createdBy?: { id: string; name: string; email: string };
   }>;
-  meetings: Array<{
-    id: string;
+  meetings?: Array<{
+        id: string;
     title: string;
     notes?: string | null;
     meetingAt: string;
     createdBy?: { id: string; name: string; email: string };
   }>;
-  tasks: Array<{
-    id: string;
+  tasks?: Array<{
+        id: string;
     title: string;
     description?: string | null;
     dueAt?: string | null;
@@ -161,6 +161,10 @@ export default function AgencyDetailPage() {
 
   const canEditAgencyInfo = canManage || canSalesEditAgency;
 
+ const [meetings, setMeetings] = useState<any[]>([]);
+const [tasks, setTasks] = useState<any[]>([]);
+
+
   function hiddenText() {
     return safeTranslate(
       t,
@@ -180,26 +184,30 @@ export default function AgencyDetailPage() {
     setLoading(true);
 
     try {
-      const [agencyData, sales] = await Promise.all([
-        authedFetch(`/agencies/${agencyId}`),
-        authedFetch("/users?role=SALES"),
-      ]);
+  const [agencyData, sales, meetingsRes, tasksRes] = await Promise.all([
+  authedFetch(`/agencies/${agencyId}`),
+  authedFetch("/users?role=SALES"),
+  authedFetch(`/meetings?kind=AGENCY&agencyId=${agencyId}`),
+  authedFetch(`/tasks?agencyId=${agencyId}`),
+]);
 
-      setAgency(agencyData);
-      setSalesUsers(Array.isArray(sales) ? sales : []);
+setAgency(agencyData);
+setSalesUsers(Array.isArray(sales) ? sales : []);
+setMeetings(Array.isArray(meetingsRes) ? meetingsRes : meetingsRes?.items || []);
+setTasks(Array.isArray(tasksRes) ? tasksRes : tasksRes?.items || []);
 
-      setName(agencyData.name || "");
-      setContactName(agencyData.contactName || "");
-      setPhone(agencyData.phone || "");
-      setEmail(agencyData.email || "");
-      setCity(agencyData.city || "");
-      setCountry(agencyData.country || "");
-      setAddress(agencyData.address || "");
-      setWebsite(agencyData.website || "");
-      setSource(agencyData.source || "");
-      setNotesSummary(agencyData.notesSummary || "");
-      setStatus(agencyData.status || "ACTIVE");
-      setAssignedSalesId(agencyData.assignedSales?.id || "");
+setName(agencyData.name || "");
+setContactName(agencyData.contactName || "");
+setPhone(agencyData.phone || "");
+setEmail(agencyData.email || "");
+setCity(agencyData.city || "");
+setCountry(agencyData.country || "");
+setAddress(agencyData.address || "");
+setWebsite(agencyData.website || "");
+setSource(agencyData.source || "");
+setNotesSummary(agencyData.notesSummary || "");
+setStatus(agencyData.status || "ACTIVE");
+setAssignedSalesId(agencyData.assignedSales?.id || "");
     } catch (e: any) {
       setAgency(null);
       setErr(String(e?.message || e));
@@ -230,9 +238,9 @@ export default function AgencyDetailPage() {
         body.source = source.trim() || undefined;
       }
 
-      if (canManage) {
-        body.status = status;
-      }
+    if (canEditAgencyInfo) {
+  body.status = status;
+}
 
       await authedFetch(`/agencies/${agency.id}`, {
         method: "PATCH",
@@ -280,14 +288,16 @@ export default function AgencyDetailPage() {
     setSaving(true);
     setErr(null);
     try {
-      await authedFetch(`/agencies/${agency.id}/meetings`, {
-        method: "POST",
-        body: JSON.stringify({
-          title: meetingTitle.trim(),
-          notes: meetingNotes.trim() || undefined,
-          meetingAt: new Date(meetingAt).toISOString(),
-        }),
-      });
+await authedFetch(`/meetings`, {
+    method: "POST",
+  body: JSON.stringify({
+kind: "AGENCY",
+agencyId: agency.id,
+    title: meetingTitle.trim(),
+    notes: meetingNotes.trim() || undefined,
+    meetingAt: new Date(meetingAt).toISOString(),
+  }),
+});
 
       setMeetingTitle("");
       setMeetingNotes("");
@@ -305,16 +315,17 @@ export default function AgencyDetailPage() {
     setSaving(true);
     setErr(null);
     try {
-      await authedFetch(`/agencies/${agency.id}/tasks`, {
-        method: "POST",
-        body: JSON.stringify({
-          title: taskTitle.trim(),
-          description: taskDescription.trim() || undefined,
-          dueAt: taskDueAt ? new Date(taskDueAt).toISOString() : undefined,
-          assignedToId: taskAssignedToId || null,
-          priority: taskPriority,
-        }),
-      });
+     await authedFetch(`/tasks`, {
+  method: "POST",
+  body: JSON.stringify({
+    agencyId: agency.id,
+    title: taskTitle.trim(),
+    description: taskDescription.trim() || undefined,
+    dueAt: taskDueAt ? new Date(taskDueAt).toISOString() : undefined,
+    assignedToId: taskAssignedToId || null,
+    priority: taskPriority,
+  }),
+});
 
       setTaskTitle("");
       setTaskDescription("");
@@ -333,10 +344,10 @@ export default function AgencyDetailPage() {
     setSaving(true);
     setErr(null);
     try {
-      await authedFetch(`/agencies/tasks/${taskId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: nextStatus }),
-      });
+  await authedFetch(`/tasks/${taskId}`, {
+  method: "PATCH",
+  body: JSON.stringify({ status: nextStatus }),
+});
       await load();
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -355,17 +366,16 @@ export default function AgencyDetailPage() {
     load();
   }, [mounted, agencyId]);
 
-  const stats = useMemo(() => {
-    return {
-      notes: agency?.notes?.length || 0,
-      meetings: agency?.meetings?.length || 0,
-      tasks: agency?.tasks?.length || 0,
-      openTasks:
-        agency?.tasks?.filter(
-          (task) => task.status !== "DONE" && task.status !== "CANCELLED",
-        ).length || 0,
-    };
-  }, [agency]);
+   const stats = useMemo(() => {
+  return {
+    notes: agency?.notes?.length || 0,
+    meetings: meetings.length,
+    tasks: tasks.length,
+    openTasks: tasks.filter(
+      (task) => task.status !== "DONE" && task.status !== "CANCELLED",
+    ).length,
+  };
+}, [agency, meetings, tasks]);
 
   if (!mounted) return <div>{t("common.loading")}</div>;
   if (loading) return <div className="card">{t("agencyDetail.loadingAgency")}</div>;
@@ -523,10 +533,10 @@ export default function AgencyDetailPage() {
           />
 
           <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value as AgencyStatus)}
-            disabled={!canManage}
-          >
+  value={status}
+  onChange={(e) => setStatus(e.target.value as AgencyStatus)}
+  disabled={!canEditAgencyInfo}
+>
             {AGENCY_STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {safeTranslate(t, `agencyStatuses.${s}`, s)}
@@ -665,11 +675,11 @@ export default function AgencyDetailPage() {
           ) : null}
 
           <div style={{ display: "grid", gap: 10 }}>
-            {agency.meetings.length === 0 ? (
-              <div className="muted">{t("agencyDetail.noMeetings")}</div>
+{meetings.length === 0 ? (
+                <div className="muted">{t("agencyDetail.noMeetings")}</div>
             ) : (
-              agency.meetings.map((m) => (
-                <div
+meetings.map((m) => (
+                  <div
                   key={m.id}
                   style={{
                     border: "1px solid var(--stroke)",
@@ -753,11 +763,11 @@ export default function AgencyDetailPage() {
         ) : null}
 
         <div style={{ display: "grid", gap: 10 }}>
-          {agency.tasks.length === 0 ? (
-            <div className="muted">{t("agencyDetail.noTasks")}</div>
+{tasks.length === 0 ? (
+              <div className="muted">{t("agencyDetail.noTasks")}</div>
           ) : (
-            agency.tasks.map((task) => (
-              <div
+tasks.map((task) => (
+                <div
                 key={task.id}
                 style={{
                   border: "1px solid var(--stroke)",
@@ -795,17 +805,19 @@ export default function AgencyDetailPage() {
                   <div style={{ fontSize: 13 }}>{task.description}</div>
                 ) : null}
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {TASK_STATUS_OPTIONS.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => updateTaskStatus(task.id, s)}
-                      disabled={saving || task.status === s}
-                    >
-                      {safeTranslate(t, `taskStatuses.${s}`, s)}
-                    </button>
-                  ))}
-                </div>
+               {canManage ? (
+  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    {TASK_STATUS_OPTIONS.map((s) => (
+      <button
+        key={s}
+        onClick={() => updateTaskStatus(task.id, s)}
+        disabled={saving || task.status === s}
+      >
+        {safeTranslate(t, `taskStatuses.${s}`, s)}
+      </button>
+    ))}
+  </div>
+) : null}
               </div>
             ))
           )}

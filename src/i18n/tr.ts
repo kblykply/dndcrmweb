@@ -42,8 +42,13 @@ create: "Oluştur" ,
     help: "Yardım & Destek",
       tasks: "Görevler"
 ,
-meetings: "Toplantılar"
+meetings: "Toplantılar",
+    orgChart: "Organizasyon Şeması"
+
   },
+
+
+  
   dashboard: {
     title: "CRM Dashboard",
     subtitle: "Lead akışı, çağrı performansı, ekip yapısı ve takip görünümü",
@@ -658,6 +663,40 @@ adminLeads: {
 
   confirmDelete: "{{count}} lead kalıcı olarak silinecek. Bu işlem geri alınamaz. Devam etmek istiyor musunuz?",
   deletedAlert: "{{count}} lead silindi.",
+
+  
+orgChart: {
+  title: "Organizasyon Şeması",
+  subtitle: "Şirket yapısını gör ve yönet",
+
+  totalNodes: "Toplam Düğüm",
+  rootNodes: "Ana Düğüm",
+
+  newNode: "Yeni Düğüm",
+  createNode: "Düğüm Oluştur",
+  editNode: "Düğüm Düzenle",
+  saving: "Kaydediliyor...",
+
+  fields: {
+    name: "İsim / Başlık",
+    type: "Tip",
+    order: "Sıra",
+    parent: "Üst Düğüm",
+    noParent: "Üst düğüm yok"
+  },
+
+  table: {
+    name: "İsim",
+    type: "Tip",
+    parent: "Üst",
+    order: "Sıra",
+    actions: "İşlem"
+  }
+}
+
+
+
+  
 },
 } as const;
 

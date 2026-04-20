@@ -2,10 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
-import { getUser } from "@/lib/auth";
+import { getUser, getAccessToken } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
+import { COUNTRIES, NATIONALITY_BY_COUNTRY } from "@/lib/locationData";
+
+
+
+
 type CustomerType = "POTENTIAL" | "EXISTING";
+type Gender = "MALE" | "FEMALE" | "OTHER";
+type ProjectType =
+  | "LA_JOYA"
+  | "LA_JOYA_PERLA"
+  | "LA_JOYA_PERLA_II"
+  | "LAGOON_VERDE";
 
 type AgencyRow = {
   id: string;
@@ -61,6 +72,23 @@ function safeTranslate(
   return translated;
 }
 
+
+
+function projectLabel(project: string, locale: string) {
+  switch (project) {
+    case "LA_JOYA":
+      return "La Joya";
+    case "LA_JOYA_PERLA":
+      return "La Joya Perla";
+    case "LA_JOYA_PERLA_II":
+      return "La Joya Perla II";
+    case "LAGOON_VERDE":
+      return "Lagoon Verde";
+    default:
+      return locale === "tr" ? "Proje" : "Project";
+  }
+}
+
 export default function CustomersPage() {
   const { t, locale } = useLanguage();
 
@@ -94,12 +122,41 @@ export default function CustomersPage() {
   const [agencyId, setAgencyId] = useState("");
   const [ownerId, setOwnerId] = useState("");
 
+  // NEW FIELDS
+  const [language, setLanguage] = useState("");
+  const [nationality, setNationality] = useState("");
+  const [gender, setGender] = useState<"" | Gender>("");
+  const [birthday, setBirthday] = useState("");
+  const [job, setJob] = useState("");
+  const [project, setProject] = useState<"" | ProjectType>("");
+
+  // UNIT SELECTIONS
+  const [unitProject, setUnitProject] = useState<"" | ProjectType>("");
+  const [unitNumber, setUnitNumber] = useState("");
+  const [unitSelections, setUnitSelections] = useState<
+    Array<{ project: ProjectType; unitNumber: string }>
+  >([]);
+
+  // FILE
+  const [idFile, setIdFile] = useState<File | null>(null);
+
   const role = me?.role as string | undefined;
   const isSales = role === "SALES";
   const isManagerOrAdmin = role === "MANAGER" || role === "ADMIN";
   const canCreate = role === "MANAGER" || role === "ADMIN" || role === "SALES";
   const canDelete = role === "MANAGER" || role === "ADMIN";
 
+
+
+
+function handleCountryChange(nextCountry: string) {
+  setCountry(nextCountry);
+  setNationality(NATIONALITY_BY_COUNTRY[nextCountry] || "");
+}
+
+
+
+  
   function hiddenText() {
     return safeTranslate(
       t,
@@ -111,6 +168,31 @@ export default function CustomersPage() {
   function canSeeContact(customer: CustomerRow) {
     if (!isSales) return true;
     return customer.canSeeContactDetails === true;
+  }
+
+  function addUnitSelection() {
+    if (!unitProject || !unitNumber.trim()) return;
+
+    const normalizedUnit = unitNumber.trim();
+
+    const exists = unitSelections.some(
+      (u) => u.project === unitProject && u.unitNumber.toLowerCase() === normalizedUnit.toLowerCase()
+    );
+    if (exists) return;
+
+    setUnitSelections((prev) => [
+      ...prev,
+      {
+        project: unitProject,
+        unitNumber: normalizedUnit,
+      },
+    ]);
+    setUnitProject("");
+    setUnitNumber("");
+  }
+
+  function removeUnitSelection(index: number) {
+    setUnitSelections((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function load() {
@@ -168,12 +250,46 @@ export default function CustomersPage() {
         type,
         agencyId: agencyId || null,
         ownerId: isSales ? undefined : ownerId || null,
+
+        language: language.trim() || undefined,
+        nationality: nationality.trim() || undefined,
+        gender: gender || undefined,
+        birthday: birthday ? new Date(birthday).toISOString() : undefined,
+        job: job.trim() || undefined,
+        project: project || undefined,
+        unitSelections,
       };
 
-      await authedFetch("/customers", {
+      const created = await authedFetch("/customers", {
         method: "POST",
         body: JSON.stringify(payload),
       });
+
+      if (idFile && created?.id) {
+        const formData = new FormData();
+        formData.append("file", idFile);
+        formData.append("type", "ID");
+
+        const token = getAccessToken();
+        const apiBase =
+          process.env.NEXT_PUBLIC_API_URL ||
+          process.env.NEXT_PUBLIC_API_BASE_URL ||
+          "";
+
+        const uploadRes = await fetch(
+          `${apiBase}/customers/${created.id}/documents/upload`,
+          {
+            method: "POST",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            body: formData,
+          }
+        );
+
+        if (!uploadRes.ok) {
+          const text = await uploadRes.text();
+          throw new Error(text || "Document upload failed");
+        }
+      }
 
       setFullName("");
       setCompanyName("");
@@ -187,6 +303,18 @@ export default function CustomersPage() {
       setType("POTENTIAL");
       setAgencyId("");
       setOwnerId(isSales ? me?.id || "" : "");
+
+      setLanguage("");
+      setNationality("");
+      setGender("");
+      setBirthday("");
+      setJob("");
+      setProject("");
+      setUnitProject("");
+      setUnitNumber("");
+      setUnitSelections([]);
+      setIdFile(null);
+
       setShowCreate(false);
 
       await load();
@@ -342,11 +470,23 @@ export default function CustomersPage() {
               onChange={(e) => setCity(e.target.value)}
               placeholder={t("customers.fields.city")}
             />
-            <input
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              placeholder={t("customers.fields.country")}
-            />
+           <select
+  value={country}
+  onChange={(e) => handleCountryChange(e.target.value)}
+>
+  <option value="">
+    {safeTranslate(
+      t,
+      "customers.fields.selectCountry",
+      locale === "tr" ? "Ülke seç" : "Select country"
+    )}
+  </option>
+  {COUNTRIES.map((countryName) => (
+    <option key={countryName} value={countryName}>
+      {countryName}
+    </option>
+  ))}
+</select>
 
             <input
               value={address}
@@ -412,6 +552,89 @@ export default function CustomersPage() {
                 ))}
               </select>
             )}
+
+            <input
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              placeholder={safeTranslate(
+                t,
+                "customers.fields.language",
+                locale === "tr" ? "Dil" : "Language"
+              )}
+            />
+            <input
+              value={nationality}
+              onChange={(e) => setNationality(e.target.value)}
+              placeholder={safeTranslate(
+                t,
+                "customers.fields.nationality",
+                locale === "tr" ? "Uyruk" : "Nationality"
+              )}
+            />
+            <select
+              value={gender}
+              onChange={(e) => setGender(e.target.value as "" | Gender)}
+            >
+              <option value="">
+                {safeTranslate(
+                  t,
+                  "customers.fields.gender",
+                  locale === "tr" ? "Cinsiyet" : "Gender"
+                )}
+              </option>
+              <option value="MALE">
+                {safeTranslate(
+                  t,
+                  "genders.MALE",
+                  locale === "tr" ? "Erkek" : "Male"
+                )}
+              </option>
+              <option value="FEMALE">
+                {safeTranslate(
+                  t,
+                  "genders.FEMALE",
+                  locale === "tr" ? "Kadın" : "Female"
+                )}
+              </option>
+              <option value="OTHER">
+                {safeTranslate(
+                  t,
+                  "genders.OTHER",
+                  locale === "tr" ? "Diğer" : "Other"
+                )}
+              </option>
+            </select>
+
+            <input
+              type="date"
+              value={birthday}
+              onChange={(e) => setBirthday(e.target.value)}
+            />
+            <input
+              value={job}
+              onChange={(e) => setJob(e.target.value)}
+              placeholder={safeTranslate(
+                t,
+                "customers.fields.job",
+                locale === "tr" ? "Meslek" : "Job"
+              )}
+            />
+            <select
+              value={project}
+              onChange={(e) => setProject(e.target.value as "" | ProjectType)}
+            >
+              <option value="">
+                {safeTranslate(
+                  t,
+                  "customers.fields.project",
+                  locale === "tr" ? "Proje" : "Project"
+                )}
+              </option>
+              <option value="LA_JOYA">{projectLabel("LA_JOYA", locale)}</option>
+              <option value="LA_JOYA_PERLA">{projectLabel("LA_JOYA_PERLA", locale)}</option>
+              <option value="LA_JOYA_PERLA_II">{projectLabel("LA_JOYA_PERLA_II", locale)}</option>
+              <option value="LAGOON_VERDE">{projectLabel("LAGOON_VERDE", locale)}</option>
+            </select>
           </div>
 
           <textarea
@@ -419,6 +642,142 @@ export default function CustomersPage() {
             onChange={(e) => setNotesSummary(e.target.value)}
             placeholder={t("customers.fields.notesSummary")}
           />
+
+          <div
+            style={{
+              border: "1px solid var(--stroke)",
+              borderRadius: 12,
+              padding: 12,
+              background: "var(--surface-2)",
+              display: "grid",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>
+              {safeTranslate(
+                t,
+                "customers.fields.unitSelections",
+                locale === "tr" ? "Ünite Seçimleri" : "Unit Selections"
+              )}
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "220px 1fr auto",
+                gap: 10,
+              }}
+            >
+              <select
+                value={unitProject}
+                onChange={(e) => setUnitProject(e.target.value as "" | ProjectType)}
+              >
+                <option value="">
+                  {safeTranslate(
+                    t,
+                    "customers.fields.selectProject",
+                    locale === "tr" ? "Proje seç" : "Select project"
+                  )}
+                </option>
+                <option value="LA_JOYA">{projectLabel("LA_JOYA", locale)}</option>
+                <option value="LA_JOYA_PERLA">{projectLabel("LA_JOYA_PERLA", locale)}</option>
+                <option value="LA_JOYA_PERLA_II">{projectLabel("LA_JOYA_PERLA_II", locale)}</option>
+                <option value="LAGOON_VERDE">{projectLabel("LAGOON_VERDE", locale)}</option>
+              </select>
+
+              <input
+                value={unitNumber}
+                onChange={(e) => setUnitNumber(e.target.value)}
+                placeholder={safeTranslate(
+                  t,
+                  "customers.fields.unitNumber",
+                  locale === "tr" ? "Ünite No (A2, B5...)" : "Unit No (A2, B5...)"
+                )}
+              />
+
+              <button type="button" onClick={addUnitSelection}>
+                {safeTranslate(
+                  t,
+                  "common.add",
+                  locale === "tr" ? "Ekle" : "Add"
+                )}
+              </button>
+            </div>
+
+            {unitSelections.length > 0 ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {unitSelections.map((u, i) => (
+                  <div
+                    key={`${u.project}-${u.unitNumber}-${i}`}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 10px",
+                      borderRadius: 999,
+                      border: "1px solid var(--stroke)",
+                      background: "var(--surface)",
+                    }}
+                  >
+                    <span style={{ fontSize: 13 }}>
+                      {projectLabel(u.project, locale)} / {u.unitNumber}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeUnitSelection(i)}
+                      style={{
+                        border: 0,
+                        background: "transparent",
+                        cursor: "pointer",
+                        fontWeight: 900,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="muted" style={{ fontSize: 13 }}>
+                {safeTranslate(
+                  t,
+                  "customers.fields.noUnitSelections",
+                  locale === "tr" ? "Henüz ünite eklenmedi." : "No units added yet."
+                )}
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              border: "1px solid var(--stroke)",
+              borderRadius: 12,
+              padding: 12,
+              background: "var(--surface-2)",
+              display: "grid",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontWeight: 800 }}>
+              {safeTranslate(
+                t,
+                "customers.fields.idDocument",
+                locale === "tr" ? "Kimlik Belgesi" : "ID Document"
+              )}
+            </div>
+
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp"
+              onChange={(e) => setIdFile(e.target.files?.[0] || null)}
+            />
+
+            {idFile ? (
+              <div className="muted" style={{ fontSize: 13 }}>
+                {idFile.name}
+              </div>
+            ) : null}
+          </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
             <button onClick={() => setShowCreate(false)}>{t("common.cancel")}</button>

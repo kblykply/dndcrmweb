@@ -1,0 +1,33 @@
+export const COUNTRIES = [
+  "Turkey",
+  "Cyprus",
+  "United Kingdom",
+  "Germany",
+  "France",
+  "Russia",
+  "Azerbaijan",
+  "Kazakhstan",
+  "Iran",
+  "Iraq",
+  "Israel",
+  "Ukraine",
+  "Saudi Arabia",
+  "United Arab Emirates",
+].sort((a, b) => a.localeCompare(b));
+
+export const NATIONALITY_BY_COUNTRY: Record<string, string> = {
+  Turkey: "Turkish",
+  Cyprus: "Cypriot",
+  "United Kingdom": "British",
+  Germany: "German",
+  France: "French",
+  Russia: "Russian",
+  Azerbaijan: "Azerbaijani",
+  Kazakhstan: "Kazakh",
+  Iran: "Iranian",
+  Iraq: "Iraqi",
+  Israel: "Israeli",
+  Ukraine: "Ukrainian",
+  "Saudi Arabia": "Saudi",
+  "United Arab Emirates": "Emirati",
+};

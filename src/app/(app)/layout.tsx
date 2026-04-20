@@ -10,6 +10,51 @@ import { getUser } from "@/lib/auth";
 import { useLanguage } from "../_ui/LanguageProvider";
 
 
+function PdcaIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M7 7h10v10H7z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 4v3M20 12h-3M12 20v-3M4 12h3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.5 9.5h5v5h-5z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+
+
+function OrgChartIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="10" y="3" width="4" height="4" rx="1.2" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="3" y="17" width="4" height="4" rx="1.2" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="10" y="17" width="4" height="4" rx="1.2" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="17" y="17" width="4" height="4" rx="1.2" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M12 7v4M12 11H5v6M12 11h7v6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 
 
 function MeetingsIcon() {
@@ -140,6 +185,20 @@ function HelpIcon() {
   );
 }
 
+
+
+
+function safeTranslate(
+  t: (path: string) => string,
+  path: string,
+  fallback?: string | null,
+) {
+  const translated = t(path);
+  if (translated === path) return fallback ?? path;
+  return translated;
+}
+
+
 function navItemStyle(active: boolean): React.CSSProperties {
   return {
     display: "flex",
@@ -259,6 +318,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
 
+
+
+
+  const isPdcaActive = useMemo(
+  () => pathname === "/pdca" || pathname.startsWith("/pdca/"),
+  [pathname],
+);
+
+
   const isTasksActive = useMemo(
     () => pathname === "/tasks" || pathname.startsWith("/tasks/"),
     [pathname],
@@ -333,6 +401,34 @@ const isMeetingsActive = useMemo(
               </NavIconWrap>
               {t("nav.calendar")}
             </Link>
+
+
+
+{canSeeCRM ? (
+  <Link href="/pdca" style={navItemStyle(isPdcaActive)}>
+    <NavIconWrap>
+      <PdcaIcon />
+    </NavIconWrap>
+    {safeTranslate(t, "nav.pdca", "PDCA")}
+  </Link>
+) : null}
+
+
+
+
+            {canSeeCRM ? (
+  <Link href="/org-chart" style={navItemStyle(pathname.startsWith("/org-chart"))}>
+    <NavIconWrap>
+      <OrgChartIcon />
+    </NavIconWrap>
+    {safeTranslate(
+      t,
+      "nav.orgChart",
+      "Organizational Chart",
+    )}
+  </Link>
+) : null}
+
 
             {canSeeCRM ? (
               <Link href="/customers" style={navItemStyle(pathname.startsWith("/customers"))}>
