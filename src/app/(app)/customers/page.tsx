@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
-import { getUser, getAccessToken } from "@/lib/auth";
+import {
+  getUser,
+  getAccessToken,
+  getRefreshToken,
+  clearSession,
+  setAccessToken,
+} from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 import { COUNTRIES, NATIONALITY_BY_COUNTRY } from "@/lib/locationData";
@@ -270,20 +276,59 @@ function handleCountryChange(nextCountry: string) {
         formData.append("file", idFile);
         formData.append("type", "ID");
 
-        const token = getAccessToken();
         const apiBase =
           process.env.NEXT_PUBLIC_API_URL ||
           process.env.NEXT_PUBLIC_API_BASE_URL ||
           "";
 
-        const uploadRes = await fetch(
-          `${apiBase}/customers/${created.id}/documents/upload`,
-          {
-            method: "POST",
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-            body: formData,
-          }
-        );
+      const uploadToken = getAccessToken();
+const refreshToken = getRefreshToken();
+
+let uploadRes = await fetch(
+  `${apiBase}/customers/${created.id}/documents/upload`,
+  {
+    method: "POST",
+    headers: uploadToken
+      ? { Authorization: `Bearer ${uploadToken}` }
+      : undefined,
+    body: formData,
+  }
+);
+
+// 🔥 AUTO REFRESH IF EXPIRED
+if (uploadRes.status === 401 && refreshToken) {
+  const refreshRes = await fetch(`${apiBase}/auth/refresh`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+if (!refreshRes.ok) {
+  clearSession();
+
+  if (typeof window !== "undefined") {
+    window.location.href = "/";
+  }
+
+  throw new Error("Session expired");
+}
+
+  const data = await refreshRes.json();
+
+  setAccessToken(data.accessToken);
+
+  // 🔁 retry upload
+  uploadRes = await fetch(
+    `${apiBase}/customers/${created.id}/documents/upload`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${data.accessToken}` },
+      body: formData,
+    }
+  );
+}
 
         if (!uploadRes.ok) {
           const text = await uploadRes.text();
@@ -369,6 +414,8 @@ function handleCountryChange(nextCountry: string) {
     }
   }, [mounted, isSales, me?.id]);
 
+
+  
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
 

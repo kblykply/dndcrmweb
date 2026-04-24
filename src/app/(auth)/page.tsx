@@ -19,12 +19,13 @@ export default function LoginPage() {
     setErr(null);
     setLoading(true);
     try {
-      const res = await apiFetch("/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
+     const res = await apiFetch("/auth/login", {
+  method: "POST",
+  body: JSON.stringify({ email, password }),
+});
 
-      setSession(res.user, res.accessToken);
+setSession(res.user, res.accessToken, res.refreshToken);
+window.location.href = "/leads";
       window.location.href = "/leads";
     } catch (e: any) {
       setErr("E-posta veya şifre hatalı.");

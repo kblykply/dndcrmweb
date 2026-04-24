@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
-import { getUser, getAccessToken } from "@/lib/auth";
+import {
+  getUser,
+  getAccessToken,
+  getRefreshToken,
+  clearSession,
+  setAccessToken,
+} from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type PresentationStatus =
@@ -563,50 +569,89 @@ function projectLabel(project?: string | null) {
     setUnitSelections((prev) => prev.filter((_, i) => i !== index));
   }
 
-  async function uploadCustomerDocument(file: File, type: CustomerDocumentType = "ID") {
-    if (!customer) return;
+ async function uploadCustomerDocument(
+  file: File,
+  type: CustomerDocumentType = "ID"
+) {
+  if (!customer) return;
 
-    setErr(null);
-    setUploadingDoc(true);
+  setErr(null);
+  setUploadingDoc(true);
 
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("type", type);
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("type", type);
 
-const token = getAccessToken();
-      const apiBase =
-        process.env.NEXT_PUBLIC_API_URL ||
-        process.env.NEXT_PUBLIC_API_BASE_URL ||
-        "";
+    const apiBase =
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      "";
 
+    if (!apiBase) {
+      throw new Error("API base URL is missing");
+    }
 
-        if (!apiBase) {
-  throw new Error("API base URL is missing");
-}
+    const uploadToken = getAccessToken();
+    const refreshToken = getRefreshToken();
 
+    let res = await fetch(
+      `${apiBase}/customers/${customer.id}/documents/upload`,
+      {
+        method: "POST",
+        headers: uploadToken
+          ? { Authorization: `Bearer ${uploadToken}` }
+          : undefined,
+        body: formData,
+      }
+    );
 
-      const res = await fetch(
+    if (res.status === 401 && refreshToken) {
+      const refreshRes = await fetch(`${apiBase}/auth/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!refreshRes.ok) {
+        clearSession();
+
+        if (typeof window !== "undefined") {
+          window.location.href = "/";
+        }
+
+        throw new Error("Session expired");
+      }
+
+      const data = await refreshRes.json();
+      setAccessToken(data.accessToken);
+
+      res = await fetch(
         `${apiBase}/customers/${customer.id}/documents/upload`,
         {
           method: "POST",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          headers: {
+            Authorization: `Bearer ${data.accessToken}`,
+          },
           body: formData,
         }
       );
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Upload failed");
-      }
-
-      await loadCustomer();
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setUploadingDoc(false);
     }
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || "Upload failed");
+    }
+
+    await loadCustomer();
+  } catch (e: any) {
+    setErr(String(e?.message || e));
+  } finally {
+    setUploadingDoc(false);
   }
+}
 
   async function deleteCustomerDocument(documentId: string) {
     if (!customer) return;

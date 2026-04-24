@@ -1,20 +1,93 @@
 import { API } from "./api";
-import { authedHeaders, clearSession } from "./auth";
+import {
+  authedHeaders,
+  clearSession,
+  getRefreshToken,
+  setAccessToken,
+} from "./auth";
 
-export async function authedFetch(path: string, init: RequestInit = {}) {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...authedHeaders(),
-    ...(init.headers as Record<string, string> | undefined),
-  };
+async function refreshAccessToken() {
+  const refreshToken = getRefreshToken();
 
-  const res = await fetch(`${API}${path}`, {
-    ...init,
-    headers,
+  if (!refreshToken) {
+    clearSession();
+    throw new Error("No refresh token");
+  }
+
+  const res = await fetch(`${API}/auth/refresh`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ refreshToken }),
     cache: "no-store",
   });
 
-  // 🔐 Auto logout on 401
+  if (!res.ok) {
+    clearSession();
+
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
+
+    throw new Error("Session expired");
+  }
+
+  const data = await res.json();
+
+  if (!data?.accessToken) {
+    clearSession();
+    throw new Error("Refresh failed");
+  }
+
+  setAccessToken(data.accessToken);
+
+  return data.accessToken;
+}
+
+async function parseError(res: Response) {
+  const contentType = res.headers.get("content-type");
+
+  try {
+    if (contentType?.includes("application/json")) {
+      const errorData = await res.json();
+      return typeof errorData === "object"
+        ? JSON.stringify(errorData)
+        : String(errorData);
+    }
+
+    return await res.text();
+  } catch {
+    return `Request failed (${res.status})`;
+  }
+}
+
+export async function authedFetch(path: string, init: RequestInit = {}) {
+  const makeRequest = (headersOverride?: Record<string, string>) => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...authedHeaders(),
+      ...(headersOverride || {}),
+      ...(init.headers as Record<string, string> | undefined),
+    };
+
+    return fetch(`${API}${path}`, {
+      ...init,
+      headers,
+      cache: "no-store",
+    });
+  };
+
+  let res = await makeRequest();
+
+  if (res.status === 401) {
+    const newAccessToken = await refreshAccessToken();
+
+    res = await makeRequest({
+      Authorization: `Bearer ${newAccessToken}`,
+    });
+  }
+
   if (res.status === 401) {
     clearSession();
 
@@ -25,32 +98,12 @@ export async function authedFetch(path: string, init: RequestInit = {}) {
     throw new Error("Unauthorized");
   }
 
-  const contentType = res.headers.get("content-type");
-
-  // ❌ Handle errors properly (JSON FIRST)
   if (!res.ok) {
-    let errorData: any = null;
-
-    try {
-      if (contentType?.includes("application/json")) {
-        errorData = await res.json();
-      } else {
-        const text = await res.text();
-        errorData = text;
-      }
-    } catch {
-      errorData = null;
-    }
-
-    // 👇 IMPORTANT: preserve JSON structure
-    if (errorData && typeof errorData === "object") {
-      throw new Error(JSON.stringify(errorData));
-    }
-
-    throw new Error(errorData || `Request failed (${res.status})`);
+    throw new Error((await parseError(res)) || `Request failed (${res.status})`);
   }
 
-  // ✅ Success response
+  const contentType = res.headers.get("content-type");
+
   if (contentType?.includes("application/json")) {
     return res.json();
   }
