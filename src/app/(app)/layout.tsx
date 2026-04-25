@@ -235,6 +235,32 @@ function NavIconWrap({ children }: { children: React.ReactNode }) {
   );
 }
 
+
+function UserActivityIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M4 19c.9-3.4 3.4-5.5 6-5.5 1.5 0 2.9.6 4 1.7"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M16.5 10.5v4l3 1.7"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="16.5" cy="14.5" r="5" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+
+
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useLanguage();
@@ -242,6 +268,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<any>(null);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [mobile, setMobile] = useState(false);
+
+
+  const isUserActivityActive = useMemo(
+  () => pathname === "/users-activity" || pathname.startsWith("/users-activity/"),
+  [pathname],
+);
+
+
 
   useEffect(() => {
     setMe(getUser());
@@ -484,6 +518,20 @@ const isMeetingsActive = useMemo(
                   </NavIconWrap>
                   {t("nav.admin")}
                 </Link>
+
+  <Link href="/users-activity" style={navItemStyle(isUserActivityActive)}>
+
+    <NavIconWrap>
+
+      <UserActivityIcon />
+
+    </NavIconWrap>
+
+    {safeTranslate(t, "nav.userActivity", "User Activity")}
+
+  </Link>
+
+
               </>
             ) : null}
 
