@@ -7,7 +7,7 @@ import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
-type MeetingKind = "AGENCY" | "PRESENTATION";
+type MeetingKind = "AGENCY" | "PRESENTATION" | "OTHER";
 
 type AgencyLite = {
   id: string;
@@ -36,32 +36,34 @@ type MeetingDetail = {
   createdAt?: string;
   updatedAt?: string;
 
-  agency?: {
-    id: string;
-    name: string;
-  } | null;
-
-  customer?: {
-    id: string;
-    fullName: string;
-    companyName?: string | null;
-  } | null;
-
-  assignedSales?: {
-    id: string;
-    name: string;
-    email: string;
-  } | null;
-
-  createdBy?: {
-    id: string;
-    name: string;
-    email: string;
-  } | null;
+  agency?: { id: string; name: string } | null;
+  customer?: { id: string; fullName: string; companyName?: string | null } | null;
+  assignedSales?: { id: string; name: string; email: string } | null;
+  createdBy?: { id: string; name: string; email: string } | null;
 
   projectName?: string | null;
   location?: string | null;
+
+  contactName?: string | null;
+  companyName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+
+  status?: string | null;
+  outcome?: string | null;
 };
+
+const MEETING_STATUS = ["SCHEDULED", "COMPLETED", "CANCELLED", "RESCHEDULED"];
+
+const MEETING_OUTCOME = [
+  "",
+  "POSITIVE",
+  "NEGATIVE",
+  "FOLLOW_UP",
+  "NO_DECISION",
+  "WON",
+  "LOST",
+];
 
 function safeTranslate(
   t: (path: string) => string,
@@ -69,18 +71,26 @@ function safeTranslate(
   fallback?: string | null,
 ) {
   const translated = t(path);
-  if (translated === path) return fallback ?? path;
-  return translated;
+  return translated === path ? fallback ?? path : translated;
 }
 
 function kindBadgeClass(kind?: string) {
   if (kind === "AGENCY") return "info";
   if (kind === "PRESENTATION") return "success";
+  if (kind === "OTHER") return "warning";
+  return "";
+}
+
+function statusBadgeClass(status?: string | null) {
+  if (status === "COMPLETED") return "success";
+  if (status === "CANCELLED") return "danger";
+  if (status === "RESCHEDULED") return "info";
   return "";
 }
 
 function toDatetimeLocalValue(date?: string | null) {
   if (!date) return "";
+
   const d = new Date(date);
   const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -94,10 +104,7 @@ function formatDateTime(value?: string | null, locale: "tr" | "en" = "en") {
   return new Date(value).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
 }
 
-function normalizeErrorMessage(
-  input: unknown,
-  locale: "tr" | "en",
-) {
+function normalizeErrorMessage(input: unknown, locale: "tr" | "en") {
   const text = String(input || "");
 
   if (
@@ -116,19 +123,21 @@ function normalizeErrorMessage(
     return locale === "tr" ? "Oturum süresi doldu." : "Session expired.";
   }
 
-  if (text.includes("No access")) {
+  if (text.includes("No access") || text.includes("Only creator")) {
     return locale === "tr"
       ? "Bu kayıt için yetkiniz yok."
       : "You do not have access to this record.";
   }
 
   if (text.includes("not found") || text.includes("Not found")) {
-    return locale === "tr"
-      ? "Kayıt bulunamadı."
-      : "Record not found.";
+    return locale === "tr" ? "Kayıt bulunamadı." : "Record not found.";
   }
 
   return text;
+}
+
+function optionMatch(text: string, query: string) {
+  return text.toLowerCase().includes(query.trim().toLowerCase());
 }
 
 export default function MeetingDetailPage() {
@@ -142,7 +151,11 @@ export default function MeetingDetailPage() {
 
   const rawKind = searchParams.get("kind");
   const meetingKind: MeetingKind =
-    rawKind === "PRESENTATION" ? "PRESENTATION" : "AGENCY";
+    rawKind === "PRESENTATION"
+      ? "PRESENTATION"
+      : rawKind === "OTHER"
+        ? "OTHER"
+        : "AGENCY";
 
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
@@ -166,32 +179,89 @@ export default function MeetingDetailPage() {
   const [assignedSalesId, setAssignedSalesId] = useState("");
   const [projectName, setProjectName] = useState("");
   const [location, setLocation] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("SCHEDULED");
+  const [outcome, setOutcome] = useState("");
+
+  const [agencySearch, setAgencySearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [salesSearch, setSalesSearch] = useState("");
 
   const role = me?.role as string | undefined;
-  const canManage =
-    role === "ADMIN" || role === "MANAGER" || role === "SALES";
+
+  function canModify() {
+    if (!meeting || !me) return false;
+    if (role === "ADMIN" || role === "MANAGER") return true;
+    return meeting.createdBy?.id === me.id;
+  }
+
+  const canEdit = canModify();
 
   function kindLabel(value?: string | null) {
     if (!value) return "-";
-
-    return safeTranslate(
-      t,
-      `meetings.kinds.${value}`,
-      value === "AGENCY"
-        ? locale === "tr"
-          ? "Ajans"
-          : "Agency"
-        : locale === "tr"
-          ? "Sunum"
-          : "Presentation",
-    );
+    if (value === "AGENCY") return locale === "tr" ? "Ajans" : "Agency";
+    if (value === "PRESENTATION") return locale === "tr" ? "Sunum" : "Presentation";
+    if (value === "OTHER") return locale === "tr" ? "Diğer" : "Other";
+    return value;
   }
+
+  function statusLabel(value?: string | null) {
+    if (!value) return locale === "tr" ? "Planlandı" : "Scheduled";
+
+    const labels: Record<string, string> = {
+      SCHEDULED: locale === "tr" ? "Planlandı" : "Scheduled",
+      COMPLETED: locale === "tr" ? "Tamamlandı" : "Completed",
+      CANCELLED: locale === "tr" ? "İptal Edildi" : "Cancelled",
+      RESCHEDULED: locale === "tr" ? "Yeniden Planlandı" : "Rescheduled",
+    };
+
+    return labels[value] || value;
+  }
+
+  function outcomeLabel(value?: string | null) {
+    if (!value) return locale === "tr" ? "Sonuç yok" : "No outcome";
+
+    const labels: Record<string, string> = {
+      POSITIVE: locale === "tr" ? "Pozitif" : "Positive",
+      NEGATIVE: locale === "tr" ? "Negatif" : "Negative",
+      FOLLOW_UP: locale === "tr" ? "Takip Edilecek" : "Follow-up",
+      NO_DECISION: locale === "tr" ? "Karar Yok" : "No Decision",
+      WON: locale === "tr" ? "Kazanıldı" : "Won",
+      LOST: locale === "tr" ? "Kaybedildi" : "Lost",
+    };
+
+    return labels[value] || value;
+  }
+
+  const filteredAgencies = useMemo(() => {
+    if (!agencySearch.trim()) return agencies.slice(0, 80);
+    return agencies.filter((a) => optionMatch(a.name, agencySearch)).slice(0, 80);
+  }, [agencies, agencySearch]);
+
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch.trim()) return customers.slice(0, 80);
+
+    return customers
+      .filter((c) =>
+        optionMatch(`${c.fullName} ${c.companyName || ""}`, customerSearch),
+      )
+      .slice(0, 80);
+  }, [customers, customerSearch]);
+
+  const filteredSalesUsers = useMemo(() => {
+    if (!salesSearch.trim()) return salesUsers.slice(0, 80);
+
+    return salesUsers
+      .filter((s) => optionMatch(`${s.name} ${s.email}`, salesSearch))
+      .slice(0, 80);
+  }, [salesUsers, salesSearch]);
 
   async function loadMeeting() {
     if (!meetingId) {
-      setErr(
-        locale === "tr" ? "Toplantı ID bulunamadı." : "Meeting ID not found.",
-      );
+      setErr(locale === "tr" ? "Toplantı ID bulunamadı." : "Meeting ID not found.");
       setMeeting(null);
       setLoading(false);
       return;
@@ -214,6 +284,20 @@ export default function MeetingDetailPage() {
       setAssignedSalesId(data?.assignedSales?.id || "");
       setProjectName(data?.projectName || "");
       setLocation(data?.location || "");
+      setContactName(data?.contactName || "");
+      setCompanyName(data?.companyName || "");
+      setPhone(data?.phone || "");
+      setEmail(data?.email || "");
+      setStatus(data?.status || "SCHEDULED");
+      setOutcome(data?.outcome || "");
+
+      setAgencySearch(data?.agency?.name || "");
+      setCustomerSearch(
+        data?.customer
+          ? `${data.customer.fullName}${data.customer.companyName ? ` (${data.customer.companyName})` : ""}`
+          : "",
+      );
+      setSalesSearch(data?.assignedSales?.name || "");
     } catch (e: any) {
       setMeeting(null);
       setErr(normalizeErrorMessage(e?.message || e, locale));
@@ -223,19 +307,23 @@ export default function MeetingDetailPage() {
   }
 
   async function loadRefs() {
-    if (!canManage) return;
-
     setLoadingRefs(true);
 
     try {
       const [agenciesRes, customersRes, salesRes] = await Promise.all([
-        authedFetch("/agencies?page=1&pageSize=300"),
-        authedFetch("/customers"),
+        authedFetch("/agencies?page=1&pageSize=500"),
+        authedFetch("/customers?page=1&pageSize=500"),
         authedFetch("/users?role=SALES"),
       ]);
 
       setAgencies(Array.isArray(agenciesRes?.items) ? agenciesRes.items : []);
-      setCustomers(Array.isArray(customersRes) ? customersRes : []);
+      setCustomers(
+        Array.isArray(customersRes?.items)
+          ? customersRes.items
+          : Array.isArray(customersRes)
+            ? customersRes
+            : [],
+      );
       setSalesUsers(Array.isArray(salesRes) ? salesRes : []);
     } catch {
       setAgencies([]);
@@ -247,7 +335,7 @@ export default function MeetingDetailPage() {
   }
 
   async function saveMeeting() {
-    if (!meeting || !meetingId || !canManage) return;
+    if (!meeting || !meetingId || !canEdit) return;
 
     setErr(null);
     setSaving(true);
@@ -257,17 +345,28 @@ export default function MeetingDetailPage() {
         title: title.trim(),
         notes: notes.trim() || null,
         meetingAt: meetingAt ? new Date(meetingAt).toISOString() : null,
+        assignedSalesId: role === "SALES" ? me?.id : assignedSalesId || null,
+        status,
+        outcome: outcome || null,
       };
 
       if (meeting.kind === "AGENCY") {
         body.agencyId = agencyId || null;
+        body.customerId = customerId || null;
       }
 
       if (meeting.kind === "PRESENTATION") {
+        body.agencyId = agencyId || null;
         body.customerId = customerId || null;
-        body.assignedSalesId = assignedSalesId || null;
         body.projectName = projectName.trim() || null;
         body.location = location.trim() || null;
+      }
+
+      if (meeting.kind === "OTHER") {
+        body.contactName = contactName.trim() || null;
+        body.companyName = companyName.trim() || null;
+        body.phone = phone.trim() || null;
+        body.email = email.trim() || null;
       }
 
       const updated = (await authedFetch(
@@ -287,6 +386,12 @@ export default function MeetingDetailPage() {
       setAssignedSalesId(updated?.assignedSales?.id || "");
       setProjectName(updated?.projectName || "");
       setLocation(updated?.location || "");
+      setContactName(updated?.contactName || "");
+      setCompanyName(updated?.companyName || "");
+      setPhone(updated?.phone || "");
+      setEmail(updated?.email || "");
+      setStatus(updated?.status || "SCHEDULED");
+      setOutcome(updated?.outcome || "");
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, locale));
     } finally {
@@ -295,7 +400,7 @@ export default function MeetingDetailPage() {
   }
 
   async function deleteMeeting() {
-    if (!meeting || !meetingId || !canManage) return;
+    if (!meeting || !meetingId || !canEdit) return;
 
     const confirmed = window.confirm(
       locale === "tr"
@@ -321,42 +426,34 @@ export default function MeetingDetailPage() {
     }
   }
 
-  useEffect(() => {
-    setMounted(true);
-    setMe(getUser());
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    loadMeeting();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, meetingId, meetingKind]);
-
-  useEffect(() => {
-    if (!mounted || !canManage) return;
-    loadRefs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, canManage]);
-
   const relatedBlock = useMemo(() => {
     if (!meeting) return null;
 
-    if (meeting.kind === "AGENCY") {
-      return meeting.agency ? (
-        <Link href={`/agencies/${meeting.agency.id}`}>{meeting.agency.name}</Link>
-      ) : (
-        "-"
+    if (meeting.kind === "OTHER") {
+      return (
+        <div style={{ display: "grid", gap: 4 }}>
+          <span>{meeting.contactName || "-"}</span>
+          {meeting.companyName ? <span className="muted">{meeting.companyName}</span> : null}
+          {meeting.phone ? <span className="muted">{meeting.phone}</span> : null}
+          {meeting.email ? <span className="muted">{meeting.email}</span> : null}
+        </div>
       );
     }
 
     return (
       <div style={{ display: "grid", gap: 4 }}>
+        {meeting.agency ? (
+          <Link href={`/agencies/${meeting.agency.id}`}>{meeting.agency.name}</Link>
+        ) : (
+          <span>-</span>
+        )}
+
         {meeting.customer ? (
-          <Link href={`/customers/${meeting.customer.id}`}>
+          <Link href={`/customers/${meeting.customer.id}`} className="muted">
             {meeting.customer.fullName}
           </Link>
         ) : (
-          <span>-</span>
+          <span className="muted">-</span>
         )}
 
         {meeting.projectName ? (
@@ -374,9 +471,19 @@ export default function MeetingDetailPage() {
     );
   }, [meeting]);
 
-  if (!mounted) {
-    return <div>{t("common.loading")}</div>;
-  }
+  useEffect(() => {
+    setMounted(true);
+    setMe(getUser());
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    loadMeeting();
+    loadRefs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, meetingId, meetingKind]);
+
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   if (loading) {
     return (
@@ -419,59 +526,51 @@ export default function MeetingDetailPage() {
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <Link href="/meetings" style={{ fontWeight: 800 }}>
-            ←{" "}
-            {safeTranslate(
-              t,
-              "meetings.backToMeetings",
-              locale === "tr" ? "Toplantılara Dön" : "Back to Meetings",
-            )}
+            ← {locale === "tr" ? "Toplantılara Dön" : "Back to Meetings"}
           </Link>
 
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ fontSize: 28, fontWeight: 900 }}>{meeting.title}</div>
+
             <span className={`badge ${kindBadgeClass(meeting.kind)}`}>
               {kindLabel(meeting.kind)}
             </span>
+
+            <span className={`badge ${statusBadgeClass(meeting.status)}`}>
+              {statusLabel(meeting.status)}
+            </span>
+
+            {meeting.outcome ? (
+              <span className="badge success">{outcomeLabel(meeting.outcome)}</span>
+            ) : null}
           </div>
 
           <div className="muted" style={{ fontSize: 13 }}>
-            {safeTranslate(
-              t,
-              "meetings.detail.createdAt",
-              locale === "tr" ? "Oluşturulma" : "Created",
-            )}
-            : {formatDateTime(meeting.createdAt, locale)}
+            {locale === "tr" ? "Oluşturulma" : "Created"}:{" "}
+            {formatDateTime(meeting.createdAt, locale)}
           </div>
+
+          {!canEdit ? (
+            <div className="muted" style={{ fontSize: 13 }}>
+              {locale === "tr"
+                ? "Bu kaydı sadece oluşturan kişi, manager veya admin düzenleyebilir."
+                : "Only the creator, manager or admin can edit this record."}
+            </div>
+          ) : null}
         </div>
 
-        {canManage ? (
+        {canEdit ? (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button
               className="primary"
               onClick={saveMeeting}
               disabled={saving || deleting || !title.trim() || !meetingAt}
             >
-              {saving
-                ? safeTranslate(
-                    t,
-                    "common.saving",
-                    locale === "tr" ? "Kaydediliyor..." : "Saving...",
-                  )
-                : t("common.save")}
+              {saving ? (locale === "tr" ? "Kaydediliyor..." : "Saving...") : t("common.save")}
             </button>
 
-            <button
-              className="danger"
-              onClick={deleteMeeting}
-              disabled={saving || deleting}
-            >
-              {deleting
-                ? safeTranslate(
-                    t,
-                    "common.deleting",
-                    locale === "tr" ? "Siliniyor..." : "Deleting...",
-                  )
-                : t("common.delete")}
+            <button className="danger" onClick={deleteMeeting} disabled={saving || deleting}>
+              {deleting ? (locale === "tr" ? "Siliniyor..." : "Deleting...") : t("common.delete")}
             </button>
           </div>
         ) : null}
@@ -498,37 +597,21 @@ export default function MeetingDetailPage() {
         }}
       >
         <div className="card">
-          <div className="muted">
-            {safeTranslate(
-              t,
-              "meetings.detail.meetingAt",
-              locale === "tr" ? "Toplantı Tarihi" : "Meeting Time",
-            )}
-          </div>
+          <div className="muted">{locale === "tr" ? "Toplantı Tarihi" : "Meeting Time"}</div>
           <div style={{ fontSize: 18, fontWeight: 900 }}>
             {formatDateTime(meeting.meetingAt, locale)}
           </div>
         </div>
 
         <div className="card">
-          <div className="muted">
-            {safeTranslate(
-              t,
-              "meetings.detail.related",
-              locale === "tr" ? "İlişkili Kayıt" : "Related Record",
-            )}
+          <div className="muted">{locale === "tr" ? "Durum" : "Status"}</div>
+          <div style={{ fontSize: 18, fontWeight: 900 }}>
+            {statusLabel(meeting.status)}
           </div>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>{relatedBlock}</div>
         </div>
 
         <div className="card">
-          <div className="muted">
-            {safeTranslate(
-              t,
-              "meetings.detail.sales",
-              locale === "tr" ? "Satış" : "Sales",
-            )}
-          </div>
+          <div className="muted">{locale === "tr" ? "Satış" : "Sales"}</div>
           <div style={{ fontSize: 18, fontWeight: 900 }}>
             {meeting.assignedSales?.name || "-"}
           </div>
@@ -536,15 +619,15 @@ export default function MeetingDetailPage() {
 
         <div className="card">
           <div className="muted">
-            {safeTranslate(
-              t,
-              "meetings.detail.createdBy",
-              locale === "tr" ? "Oluşturan" : "Created By",
-            )}
+            {meeting.kind === "OTHER"
+              ? locale === "tr"
+                ? "İlgili Kişi"
+                : "Contact"
+              : locale === "tr"
+                ? "İlişkili Kayıt"
+                : "Related"}
           </div>
-          <div style={{ fontSize: 18, fontWeight: 900 }}>
-            {meeting.createdBy?.name || "-"}
-          </div>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>{relatedBlock}</div>
         </div>
       </div>
 
@@ -557,12 +640,15 @@ export default function MeetingDetailPage() {
         }}
       >
         <div className="card" style={{ display: "grid", gap: 12 }}>
-          <div style={{ fontWeight: 900 }}>
-            {safeTranslate(
-              t,
-              "meetings.detail.meetingInfo",
-              locale === "tr" ? "Toplantı Bilgileri" : "Meeting Information",
-            )}
+          <div>
+            <div style={{ fontWeight: 900 }}>
+              {locale === "tr" ? "Toplantı Bilgileri" : "Meeting Information"}
+            </div>
+            {loadingRefs ? (
+              <div className="muted" style={{ fontSize: 12 }}>
+                {t("common.loading")}
+              </div>
+            ) : null}
           </div>
 
           <div
@@ -573,165 +659,211 @@ export default function MeetingDetailPage() {
             }}
           >
             <div style={{ display: "grid", gap: 6 }}>
-              <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                {safeTranslate(
-                  t,
-                  "meetings.fields.title",
-                  locale === "tr" ? "Başlık" : "Title",
-                )}
+              <label className="muted" style={{ fontSize: 12 }}>
+                {locale === "tr" ? "Başlık" : "Title"}
               </label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                disabled={!canManage}
-              />
+              <input value={title} onChange={(e) => setTitle(e.target.value)} disabled={!canEdit} />
             </div>
 
             <div style={{ display: "grid", gap: 6 }}>
-              <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                {safeTranslate(
-                  t,
-                  "meetings.fields.kind",
-                  locale === "tr" ? "Tür" : "Type",
-                )}
+              <label className="muted" style={{ fontSize: 12 }}>
+                {locale === "tr" ? "Tür" : "Type"}
               </label>
               <input value={kindLabel(meeting.kind)} disabled />
             </div>
 
             <div style={{ display: "grid", gap: 6 }}>
-              <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                {safeTranslate(
-                  t,
-                  "meetings.fields.meetingAt",
-                  locale === "tr" ? "Toplantı Tarihi" : "Meeting Time",
-                )}
+              <label className="muted" style={{ fontSize: 12 }}>
+                {locale === "tr" ? "Toplantı Tarihi" : "Meeting Time"}
               </label>
               <input
                 type="datetime-local"
                 value={meetingAt}
                 onChange={(e) => setMeetingAt(e.target.value)}
-                disabled={!canManage}
+                disabled={!canEdit}
               />
             </div>
 
-            {meeting.kind === "AGENCY" ? (
-              <div style={{ display: "grid", gap: 6 }}>
-                <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                  {safeTranslate(
-                    t,
-                    "meetings.fields.selectAgency",
-                    locale === "tr" ? "Ajans" : "Agency",
-                  )}
-                </label>
-                <select
-                  value={agencyId}
-                  onChange={(e) => setAgencyId(e.target.value)}
-                  disabled={!canManage || loadingRefs}
-                >
-                  <option value="">
-                    {safeTranslate(
-                      t,
-                      "meetings.fields.selectAgency",
-                      locale === "tr" ? "Ajans seç" : "Select agency",
-                    )}
+            <div style={{ display: "grid", gap: 6 }}>
+              <label className="muted" style={{ fontSize: 12 }}>
+                {locale === "tr" ? "Durum" : "Status"}
+              </label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} disabled={!canEdit}>
+                {MEETING_STATUS.map((s) => (
+                  <option key={s} value={s}>
+                    {statusLabel(s)}
                   </option>
-                  {agencies.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 6 }}>
-                <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                  {safeTranslate(
-                    t,
-                    "meetings.fields.selectCustomer",
-                    locale === "tr" ? "Müşteri" : "Customer",
-                  )}
-                </label>
-                <select
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                  disabled={!canManage || loadingRefs}
-                >
-                  <option value="">
-                    {safeTranslate(
-                      t,
-                      "meetings.fields.selectCustomer",
-                      locale === "tr" ? "Müşteri seç" : "Select customer",
-                    )}
-                  </option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.fullName}
-                      {c.companyName ? ` (${c.companyName})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+                ))}
+              </select>
+            </div>
 
-            {meeting.kind === "PRESENTATION" ? (
+            <div style={{ display: "grid", gap: 6 }}>
+              <label className="muted" style={{ fontSize: 12 }}>
+                {locale === "tr" ? "Sonuç" : "Outcome"}
+              </label>
+              <select value={outcome} onChange={(e) => setOutcome(e.target.value)} disabled={!canEdit}>
+                {MEETING_OUTCOME.map((o) => (
+                  <option key={o || "EMPTY"} value={o}>
+                    {outcomeLabel(o)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {meeting.kind !== "OTHER" ? (
               <>
                 <div style={{ display: "grid", gap: 6 }}>
-                  <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                    {safeTranslate(
-                      t,
-                      "meetings.fields.selectSales",
-                      locale === "tr" ? "Satış Temsilcisi" : "Sales Rep",
-                    )}
+                  <label className="muted" style={{ fontSize: 12 }}>
+                    {locale === "tr" ? "Ajans Ara" : "Search Agency"}
                   </label>
+                  <input
+                    value={agencySearch}
+                    onChange={(e) => setAgencySearch(e.target.value)}
+                    disabled={!canEdit || loadingRefs}
+                    placeholder={locale === "tr" ? "Ajans ara..." : "Search agency..."}
+                  />
                   <select
-                    value={assignedSalesId}
-                    onChange={(e) => setAssignedSalesId(e.target.value)}
-                    disabled={!canManage || loadingRefs}
+                    value={agencyId}
+                    onChange={(e) => setAgencyId(e.target.value)}
+                    disabled={!canEdit || loadingRefs}
                   >
                     <option value="">
-                      {safeTranslate(
-                        t,
-                        "meetings.fields.selectSales",
-                        locale === "tr"
-                          ? "Satış temsilcisi seç"
-                          : "Select sales rep",
-                      )}
+                      {locale === "tr" ? "Ajans seçmeden devam et" : "Continue without agency"}
                     </option>
-                    {salesUsers.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.email})
+                    {filteredAgencies.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div style={{ display: "grid", gap: 6 }}>
-                  <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                    {safeTranslate(
-                      t,
-                      "meetings.fields.projectName",
-                      locale === "tr" ? "Proje Adı" : "Project Name",
-                    )}
+                  <label className="muted" style={{ fontSize: 12 }}>
+                    {locale === "tr" ? "Müşteri Ara" : "Search Customer"}
                   </label>
                   <input
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    disabled={!canManage}
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    disabled={!canEdit || loadingRefs}
+                    placeholder={locale === "tr" ? "Müşteri ara..." : "Search customer..."}
+                  />
+                  <select
+                    value={customerId}
+                    onChange={(e) => setCustomerId(e.target.value)}
+                    disabled={!canEdit || loadingRefs}
+                  >
+                    <option value="">
+                      {locale === "tr"
+                        ? "Müşteri seçmeden devam et"
+                        : "Continue without customer"}
+                    </option>
+                    {filteredCustomers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.fullName}
+                        {c.companyName ? ` (${c.companyName})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <label className="muted" style={{ fontSize: 12 }}>
+                    {locale === "tr" ? "Kişi Adı" : "Contact Name"}
+                  </label>
+                  <input
+                    value={contactName}
+                    onChange={(e) => setContactName(e.target.value)}
+                    disabled={!canEdit}
                   />
                 </div>
 
                 <div style={{ display: "grid", gap: 6 }}>
-                  <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                    {safeTranslate(
-                      t,
-                      "meetings.fields.location",
-                      locale === "tr" ? "Lokasyon" : "Location",
-                    )}
+                  <label className="muted" style={{ fontSize: 12 }}>
+                    {locale === "tr" ? "Şirket / Kurum" : "Company / Organization"}
+                  </label>
+                  <input
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    disabled={!canEdit}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <label className="muted" style={{ fontSize: 12 }}>
+                    {locale === "tr" ? "Telefon" : "Phone"}
+                  </label>
+                  <input value={phone} onChange={(e) => setPhone(e.target.value)} disabled={!canEdit} />
+                </div>
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <label className="muted" style={{ fontSize: 12 }}>
+                    {locale === "tr" ? "E-posta" : "Email"}
+                  </label>
+                  <input value={email} onChange={(e) => setEmail(e.target.value)} disabled={!canEdit} />
+                </div>
+              </>
+            )}
+
+            <div style={{ display: "grid", gap: 6 }}>
+              <label className="muted" style={{ fontSize: 12 }}>
+                {locale === "tr" ? "Satış Temsilcisi" : "Sales Rep"}
+              </label>
+
+              {role === "SALES" ? (
+                <input value={me?.name || ""} disabled />
+              ) : (
+                <>
+                  <input
+                    value={salesSearch}
+                    onChange={(e) => setSalesSearch(e.target.value)}
+                    disabled={!canEdit || loadingRefs}
+                    placeholder={locale === "tr" ? "Satış temsilcisi ara..." : "Search sales rep..."}
+                  />
+                  <select
+                    value={assignedSalesId}
+                    onChange={(e) => setAssignedSalesId(e.target.value)}
+                    disabled={!canEdit || loadingRefs}
+                  >
+                    <option value="">
+                      {locale === "tr"
+                        ? "Satış temsilcisi seçmeden devam et"
+                        : "Continue without sales rep"}
+                    </option>
+
+                    {filteredSalesUsers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.email})
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+            </div>
+
+            {meeting.kind === "PRESENTATION" ? (
+              <>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <label className="muted" style={{ fontSize: 12 }}>
+                    {locale === "tr" ? "Proje Adı" : "Project Name"}
+                  </label>
+                  <input
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    disabled={!canEdit}
+                  />
+                </div>
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <label className="muted" style={{ fontSize: 12 }}>
+                    {locale === "tr" ? "Lokasyon" : "Location"}
                   </label>
                   <input
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
-                    disabled={!canManage}
+                    disabled={!canEdit}
                   />
                 </div>
               </>
@@ -739,17 +871,13 @@ export default function MeetingDetailPage() {
           </div>
 
           <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-              {safeTranslate(
-                t,
-                "meetings.fields.notes",
-                locale === "tr" ? "Notlar" : "Notes",
-              )}
+            <label className="muted" style={{ fontSize: 12 }}>
+              {locale === "tr" ? "Notlar" : "Notes"}
             </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              disabled={!canManage}
+              disabled={!canEdit}
               style={{ minHeight: 160 }}
             />
           </div>
@@ -758,11 +886,7 @@ export default function MeetingDetailPage() {
         <div style={{ display: "grid", gap: 14 }}>
           <div className="card" style={{ display: "grid", gap: 12 }}>
             <div style={{ fontWeight: 900 }}>
-              {safeTranslate(
-                t,
-                "meetings.detail.meta",
-                locale === "tr" ? "Kayıt Bilgileri" : "Record Details",
-              )}
+              {locale === "tr" ? "Kayıt Bilgileri" : "Record Details"}
             </div>
 
             <div
@@ -781,73 +905,56 @@ export default function MeetingDetailPage() {
               </div>
 
               <div>
-                <b>
-                  {safeTranslate(
-                    t,
-                    "meetings.detail.kind",
-                    locale === "tr" ? "Tür" : "Type",
-                  )}
-                  :
-                </b>{" "}
-                {kindLabel(meeting.kind)}
+                <b>{locale === "tr" ? "Tür" : "Type"}:</b> {kindLabel(meeting.kind)}
               </div>
 
               <div>
-                <b>
-                  {safeTranslate(
-                    t,
-                    "meetings.detail.createdAt",
-                    locale === "tr" ? "Oluşturulma" : "Created",
-                  )}
-                  :
-                </b>{" "}
+                <b>{locale === "tr" ? "Durum" : "Status"}:</b>{" "}
+                {statusLabel(meeting.status)}
+              </div>
+
+              <div>
+                <b>{locale === "tr" ? "Sonuç" : "Outcome"}:</b>{" "}
+                {outcomeLabel(meeting.outcome)}
+              </div>
+
+              {meeting.kind === "OTHER" ? (
+                <>
+                  <div>
+                    <b>{locale === "tr" ? "Kişi" : "Contact"}:</b>{" "}
+                    {meeting.contactName || "-"}
+                  </div>
+                  <div>
+                    <b>{locale === "tr" ? "Şirket" : "Company"}:</b>{" "}
+                    {meeting.companyName || "-"}
+                  </div>
+                </>
+              ) : null}
+
+              <div>
+                <b>{locale === "tr" ? "Oluşturulma" : "Created"}:</b>{" "}
                 {formatDateTime(meeting.createdAt, locale)}
               </div>
 
               <div>
-                <b>
-                  {safeTranslate(
-                    t,
-                    "meetings.detail.updatedAt",
-                    locale === "tr" ? "Güncellenme" : "Updated",
-                  )}
-                  :
-                </b>{" "}
+                <b>{locale === "tr" ? "Güncellenme" : "Updated"}:</b>{" "}
                 {formatDateTime(meeting.updatedAt, locale)}
               </div>
 
               <div>
-                <b>
-                  {safeTranslate(
-                    t,
-                    "meetings.detail.createdBy",
-                    locale === "tr" ? "Oluşturan" : "Created By",
-                  )}
-                  :
-                </b>{" "}
+                <b>{locale === "tr" ? "Oluşturan" : "Created By"}:</b>{" "}
                 {meeting.createdBy?.name || "-"}
               </div>
 
               <div>
-                <b>
-                  {safeTranslate(
-                    t,
-                    "meetings.detail.sales",
-                    locale === "tr" ? "Satış" : "Sales",
-                  )}
-                  :
-                </b>{" "}
+                <b>{locale === "tr" ? "Satış" : "Sales"}:</b>{" "}
                 {meeting.assignedSales?.name || "-"}
               </div>
             </div>
 
             <Link href="/meetings">
               <button style={{ width: "100%" }}>
-                {safeTranslate(
-                  t,
-                  "meetings.backToMeetings",
-                  locale === "tr" ? "Toplantılara Dön" : "Back to Meetings",
-                )}
+                {locale === "tr" ? "Toplantılara Dön" : "Back to Meetings"}
               </button>
             </Link>
           </div>

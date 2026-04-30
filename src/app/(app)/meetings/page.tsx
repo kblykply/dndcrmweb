@@ -6,7 +6,7 @@ import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
-type MeetingKind = "AGENCY" | "PRESENTATION";
+type MeetingKind = "AGENCY" | "PRESENTATION" | "OTHER";
 type MeetingKindFilter = "ALL" | MeetingKind;
 
 type AgencyLite = {
@@ -36,31 +36,21 @@ type MeetingRow = {
   createdAt?: string;
   updatedAt?: string;
 
-  agency?: {
-    id: string;
-    name: string;
-  } | null;
-
-  customer?: {
-    id: string;
-    fullName: string;
-    companyName?: string | null;
-  } | null;
-
-  assignedSales?: {
-    id: string;
-    name: string;
-    email: string;
-  } | null;
-
-  createdBy?: {
-    id: string;
-    name: string;
-    email: string;
-  } | null;
+  agency?: { id: string; name: string } | null;
+  customer?: { id: string; fullName: string; companyName?: string | null } | null;
+  assignedSales?: { id: string; name: string; email: string } | null;
+  createdBy?: { id: string; name: string; email: string } | null;
 
   projectName?: string | null;
   location?: string | null;
+
+  contactName?: string | null;
+  companyName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+
+  status?: string | null;
+  outcome?: string | null;
 };
 
 type MeetingsResponse = {
@@ -71,7 +61,7 @@ type MeetingsResponse = {
   totalPages: number;
 };
 
-const KIND_OPTIONS: MeetingKindFilter[] = ["ALL", "AGENCY", "PRESENTATION"];
+const KIND_OPTIONS: MeetingKindFilter[] = ["ALL", "AGENCY", "PRESENTATION", "OTHER"];
 
 function safeTranslate(
   t: (path: string) => string,
@@ -79,24 +69,35 @@ function safeTranslate(
   fallback?: string | null,
 ) {
   const translated = t(path);
-  if (translated === path) return fallback ?? path;
-  return translated;
+  return translated === path ? fallback ?? path : translated;
 }
 
 function kindBadgeClass(kind?: string) {
   if (kind === "AGENCY") return "info";
   if (kind === "PRESENTATION") return "success";
+  if (kind === "OTHER") return "warning";
   return "";
 }
 
-function isPast(meetingAt?: string | null) {
-  if (!meetingAt) return false;
-  return new Date(meetingAt).getTime() < Date.now();
+function statusBadgeClass(status?: string | null) {
+  if (status === "COMPLETED") return "success";
+  if (status === "CANCELLED") return "danger";
+  if (status === "RESCHEDULED") return "info";
+  return "";
+}
+
+function isPast(value?: string | null) {
+  if (!value) return false;
+  return new Date(value).getTime() < Date.now();
 }
 
 function formatDateTime(value?: string | null, locale: "tr" | "en" = "en") {
   if (!value) return "-";
   return new Date(value).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
+}
+
+function optionMatch(text: string, query: string) {
+  return text.toLowerCase().includes(query.trim().toLowerCase());
 }
 
 export default function MeetingsPage() {
@@ -113,6 +114,7 @@ export default function MeetingsPage() {
   const [loading, setLoading] = useState(false);
   const [loadingRefs, setLoadingRefs] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
@@ -120,6 +122,7 @@ export default function MeetingsPage() {
   const [kind, setKind] = useState<MeetingKindFilter>("ALL");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [salesFilterId, setSalesFilterId] = useState("");
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -127,8 +130,8 @@ export default function MeetingsPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   const [showCreate, setShowCreate] = useState(false);
-
   const [createKind, setCreateKind] = useState<MeetingKind>("AGENCY");
+
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [meetingAt, setMeetingAt] = useState("");
@@ -138,24 +141,81 @@ export default function MeetingsPage() {
   const [projectName, setProjectName] = useState("");
   const [location, setLocation] = useState("");
 
+  const [contactName, setContactName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+
+  const [agencySearch, setAgencySearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [salesSearch, setSalesSearch] = useState("");
+
   const role = me?.role as string | undefined;
   const canCreate = role === "ADMIN" || role === "MANAGER" || role === "SALES";
+
+  function canModify(item: MeetingRow) {
+    if (role === "ADMIN" || role === "MANAGER") return true;
+    return item.createdBy?.id === me?.id;
+  }
 
   function kindLabel(value?: string | null) {
     if (!value) return "-";
 
-    return safeTranslate(
-      t,
-      `meetings.kinds.${value}`,
-      value === "AGENCY"
-        ? locale === "tr"
-          ? "Ajans"
-          : "Agency"
-        : locale === "tr"
-          ? "Sunum"
-          : "Presentation",
-    );
+    if (value === "AGENCY") return locale === "tr" ? "Ajans" : "Agency";
+    if (value === "PRESENTATION") return locale === "tr" ? "Sunum" : "Presentation";
+    if (value === "OTHER") return locale === "tr" ? "Diğer" : "Other";
+
+    return value;
   }
+
+  function statusLabel(value?: string | null) {
+    if (!value) return locale === "tr" ? "Planlandı" : "Scheduled";
+
+    const labels: Record<string, string> = {
+      SCHEDULED: locale === "tr" ? "Planlandı" : "Scheduled",
+      COMPLETED: locale === "tr" ? "Tamamlandı" : "Completed",
+      CANCELLED: locale === "tr" ? "İptal Edildi" : "Cancelled",
+      RESCHEDULED: locale === "tr" ? "Yeniden Planlandı" : "Rescheduled",
+    };
+
+    return labels[value] || value;
+  }
+
+  function outcomeLabel(value?: string | null) {
+    if (!value) return "";
+
+    const labels: Record<string, string> = {
+      POSITIVE: locale === "tr" ? "Pozitif" : "Positive",
+      NEGATIVE: locale === "tr" ? "Negatif" : "Negative",
+      FOLLOW_UP: locale === "tr" ? "Takip Edilecek" : "Follow-up",
+      NO_DECISION: locale === "tr" ? "Karar Yok" : "No Decision",
+      WON: locale === "tr" ? "Kazanıldı" : "Won",
+      LOST: locale === "tr" ? "Kaybedildi" : "Lost",
+    };
+
+    return labels[value] || value;
+  }
+
+  const filteredAgencies = useMemo(() => {
+    if (!agencySearch.trim()) return agencies.slice(0, 80);
+    return agencies.filter((a) => optionMatch(a.name, agencySearch)).slice(0, 80);
+  }, [agencies, agencySearch]);
+
+  const filteredCustomers = useMemo(() => {
+    if (!customerSearch.trim()) return customers.slice(0, 80);
+    return customers
+      .filter((c) =>
+        optionMatch(`${c.fullName} ${c.companyName || ""}`, customerSearch),
+      )
+      .slice(0, 80);
+  }, [customers, customerSearch]);
+
+  const filteredSalesUsers = useMemo(() => {
+    if (!salesSearch.trim()) return salesUsers.slice(0, 80);
+    return salesUsers
+      .filter((s) => optionMatch(`${s.name} ${s.email}`, salesSearch))
+      .slice(0, 80);
+  }, [salesUsers, salesSearch]);
 
   async function load(
     nextPage = page,
@@ -164,6 +224,7 @@ export default function MeetingsPage() {
     nextPageSize = pageSize,
     nextFrom = from,
     nextTo = to,
+    nextSalesFilterId = salesFilterId,
   ) {
     setErr(null);
     setLoading(true);
@@ -173,6 +234,7 @@ export default function MeetingsPage() {
 
       if (nextQ.trim()) params.set("q", nextQ.trim());
       if (nextKind !== "ALL") params.set("kind", nextKind);
+      if (nextSalesFilterId) params.set("assignedSalesId", nextSalesFilterId);
       if (nextFrom) params.set("from", new Date(nextFrom).toISOString());
       if (nextTo) params.set("to", new Date(nextTo).toISOString());
 
@@ -203,13 +265,19 @@ export default function MeetingsPage() {
 
     try {
       const [agenciesRes, customersRes, salesRes] = await Promise.all([
-        authedFetch("/agencies?page=1&pageSize=300"),
-        authedFetch("/customers"),
+        authedFetch("/agencies?page=1&pageSize=500"),
+        authedFetch("/customers?page=1&pageSize=500"),
         authedFetch("/users?role=SALES"),
       ]);
 
       setAgencies(Array.isArray(agenciesRes?.items) ? agenciesRes.items : []);
-      setCustomers(Array.isArray(customersRes) ? customersRes : []);
+      setCustomers(
+        Array.isArray(customersRes?.items)
+          ? customersRes.items
+          : Array.isArray(customersRes)
+            ? customersRes
+            : [],
+      );
       setSalesUsers(Array.isArray(salesRes) ? salesRes : []);
     } catch {
       setAgencies([]);
@@ -220,26 +288,27 @@ export default function MeetingsPage() {
     }
   }
 
+  function resetCreateForm() {
+    setCreateKind("AGENCY");
+    setTitle("");
+    setNotes("");
+    setMeetingAt("");
+    setAgencyId("");
+    setCustomerId("");
+    setAssignedSalesId("");
+    setProjectName("");
+    setLocation("");
+    setContactName("");
+    setCompanyName("");
+    setPhone("");
+    setEmail("");
+    setAgencySearch("");
+    setCustomerSearch("");
+    setSalesSearch("");
+  }
+
   async function createMeeting() {
     if (!title.trim() || !meetingAt) return;
-
-    if (createKind === "AGENCY" && !agencyId) {
-      setErr(
-        locale === "tr"
-          ? "Ajans toplantısı için ajans seçmelisiniz."
-          : "You must select an agency for an agency meeting.",
-      );
-      return;
-    }
-
-    if (createKind === "PRESENTATION" && !customerId) {
-      setErr(
-        locale === "tr"
-          ? "Sunum toplantısı için müşteri seçmelisiniz."
-          : "You must select a customer for a presentation meeting.",
-      );
-      return;
-    }
 
     setErr(null);
     setSaving(true);
@@ -250,17 +319,26 @@ export default function MeetingsPage() {
         title: title.trim(),
         notes: notes.trim() || undefined,
         meetingAt: new Date(meetingAt).toISOString(),
+        assignedSalesId: role === "SALES" ? me?.id : assignedSalesId || undefined,
       };
 
       if (createKind === "AGENCY") {
-        body.agencyId = agencyId;
+        body.agencyId = agencyId || undefined;
+        body.customerId = customerId || undefined;
       }
 
       if (createKind === "PRESENTATION") {
-        body.customerId = customerId;
-        body.assignedSalesId = assignedSalesId || undefined;
+        body.agencyId = agencyId || undefined;
+        body.customerId = customerId || undefined;
         body.projectName = projectName.trim() || undefined;
         body.location = location.trim() || undefined;
+      }
+
+      if (createKind === "OTHER") {
+        body.contactName = contactName.trim() || undefined;
+        body.companyName = companyName.trim() || undefined;
+        body.phone = phone.trim() || undefined;
+        body.email = email.trim() || undefined;
       }
 
       await authedFetch("/meetings", {
@@ -268,18 +346,9 @@ export default function MeetingsPage() {
         body: JSON.stringify(body),
       });
 
-      setTitle("");
-      setNotes("");
-      setMeetingAt("");
-      setAgencyId("");
-      setCustomerId("");
-      setAssignedSalesId("");
-      setProjectName("");
-      setLocation("");
-      setCreateKind("AGENCY");
+      resetCreateForm();
       setShowCreate(false);
-
-      await load(1, kind, q, pageSize, from, to);
+      await load(1, kind, q, pageSize, from, to, salesFilterId);
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
@@ -287,10 +356,46 @@ export default function MeetingsPage() {
     }
   }
 
+  async function deleteMeeting(item: MeetingRow) {
+    const ok = window.confirm(
+      locale === "tr"
+        ? "Bu toplantıyı silmek istediğinize emin misiniz?"
+        : "Are you sure you want to delete this meeting?",
+    );
+
+    if (!ok) return;
+
+    setDeletingId(item.id);
+    setErr(null);
+
+    try {
+      await authedFetch(`/meetings/${item.kind}/${item.id}`, {
+        method: "DELETE",
+      });
+
+      await load(page, kind, q, pageSize, from, to, salesFilterId);
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   function runSearch() {
     const trimmed = searchInput.trim();
     setQ(trimmed);
-    load(1, kind, trimmed, pageSize, from, to);
+    load(1, kind, trimmed, pageSize, from, to, salesFilterId);
+  }
+
+  function clearFilters() {
+    setSearchInput("");
+    setQ("");
+    setKind("ALL");
+    setFrom("");
+    setTo("");
+    setSalesFilterId("");
+    setPageSize(20);
+    load(1, "ALL", "", 20, "", "", "");
   }
 
   useEffect(() => {
@@ -300,7 +405,7 @@ export default function MeetingsPage() {
 
   useEffect(() => {
     if (!mounted) return;
-    load(1, kind, q, pageSize, from, to);
+    load(1, kind, q, pageSize, from, to, salesFilterId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 
@@ -327,9 +432,7 @@ export default function MeetingsPage() {
     [items],
   );
 
-  if (!mounted) {
-    return <div>{t("common.loading")}</div>;
-  }
+  if (!mounted) return <div>{t("common.loading")}</div>;
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -352,49 +455,64 @@ export default function MeetingsPage() {
           </div>
 
           <div className="muted" style={{ fontSize: 13 }}>
-            {safeTranslate(
-              t,
-              "meetings.subtitle",
-              locale === "tr"
-                ? "Ajans toplantıları ve sunum planlamalarını tek ekranda yönetin."
-                : "Manage agency meetings and presentation schedules in one place.",
-            )}
+            {locale === "tr"
+              ? "Ajans, sunum ve harici toplantıları tek ekranda yönetin."
+              : "Manage agency, presentation and external meetings in one place."}
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
-            onClick={() => load(page, kind, q, pageSize, from, to)}
+            onClick={() => load(page, kind, q, pageSize, from, to, salesFilterId)}
             disabled={loading}
           >
             {loading ? t("common.loading") : t("common.refresh")}
           </button>
 
           {canCreate ? (
-            <button
-              className="primary"
-              onClick={() => setShowCreate((v) => !v)}
-            >
+            <button className="primary" onClick={() => setShowCreate((v) => !v)}>
               {showCreate
                 ? t("common.close")
-                : safeTranslate(
-                    t,
-                    "meetings.newMeeting",
-                    locale === "tr" ? "Yeni Toplantı" : "New Meeting",
-                  )}
+                : locale === "tr"
+                  ? "Yeni Toplantı"
+                  : "New Meeting"}
             </button>
           ) : null}
         </div>
       </div>
 
       {showCreate && canCreate ? (
-        <div className="card" style={{ display: "grid", gap: 12 }}>
-          <div style={{ fontWeight: 900 }}>
-            {safeTranslate(
-              t,
-              "meetings.createTitle",
-              locale === "tr" ? "Yeni Toplantı Oluştur" : "Create New Meeting",
-            )}
+        <div className="card" style={{ display: "grid", gap: 14 }}>
+          <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 900 }}>
+                {locale === "tr" ? "Yeni Toplantı Oluştur" : "Create New Meeting"}
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                {locale === "tr"
+                  ? "Yeni toplantılar otomatik olarak Planlandı durumunda oluşturulur."
+                  : "New meetings are automatically created as Scheduled."}
+              </div>
+            </div>
+
+            <span className="badge">
+              {locale === "tr" ? "Durum: Planlandı" : "Status: Scheduled"}
+            </span>
+
+            {loadingRefs ? <span className="muted">{t("common.loading")}</span> : null}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {(["AGENCY", "PRESENTATION", "OTHER"] as MeetingKind[]).map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={createKind === option ? "primary" : ""}
+                onClick={() => setCreateKind(option)}
+              >
+                {kindLabel(option)}
+              </button>
+            ))}
           </div>
 
           <div
@@ -404,22 +522,10 @@ export default function MeetingsPage() {
               gap: 10,
             }}
           >
-            <select
-              value={createKind}
-              onChange={(e) => setCreateKind(e.target.value as MeetingKind)}
-            >
-              <option value="AGENCY">{kindLabel("AGENCY")}</option>
-              <option value="PRESENTATION">{kindLabel("PRESENTATION")}</option>
-            </select>
-
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={safeTranslate(
-                t,
-                "meetings.fields.title",
-                locale === "tr" ? "Toplantı başlığı" : "Meeting title",
-              )}
+              placeholder={locale === "tr" ? "Toplantı başlığı *" : "Meeting title *"}
             />
 
             <input
@@ -428,70 +534,111 @@ export default function MeetingsPage() {
               onChange={(e) => setMeetingAt(e.target.value)}
             />
 
-            {createKind === "AGENCY" ? (
-              <select
-                value={agencyId}
-                onChange={(e) => setAgencyId(e.target.value)}
-                disabled={loadingRefs}
-              >
-                <option value="">
-                  {safeTranslate(
-                    t,
-                    "meetings.fields.selectAgency",
-                    locale === "tr" ? "Ajans seç" : "Select agency",
-                  )}
-                </option>
-                {agencies.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
+            {role === "SALES" ? (
+              <input value={me?.name || ""} disabled />
             ) : (
-              <select
-                value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
-                disabled={loadingRefs}
-              >
-                <option value="">
-                  {safeTranslate(
-                    t,
-                    "meetings.fields.selectCustomer",
-                    locale === "tr" ? "Müşteri seç" : "Select customer",
-                  )}
-                </option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.fullName}
-                    {c.companyName ? ` (${c.companyName})` : ""}
+              <div style={{ display: "grid", gap: 6 }}>
+                <input
+                  value={salesSearch}
+                  onChange={(e) => setSalesSearch(e.target.value)}
+                  placeholder={
+                    locale === "tr" ? "Satış temsilcisi ara..." : "Search sales rep..."
+                  }
+                />
+                <select
+                  value={assignedSalesId}
+                  onChange={(e) => setAssignedSalesId(e.target.value)}
+                  disabled={loadingRefs}
+                >
+                  <option value="">
+                    {locale === "tr"
+                      ? "Satış temsilcisi seçmeden devam et"
+                      : "Continue without sales rep"}
                   </option>
-                ))}
-              </select>
+                  {filteredSalesUsers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
 
-            {createKind === "PRESENTATION" ? (
-              <select
-                value={assignedSalesId}
-                onChange={(e) => setAssignedSalesId(e.target.value)}
-                disabled={loadingRefs}
-              >
-                <option value="">
-                  {safeTranslate(
-                    t,
-                    "meetings.fields.selectSales",
-                    locale === "tr"
-                      ? "Satış temsilcisi seç"
-                      : "Select sales rep",
-                  )}
-                </option>
-                {salesUsers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.email})
-                  </option>
-                ))}
-              </select>
+            {createKind !== "OTHER" ? (
+              <>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <input
+                    value={agencySearch}
+                    onChange={(e) => setAgencySearch(e.target.value)}
+                    placeholder={locale === "tr" ? "Ajans ara..." : "Search agency..."}
+                  />
+                  <select
+                    value={agencyId}
+                    onChange={(e) => setAgencyId(e.target.value)}
+                    disabled={loadingRefs}
+                  >
+                    <option value="">
+                      {locale === "tr" ? "Ajans seçmeden devam et" : "Continue without agency"}
+                    </option>
+                    {filteredAgencies.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <input
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    placeholder={locale === "tr" ? "Müşteri ara..." : "Search customer..."}
+                  />
+                  <select
+                    value={customerId}
+                    onChange={(e) => setCustomerId(e.target.value)}
+                    disabled={loadingRefs}
+                  >
+                    <option value="">
+                      {locale === "tr"
+                        ? "Müşteri seçmeden devam et"
+                        : "Continue without customer"}
+                    </option>
+                    {filteredCustomers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.fullName}
+                        {c.companyName ? ` (${c.companyName})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
             ) : (
-              <div />
+              <>
+                <input
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  placeholder={locale === "tr" ? "Kişi adı" : "Contact name"}
+                />
+
+                <input
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder={locale === "tr" ? "Şirket / Kurum adı" : "Company name"}
+                />
+
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder={locale === "tr" ? "Telefon" : "Phone"}
+                />
+
+                <input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={locale === "tr" ? "E-posta" : "Email"}
+                />
+              </>
             )}
 
             {createKind === "PRESENTATION" ? (
@@ -499,21 +646,13 @@ export default function MeetingsPage() {
                 <input
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
-                  placeholder={safeTranslate(
-                    t,
-                    "meetings.fields.projectName",
-                    locale === "tr" ? "Proje adı" : "Project name",
-                  )}
+                  placeholder={locale === "tr" ? "Proje adı" : "Project name"}
                 />
 
                 <input
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  placeholder={safeTranslate(
-                    t,
-                    "meetings.fields.location",
-                    locale === "tr" ? "Lokasyon" : "Location",
-                  )}
+                  placeholder={locale === "tr" ? "Lokasyon" : "Location"}
                 />
               </>
             ) : null}
@@ -522,40 +661,32 @@ export default function MeetingsPage() {
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder={safeTranslate(
-              t,
-              "meetings.fields.notes",
-              locale === "tr" ? "Notlar" : "Notes",
-            )}
+            placeholder={locale === "tr" ? "Notlar" : "Notes"}
           />
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-            <button onClick={() => setShowCreate(false)}>
+            <button
+              type="button"
+              onClick={() => {
+                resetCreateForm();
+                setShowCreate(false);
+              }}
+            >
               {t("common.cancel")}
             </button>
 
             <button
               className="primary"
               onClick={createMeeting}
-              disabled={
-                saving ||
-                !title.trim() ||
-                !meetingAt ||
-                (createKind === "AGENCY" && !agencyId) ||
-                (createKind === "PRESENTATION" && !customerId)
-              }
+              disabled={saving || !title.trim() || !meetingAt}
             >
               {saving
-                ? safeTranslate(
-                    t,
-                    "meetings.creating",
-                    locale === "tr" ? "Oluşturuluyor..." : "Creating...",
-                  )
-                : safeTranslate(
-                    t,
-                    "meetings.createMeeting",
-                    locale === "tr" ? "Toplantı Oluştur" : "Create Meeting",
-                  )}
+                ? locale === "tr"
+                  ? "Oluşturuluyor..."
+                  : "Creating..."
+                : locale === "tr"
+                  ? "Toplantı Oluştur"
+                  : "Create Meeting"}
             </button>
           </div>
         </div>
@@ -582,35 +713,17 @@ export default function MeetingsPage() {
         }}
       >
         <div className="card">
-          <div className="muted">
-            {safeTranslate(
-              t,
-              "meetings.stats.total",
-              locale === "tr" ? "Toplam" : "Total",
-            )}
-          </div>
+          <div className="muted">{locale === "tr" ? "Toplam" : "Total"}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{total}</div>
         </div>
 
         <div className="card">
-          <div className="muted">
-            {safeTranslate(
-              t,
-              "meetings.stats.upcoming",
-              locale === "tr" ? "Yaklaşan" : "Upcoming",
-            )}
-          </div>
+          <div className="muted">{locale === "tr" ? "Yaklaşan" : "Upcoming"}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{upcomingCount}</div>
         </div>
 
         <div className="card">
-          <div className="muted">
-            {safeTranslate(
-              t,
-              "meetings.stats.past",
-              locale === "tr" ? "Geçmiş" : "Past",
-            )}
-          </div>
+          <div className="muted">{locale === "tr" ? "Geçmiş" : "Past"}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{pastCount}</div>
         </div>
       </div>
@@ -619,69 +732,63 @@ export default function MeetingsPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 180px 180px 180px 140px auto",
+            gridTemplateColumns: "1fr 160px 180px 180px 180px 140px auto auto",
             gap: 10,
           }}
         >
           <input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder={safeTranslate(
-              t,
-              "meetings.searchPlaceholder",
+            placeholder={
               locale === "tr"
-                ? "Başlık, müşteri, ajans, proje ara..."
-                : "Search title, customer, agency, project...",
-            )}
+                ? "Başlık, müşteri, ajans, proje, kişi veya şirket ara..."
+                : "Search title, customer, agency, project, contact or company..."
+            }
             onKeyDown={(e) => {
               if (e.key === "Enter") runSearch();
             }}
           />
 
-          <select
-            value={kind}
-            onChange={(e) => setKind(e.target.value as MeetingKindFilter)}
-          >
+          <select value={kind} onChange={(e) => setKind(e.target.value as MeetingKindFilter)}>
             {KIND_OPTIONS.map((option) => (
               <option key={option} value={option}>
                 {option === "ALL"
-                  ? safeTranslate(
-                      t,
-                      "meetings.allKinds",
-                      locale === "tr" ? "Tüm Türler" : "All Types",
-                    )
+                  ? locale === "tr"
+                    ? "Tüm Türler"
+                    : "All Types"
                   : kindLabel(option)}
               </option>
             ))}
           </select>
 
-          <input
-            type="datetime-local"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-
-          <input
-            type="datetime-local"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
-
           <select
-            value={pageSize}
-            onChange={(e) => setPageSize(Number(e.target.value))}
+            value={salesFilterId}
+            onChange={(e) => setSalesFilterId(e.target.value)}
+            disabled={loadingRefs}
           >
+            <option value="">{locale === "tr" ? "Tüm satışlar" : "All sales reps"}</option>
+            {salesUsers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+
+          <input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <input type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} />
+
+          <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
             <option value={20}>20 / {t("agencies.perPage")}</option>
             <option value={50}>50 / {t("agencies.perPage")}</option>
             <option value={100}>100 / {t("agencies.perPage")}</option>
           </select>
 
           <button onClick={runSearch} disabled={loading}>
-            {safeTranslate(
-              t,
-              "meetings.searchAndRefresh",
-              locale === "tr" ? "Ara / Yenile" : "Search / Refresh",
-            )}
+            {locale === "tr" ? "Ara" : "Search"}
+          </button>
+
+          <button onClick={clearFilters} disabled={loading}>
+            {locale === "tr" ? "Temizle" : "Clear"}
           </button>
         </div>
       </div>
@@ -690,55 +797,14 @@ export default function MeetingsPage() {
         <table>
           <thead>
             <tr>
-              <th>
-                {safeTranslate(
-                  t,
-                  "meetings.table.title",
-                  locale === "tr" ? "Toplantı" : "Meeting",
-                )}
-              </th>
-              <th>
-                {safeTranslate(
-                  t,
-                  "meetings.table.kind",
-                  locale === "tr" ? "Tür" : "Type",
-                )}
-              </th>
-              <th>
-                {safeTranslate(
-                  t,
-                  "meetings.table.related",
-                  locale === "tr" ? "İlişkili" : "Related",
-                )}
-              </th>
-              <th>
-                {safeTranslate(
-                  t,
-                  "meetings.table.sales",
-                  locale === "tr" ? "Satış" : "Sales",
-                )}
-              </th>
-              <th>
-                {safeTranslate(
-                  t,
-                  "meetings.table.meetingAt",
-                  locale === "tr" ? "Tarih" : "Meeting Time",
-                )}
-              </th>
-              <th>
-                {safeTranslate(
-                  t,
-                  "meetings.table.createdBy",
-                  locale === "tr" ? "Oluşturan" : "Created By",
-                )}
-              </th>
-              <th>
-                {safeTranslate(
-                  t,
-                  "meetings.table.actions",
-                  locale === "tr" ? "İşlem" : "Actions",
-                )}
-              </th>
+              <th>{locale === "tr" ? "Toplantı" : "Meeting"}</th>
+              <th>{locale === "tr" ? "Tür" : "Type"}</th>
+              <th>{locale === "tr" ? "İlişkili" : "Related"}</th>
+              <th>{locale === "tr" ? "Durum" : "Status"}</th>
+              <th>{locale === "tr" ? "Satış" : "Sales"}</th>
+              <th>{locale === "tr" ? "Tarih" : "Meeting Time"}</th>
+              <th>{locale === "tr" ? "Oluşturan" : "Created By"}</th>
+              <th>{locale === "tr" ? "İşlem" : "Actions"}</th>
             </tr>
           </thead>
 
@@ -772,23 +838,38 @@ export default function MeetingsPage() {
 
                 <td>
                   <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
-                    {item.kind === "AGENCY" ? (
-                      item.agency ? (
-                        <Link href={`/agencies/${item.agency.id}`}>
-                          {item.agency.name}
-                        </Link>
-                      ) : (
-                        "-"
-                      )
+                    {item.kind === "OTHER" ? (
+                      <>
+                        <b>{item.contactName || item.companyName || "-"}</b>
+                        {item.companyName && item.contactName ? (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            {item.companyName}
+                          </span>
+                        ) : null}
+                        {item.phone ? (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            {item.phone}
+                          </span>
+                        ) : null}
+                        {item.email ? (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            {item.email}
+                          </span>
+                        ) : null}
+                      </>
                     ) : (
                       <>
+                        {item.agency ? (
+                          <Link href={`/agencies/${item.agency.id}`}>{item.agency.name}</Link>
+                        ) : null}
+
                         {item.customer ? (
                           <Link href={`/customers/${item.customer.id}`}>
                             {item.customer.fullName}
                           </Link>
-                        ) : (
-                          "-"
-                        )}
+                        ) : null}
+
+                        {!item.agency && !item.customer ? "-" : null}
 
                         {item.projectName ? (
                           <span className="muted" style={{ fontSize: 12 }}>
@@ -806,14 +887,26 @@ export default function MeetingsPage() {
                   </div>
                 </td>
 
+                <td>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <span className={`badge ${statusBadgeClass(item.status)}`}>
+                      {statusLabel(item.status)}
+                    </span>
+
+                    {item.outcome ? (
+                      <span className="muted" style={{ fontSize: 12 }}>
+                        {outcomeLabel(item.outcome)}
+                      </span>
+                    ) : null}
+                  </div>
+                </td>
+
                 <td>{item.assignedSales?.name || "-"}</td>
 
                 <td>
                   <div
                     style={{
-                      color: isPast(item.meetingAt)
-                        ? "var(--text-secondary)"
-                        : "inherit",
+                      color: isPast(item.meetingAt) ? "var(--text-secondary)" : "inherit",
                       fontWeight: isPast(item.meetingAt) ? 500 : 800,
                     }}
                   >
@@ -824,15 +917,27 @@ export default function MeetingsPage() {
                 <td>{item.createdBy?.name || "-"}</td>
 
                 <td>
-                  <Link href={`/meetings/${item.id}?kind=${item.kind}`}>
-                    <button>
-                      {safeTranslate(
-                        t,
-                        "meetings.openDetail",
-                        locale === "tr" ? "Detay Aç" : "Open Detail",
-                      )}
-                    </button>
-                  </Link>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <Link href={`/meetings/${item.id}?kind=${item.kind}`}>
+                      <button>{locale === "tr" ? "Detay" : "Detail"}</button>
+                    </Link>
+
+                    {canModify(item) ? (
+                      <button
+                        className="danger"
+                        onClick={() => deleteMeeting(item)}
+                        disabled={deletingId === item.id}
+                      >
+                        {deletingId === item.id
+                          ? locale === "tr"
+                            ? "Siliniyor..."
+                            : "Deleting..."
+                          : locale === "tr"
+                            ? "Sil"
+                            : "Delete"}
+                      </button>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -841,11 +946,7 @@ export default function MeetingsPage() {
 
         {items.length === 0 ? (
           <div style={{ padding: 14, color: "var(--text-secondary)" }}>
-            {safeTranslate(
-              t,
-              "meetings.noMeetings",
-              locale === "tr" ? "Toplantı bulunamadı." : "No meetings found.",
-            )}
+            {locale === "tr" ? "Toplantı bulunamadı." : "No meetings found."}
           </div>
         ) : null}
       </div>
@@ -859,7 +960,7 @@ export default function MeetingsPage() {
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button
               onClick={() =>
-                load(Math.max(1, page - 1), kind, q, pageSize, from, to)
+                load(Math.max(1, page - 1), kind, q, pageSize, from, to, salesFilterId)
               }
               disabled={page <= 1 || loading}
             >
@@ -872,7 +973,7 @@ export default function MeetingsPage() {
 
             <button
               onClick={() =>
-                load(Math.min(totalPages, page + 1), kind, q, pageSize, from, to)
+                load(Math.min(totalPages, page + 1), kind, q, pageSize, from, to, salesFilterId)
               }
               disabled={page >= totalPages || loading}
             >

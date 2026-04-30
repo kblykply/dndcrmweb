@@ -151,6 +151,12 @@ export default function AgenciesPage() {
     role === "MANAGER" || role === "ADMIN" || role === "SALES";
   const canDelete = role === "MANAGER" || role === "ADMIN";
 
+
+
+
+const [filterSalesId, setFilterSalesId] = useState<string>("");
+
+
   function hiddenText() {
     return safeTranslate(
       t,
@@ -192,6 +198,7 @@ setCreateStatus("ACTIVE");
 
       if (nextQ.trim()) params.set("q", nextQ.trim());
       if (nextStatus !== "ALL") params.set("status", nextStatus);
+      if (filterSalesId) params.set("assignedSalesId", filterSalesId);
       params.set("page", String(nextPage));
       params.set("pageSize", String(nextPageSize));
 
@@ -541,7 +548,7 @@ setCreateStatus("ACTIVE");
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 220px 140px auto",
+gridTemplateColumns: "1fr 180px 180px 140px auto",
             gap: 10,
           }}
         >
@@ -568,6 +575,28 @@ setCreateStatus("ACTIVE");
               </option>
             ))}
           </select>
+
+
+
+
+
+
+<select
+  value={filterSalesId}
+  onChange={(e) => setFilterSalesId(e.target.value)}
+>
+  <option value="">
+    {locale === "tr" ? "Tüm Sales" : "All Sales"}
+  </option>
+
+  {salesUsers.map((s) => (
+    <option key={s.id} value={s.id}>
+      {s.name}
+    </option>
+  ))}
+</select>
+
+
 
           <select
             value={pageSize}

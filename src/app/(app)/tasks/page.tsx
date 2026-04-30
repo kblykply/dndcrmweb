@@ -102,7 +102,6 @@ function isOverdue(task?: TaskRow | null) {
   return new Date(task.dueAt).getTime() < Date.now();
 }
 
-
 export default function TasksPage() {
   const { t, locale } = useLanguage();
 
@@ -112,6 +111,7 @@ export default function TasksPage() {
   const [tab, setTab] = useState<TaskTab>("my");
   const [status, setStatus] = useState<string>("ALL");
   const [q, setQ] = useState("");
+  const [userFilterId, setUserFilterId] = useState("");
 
   const [myTasks, setMyTasks] = useState<TaskRow[]>([]);
   const [teamTasks, setTeamTasks] = useState<TaskRow[]>([]);
@@ -126,6 +126,7 @@ export default function TasksPage() {
   const [loadingTeam, setLoadingTeam] = useState(false);
   const [loadingRefs, setLoadingRefs] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [selected, setSelected] = useState<TaskRow | null>(null);
@@ -142,23 +143,21 @@ export default function TasksPage() {
 
   const socketRef = useRef<Socket | null>(null);
 
- const role = me?.role as string | undefined;
-const isAdmin = role === "ADMIN";
-const isManager = role === "MANAGER";
-const isSales = role === "SALES";
-const canSeeTeam = isAdmin || isManager;
-const canCreate = isAdmin || isManager || isSales;
+  const role = me?.role as string | undefined;
+  const isAdmin = role === "ADMIN";
+  const isManager = role === "MANAGER";
+  const isSales = role === "SALES";
+  const canSeeTeam = isAdmin || isManager;
+  const canCreate = isAdmin || isManager || isSales;
+  const canDelete = isAdmin || isManager;
 
+  useEffect(() => {
+    if (!mounted || !me?.id) return;
 
-
-useEffect(() => {
-  if (!mounted || !me?.id) return;
-
-  if (isSales && !assignedToId) {
-    setAssignedToId(me.id);
-  }
-}, [mounted, isSales, me?.id, assignedToId]);
-
+    if (isSales && !assignedToId) {
+      setAssignedToId(me.id);
+    }
+  }, [mounted, isSales, me?.id, assignedToId]);
 
   function formatDateTime(v?: string | null) {
     if (!v) return "-";
@@ -201,7 +200,11 @@ useEffect(() => {
     }
   }
 
-  async function loadTeamTasks(nextStatus = status, nextSearch = q) {
+  async function loadTeamTasks(
+    nextStatus = status,
+    nextSearch = q,
+    nextUserFilterId = userFilterId,
+  ) {
     if (!canSeeTeam) {
       setTeamTasks([]);
       return;
@@ -214,6 +217,7 @@ useEffect(() => {
       const params = new URLSearchParams();
       if (nextStatus !== "ALL") params.set("status", nextStatus);
       if (nextSearch.trim()) params.set("search", nextSearch.trim());
+      if (nextUserFilterId) params.set("assignedToId", nextUserFilterId);
 
       const res = await authedFetch(`/tasks?${params.toString()}`);
       const nextItems = Array.isArray(res) ? res : [];
@@ -233,7 +237,7 @@ useEffect(() => {
   }
 
   async function loadRefs() {
-    if (!canCreate) return;
+    if (!canCreate && !canSeeTeam) return;
 
     setLoadingRefs(true);
     try {
@@ -264,7 +268,7 @@ useEffect(() => {
 
   async function refreshActive(nextStatus = status, nextSearch = q) {
     if (tab === "team" && canSeeTeam) {
-      await loadTeamTasks(nextStatus, nextSearch);
+      await loadTeamTasks(nextStatus, nextSearch, userFilterId);
     } else {
       await loadMyTasks(nextStatus, nextSearch);
     }
@@ -281,7 +285,7 @@ useEffect(() => {
 
       await Promise.all([
         loadMyTasks(status, q),
-        canSeeTeam ? loadTeamTasks(status, q) : Promise.resolve(),
+        canSeeTeam ? loadTeamTasks(status, q, userFilterId) : Promise.resolve(),
       ]);
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -301,7 +305,7 @@ useEffect(() => {
 
       await Promise.all([
         loadMyTasks(status, q),
-        canSeeTeam ? loadTeamTasks(status, q) : Promise.resolve(),
+        canSeeTeam ? loadTeamTasks(status, q, userFilterId) : Promise.resolve(),
       ]);
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -310,47 +314,79 @@ useEffect(() => {
     }
   }
 
- async function createTask() {
-  if (!title.trim() || !assignedToId) return;
+  async function deleteTask(taskId: string) {
+    if (!canDelete) return;
 
-  setCreating(true);
-  setErr(null);
+    const confirmed = window.confirm(
+      locale === "tr"
+        ? "Bu görevi kalıcı olarak silmek istediğinize emin misiniz?"
+        : "Are you sure you want to permanently delete this task?",
+    );
 
-  try {
-    await authedFetch("/tasks", {
-      method: "POST",
-      body: JSON.stringify({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        priority,
-        dueAt: dueAt ? new Date(dueAt).toISOString() : null,
-        assignedToId,
-        leadId: leadId || null,
-        agencyId: agencyId || null,
-        customerId: customerId || null,
-      }),
-    });
+    if (!confirmed) return;
 
-    setTitle("");
-    setDescription("");
-    setPriority("MEDIUM");
-    setDueAt("");
-    setAssignedToId("");
-    setLeadId("");
-    setAgencyId("");
-    setCustomerId("");
-    setShowCreate(false);
+    setDeletingId(taskId);
+    setErr(null);
 
-    await Promise.all([
-      loadMyTasks(status, q),
-      canSeeTeam ? loadTeamTasks(status, q) : Promise.resolve(),
-    ]);
-  } catch (e: any) {
-    setErr(String(e?.message || e));
-  } finally {
-    setCreating(false);
+    try {
+      await authedFetch(`/tasks/${taskId}`, {
+        method: "DELETE",
+      });
+
+      setSelected((prev) => (prev?.id === taskId ? null : prev));
+
+      await Promise.all([
+        loadMyTasks(status, q),
+        canSeeTeam ? loadTeamTasks(status, q, userFilterId) : Promise.resolve(),
+      ]);
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setDeletingId(null);
+    }
   }
-}
+
+  async function createTask() {
+    if (!title.trim() || !assignedToId) return;
+
+    setCreating(true);
+    setErr(null);
+
+    try {
+      await authedFetch("/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim() || undefined,
+          priority,
+          dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+          assignedToId,
+          leadId: leadId || null,
+          agencyId: agencyId || null,
+          customerId: customerId || null,
+        }),
+      });
+
+      setTitle("");
+      setDescription("");
+      setPriority("MEDIUM");
+      setDueAt("");
+      setAssignedToId(isSales && me?.id ? me.id : "");
+      setLeadId("");
+      setAgencyId("");
+      setCustomerId("");
+      setShowCreate(false);
+
+      await Promise.all([
+        loadMyTasks(status, q),
+        canSeeTeam ? loadTeamTasks(status, q, userFilterId) : Promise.resolve(),
+      ]);
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setCreating(false);
+    }
+  }
 
   useEffect(() => {
     setMounted(true);
@@ -365,15 +401,15 @@ useEffect(() => {
 
   useEffect(() => {
     if (!mounted || !canSeeTeam) return;
-    loadTeamTasks();
+    loadTeamTasks(status, q, userFilterId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, canSeeTeam]);
 
   useEffect(() => {
-    if (!mounted || !canCreate) return;
+    if (!mounted || (!canCreate && !canSeeTeam)) return;
     loadRefs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, canCreate]);
+  }, [mounted, canCreate, canSeeTeam]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -408,7 +444,7 @@ useEffect(() => {
 
       await Promise.all([
         loadMyTasks(status, q),
-        canSeeTeam ? loadTeamTasks(status, q) : Promise.resolve(),
+        canSeeTeam ? loadTeamTasks(status, q, userFilterId) : Promise.resolve(),
       ]);
     };
 
@@ -419,7 +455,8 @@ useEffect(() => {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [mounted, canSeeTeam, status, q]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, canSeeTeam, status, q, userFilterId]);
 
   const activeTasks = useMemo(() => {
     const source = tab === "team" && canSeeTeam ? teamTasks : myTasks;
@@ -483,9 +520,15 @@ useEffect(() => {
               locale === "tr" ? "Görev Yönetimi" : "Task Management",
             )}
           </div>
+
           <div style={{ fontSize: 28, fontWeight: 900 }}>
-            {safeTranslate(t, "tasks.title", locale === "tr" ? "Görevler" : "Tasks")}
+            {safeTranslate(
+              t,
+              "tasks.title",
+              locale === "tr" ? "Görevler" : "Tasks",
+            )}
           </div>
+
           <div className="muted" style={{ fontSize: 13 }}>
             {safeTranslate(
               t,
@@ -513,6 +556,7 @@ useEffect(() => {
                   locale === "tr" ? "Görevlerim" : "My Tasks",
                 )}
               </button>
+
               <button
                 className={tab === "team" ? "primary" : ""}
                 onClick={() => {
@@ -530,10 +574,7 @@ useEffect(() => {
           ) : null}
 
           {canCreate ? (
-            <button
-              className="primary"
-              onClick={() => setShowCreate((v) => !v)}
-            >
+            <button className="primary" onClick={() => setShowCreate((v) => !v)}>
               {showCreate
                 ? safeTranslate(t, "common.close", locale === "tr" ? "Kapat" : "Close")
                 : safeTranslate(
@@ -578,10 +619,10 @@ useEffect(() => {
             />
 
             <select
-  value={assignedToId}
-  onChange={(e) => setAssignedToId(e.target.value)}
-  disabled={loadingRefs || isSales}
->
+              value={assignedToId}
+              onChange={(e) => setAssignedToId(e.target.value)}
+              disabled={loadingRefs || isSales}
+            >
               <option value="">
                 {safeTranslate(
                   t,
@@ -589,6 +630,7 @@ useEffect(() => {
                   locale === "tr" ? "Atanacak kişi seç" : "Select assignee",
                 )}
               </option>
+
               {assignableUsers.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name} {u.role ? `(${u.role})` : ""}
@@ -611,17 +653,9 @@ useEffect(() => {
               onChange={(e) => setDueAt(e.target.value)}
             />
 
-            <select
-              value={leadId}
-              onChange={(e) => setLeadId(e.target.value)}
-              disabled={loadingRefs}
-            >
+            <select value={leadId} onChange={(e) => setLeadId(e.target.value)} disabled={loadingRefs}>
               <option value="">
-                {safeTranslate(
-                  t,
-                  "tasks.fields.selectLead",
-                  locale === "tr" ? "Lead seç" : "Select lead",
-                )}
+                {safeTranslate(t, "tasks.fields.selectLead", locale === "tr" ? "Lead seç" : "Select lead")}
               </option>
               {leads.map((lead) => (
                 <option key={lead.id} value={lead.id}>
@@ -702,6 +736,7 @@ useEffect(() => {
             <button onClick={() => setShowCreate(false)}>
               {safeTranslate(t, "common.cancel", locale === "tr" ? "Vazgeç" : "Cancel")}
             </button>
+
             <button
               className="primary"
               onClick={createTask}
@@ -749,22 +784,27 @@ useEffect(() => {
           </div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.all}</div>
         </div>
+
         <div className="card">
           <div className="muted">{statusLabel("TODO")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.todo}</div>
         </div>
+
         <div className="card">
           <div className="muted">{statusLabel("IN_PROGRESS")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.inProgress}</div>
         </div>
+
         <div className="card">
           <div className="muted">{statusLabel("DONE")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.done}</div>
         </div>
+
         <div className="card">
           <div className="muted">{statusLabel("CANCELLED")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.cancelled}</div>
         </div>
+
         <div className="card">
           <div className="muted">
             {safeTranslate(t, "tasks.stats.overdue", locale === "tr" ? "Geciken" : "Overdue")}
@@ -777,7 +817,10 @@ useEffect(() => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 200px auto",
+            gridTemplateColumns:
+              tab === "team" && canSeeTeam
+                ? "1fr 200px 220px auto"
+                : "1fr 200px auto",
             gap: 10,
           }}
         >
@@ -811,6 +854,28 @@ useEffect(() => {
             <option value="DONE">{statusLabel("DONE")}</option>
             <option value="CANCELLED">{statusLabel("CANCELLED")}</option>
           </select>
+
+          {tab === "team" && canSeeTeam ? (
+            <select
+              value={userFilterId}
+              onChange={(e) => {
+                const next = e.target.value;
+                setUserFilterId(next);
+                loadTeamTasks(status, q, next);
+              }}
+              disabled={loadingRefs}
+            >
+              <option value="">
+                {locale === "tr" ? "Tüm kullanıcılar" : "All users"}
+              </option>
+
+              {assignableUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} {u.role ? `(${u.role})` : ""}
+                </option>
+              ))}
+            </select>
+          ) : null}
 
           <button onClick={() => refreshActive(status, q)} disabled={loadingMy || loadingTeam}>
             {safeTranslate(
@@ -855,6 +920,7 @@ useEffect(() => {
             <tbody>
               {activeTasks.map((task) => {
                 const saving = savingId === task.id;
+                const deleting = deletingId === task.id;
                 const overdue = isOverdue(task);
 
                 return (
@@ -933,11 +999,11 @@ useEffect(() => {
 
                     <td>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {(task.status === "TODO" || task.status === "IN_PROGRESS") ? (
+                        {task.status === "TODO" || task.status === "IN_PROGRESS" ? (
                           <button
                             className="primary"
                             onClick={() => markDone(task.id)}
-                            disabled={saving}
+                            disabled={saving || deleting}
                           >
                             {saving
                               ? safeTranslate(
@@ -953,15 +1019,31 @@ useEffect(() => {
                           </button>
                         ) : null}
 
-                        {(isAdmin || isManager) &&
+                        {canDelete &&
                         task.status !== "DONE" &&
                         task.status !== "CANCELLED" ? (
-                          <button onClick={() => cancelTask(task.id)} disabled={saving}>
+                          <button onClick={() => cancelTask(task.id)} disabled={saving || deleting}>
                             {safeTranslate(
                               t,
                               "tasks.actions.cancel",
                               locale === "tr" ? "İptal Et" : "Cancel",
                             )}
+                          </button>
+                        ) : null}
+
+                        {canDelete ? (
+                          <button
+                            className="danger"
+                            onClick={() => deleteTask(task.id)}
+                            disabled={saving || deleting}
+                          >
+                            {deleting
+                              ? locale === "tr"
+                                ? "Siliniyor..."
+                                : "Deleting..."
+                              : locale === "tr"
+                                ? "Sil"
+                                : "Delete"}
                           </button>
                         ) : null}
                       </div>
@@ -1007,6 +1089,7 @@ useEffect(() => {
                     )}
                   </button>
                 </Link>
+
                 <button onClick={() => setSelected(null)}>
                   {safeTranslate(t, "common.close", locale === "tr" ? "Kapat" : "Close")}
                 </button>
@@ -1017,9 +1100,11 @@ useEffect(() => {
               <span className={`badge ${statusBadgeClass(selected.status)}`}>
                 {statusLabel(selected.status)}
               </span>
+
               <span className={`badge ${priorityBadgeClass(selected.priority)}`}>
                 {priorityLabel(selected.priority)}
               </span>
+
               {isOverdue(selected) ? (
                 <span className="badge danger">
                   {safeTranslate(
@@ -1046,20 +1131,28 @@ useEffect(() => {
                 <b>{safeTranslate(t, "tasks.detail.dueAt", locale === "tr" ? "Termin" : "Due")}:</b>{" "}
                 {formatDateTime(selected.dueAt)}
               </div>
+
               <div>
-                <b>{safeTranslate(
-                  t,
-                  "tasks.detail.assignedTo",
-                  locale === "tr" ? "Atanan" : "Assigned to",
-                )}:</b>{" "}
+                <b>
+                  {safeTranslate(
+                    t,
+                    "tasks.detail.assignedTo",
+                    locale === "tr" ? "Atanan" : "Assigned to",
+                  )}
+                  :
+                </b>{" "}
                 {selected.assignedTo?.name || "-"}
               </div>
+
               <div>
-                <b>{safeTranslate(
-                  t,
-                  "tasks.detail.createdBy",
-                  locale === "tr" ? "Oluşturan" : "Created by",
-                )}:</b>{" "}
+                <b>
+                  {safeTranslate(
+                    t,
+                    "tasks.detail.createdBy",
+                    locale === "tr" ? "Oluşturan" : "Created by",
+                  )}
+                  :
+                </b>{" "}
                 {selected.createdBy?.name || "-"}
               </div>
 
@@ -1072,23 +1165,33 @@ useEffect(() => {
 
               {selected.customer ? (
                 <div>
-                  <b>{safeTranslate(
-                    t,
-                    "tasks.detail.customer",
-                    locale === "tr" ? "Müşteri" : "Customer",
-                  )}:</b>{" "}
-                  <Link href={`/customers/${selected.customer.id}`}>{selected.customer.fullName}</Link>
+                  <b>
+                    {safeTranslate(
+                      t,
+                      "tasks.detail.customer",
+                      locale === "tr" ? "Müşteri" : "Customer",
+                    )}
+                    :
+                  </b>{" "}
+                  <Link href={`/customers/${selected.customer.id}`}>
+                    {selected.customer.fullName}
+                  </Link>
                 </div>
               ) : null}
 
               {selected.agency ? (
                 <div>
-                  <b>{safeTranslate(
-                    t,
-                    "tasks.detail.agency",
-                    locale === "tr" ? "Ajans" : "Agency",
-                  )}:</b>{" "}
-                  <Link href={`/agencies/${selected.agency.id}`}>{selected.agency.name}</Link>
+                  <b>
+                    {safeTranslate(
+                      t,
+                      "tasks.detail.agency",
+                      locale === "tr" ? "Ajans" : "Agency",
+                    )}
+                    :
+                  </b>{" "}
+                  <Link href={`/agencies/${selected.agency.id}`}>
+                    {selected.agency.name}
+                  </Link>
                 </div>
               ) : null}
             </div>
@@ -1110,11 +1213,11 @@ useEffect(() => {
             ) : null}
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {(selected.status === "TODO" || selected.status === "IN_PROGRESS") ? (
+              {selected.status === "TODO" || selected.status === "IN_PROGRESS" ? (
                 <button
                   className="primary"
                   onClick={() => markDone(selected.id)}
-                  disabled={savingId === selected.id}
+                  disabled={savingId === selected.id || deletingId === selected.id}
                 >
                   {savingId === selected.id
                     ? safeTranslate(
@@ -1130,18 +1233,34 @@ useEffect(() => {
                 </button>
               ) : null}
 
-              {(isAdmin || isManager) &&
+              {canDelete &&
               selected.status !== "DONE" &&
               selected.status !== "CANCELLED" ? (
                 <button
                   onClick={() => cancelTask(selected.id)}
-                  disabled={savingId === selected.id}
+                  disabled={savingId === selected.id || deletingId === selected.id}
                 >
                   {safeTranslate(
                     t,
                     "tasks.actions.cancel",
                     locale === "tr" ? "İptal Et" : "Cancel",
                   )}
+                </button>
+              ) : null}
+
+              {canDelete ? (
+                <button
+                  className="danger"
+                  onClick={() => deleteTask(selected.id)}
+                  disabled={savingId === selected.id || deletingId === selected.id}
+                >
+                  {deletingId === selected.id
+                    ? locale === "tr"
+                      ? "Siliniyor..."
+                      : "Deleting..."
+                    : locale === "tr"
+                      ? "Sil"
+                      : "Delete"}
                 </button>
               ) : null}
             </div>

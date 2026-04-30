@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
+import Link from "next/link";
+
 
 type AgencyStatus = "ACTIVE" | "PASSIVE" | "PROSPECT" | "DEALING" | "CLOSED";
 type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
@@ -700,7 +702,21 @@ meetings.map((m) => (
                     gap: 6,
                   }}
                 >
-                  <div style={{ fontWeight: 800 }}>{m.title}</div>
+<Link
+
+  href={`/meetings/${m.id}`}
+
+  target="_blank"
+
+  rel="noopener noreferrer"
+
+  style={{ fontWeight: 800, color: "inherit", textDecoration: "none" }}
+
+>
+
+  {m.title}
+
+</Link>
                   <div className="muted" style={{ fontSize: 12 }}>
                     {new Date(m.meetingAt).toLocaleString(
                       locale === "tr" ? "tr-TR" : "en-US",
@@ -794,7 +810,14 @@ tasks.map((task) => (
               >
                 <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
                   <div style={{ display: "grid", gap: 4 }}>
-                    <div style={{ fontWeight: 800 }}>{task.title}</div>
+<Link
+  href={`/tasks/${task.id}`}
+  target="_blank"
+  rel="noopener noreferrer"
+  style={{ fontWeight: 800, color: "inherit", textDecoration: "none" }}
+>
+  {task.title}
+</Link>
                     <div className="muted" style={{ fontSize: 12 }}>
                       {task.assignedTo?.name || t("agencyDetail.unassigned")} •{" "}
                       {task.dueAt

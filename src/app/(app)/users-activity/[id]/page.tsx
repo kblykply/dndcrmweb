@@ -15,6 +15,8 @@ const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
   { key: "90D", label: "Last 90 days" },
 ];
 
+const INITIAL_VISIBLE_ROWS = 25;
+
 export default function UserActivityDetailPage() {
   const params = useParams();
   const userId = Array.isArray((params as any)?.id)
@@ -22,8 +24,9 @@ export default function UserActivityDetailPage() {
     : (params as any)?.id;
 
   const [data, setData] = useState<any>(null);
-  const [range, setRange] = useState<RangeKey>("WEEK");
+  const [range, setRange] = useState<RangeKey>("ALL");
   const [q, setQ] = useState("");
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -36,6 +39,7 @@ export default function UserActivityDetailPage() {
     try {
       const res = await authedFetch(`/user-activity/${userId}`);
       setData(res);
+      setVisibleCounts({});
     } catch (e: any) {
       setErr(String(e?.message || e));
       setData(null);
@@ -46,6 +50,7 @@ export default function UserActivityDetailPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   function dateFromRange() {
@@ -76,28 +81,67 @@ export default function UserActivityDetailPage() {
     return start;
   }
 
+  function getDate(item: any) {
+    return (
+      item.meetingAt ||
+      item.presentationAt ||
+      item.dueAt ||
+      item.createdAt ||
+      item.updatedAt
+    );
+  }
+
   function inRange(item: any) {
     const from = dateFromRange();
     if (!from) return true;
 
-    const raw =
-      item.createdAt ||
-      item.updatedAt ||
-      item.dueAt ||
-      item.meetingAt ||
-      item.presentationAt;
-
+    const raw = getDate(item);
     if (!raw) return false;
 
     return new Date(raw).getTime() >= from.getTime();
   }
 
+  function searchableText(item: any) {
+    return [
+      item.title,
+      item.fullName,
+      item.name,
+      item.summary,
+      item.details,
+      item.description,
+      item.notes,
+      item.notesSummary,
+      item.conclusionNote,
+      item.note,
+      item.type,
+      item.status,
+      item.outcome,
+      item.priority,
+      item.callOutcome,
+      item.projectName,
+      item.location,
+      item.contactName,
+      item.companyName,
+      item.phone,
+      item.email,
+      item.lead?.fullName,
+      item.lead?.phone,
+      item.customer?.fullName,
+      item.customer?.companyName,
+      item.agency?.name,
+      item.createdBy?.name,
+      item.assignedTo?.name,
+      item.assignedSales?.name,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  }
+
   function matchesSearch(item: any) {
     const search = q.trim().toLowerCase();
     if (!search) return true;
-
-    const text = JSON.stringify(item || {}).toLowerCase();
-    return text.includes(search);
+    return searchableText(item).includes(search);
   }
 
   function filterRows(items?: any[]) {
@@ -116,7 +160,7 @@ export default function UserActivityDetailPage() {
       },
       {
         title: "CRM Tasks Created",
-        type: "crmTask",
+        type: "crmTaskCreated",
         rows: filterRows(data.crmTasksCreated),
       },
       {
@@ -126,13 +170,23 @@ export default function UserActivityDetailPage() {
       },
       {
         title: "Agency Tasks Created",
-        type: "agencyTask",
+        type: "agencyTaskCreated",
         rows: filterRows(data.agencyTasksCreated),
       },
       {
-        title: "Agency Meetings Created",
+        title: "Agency Meetings Assigned",
         type: "agencyMeeting",
-        rows: filterRows(data.agencyMeetingsAuthored),
+        rows: filterRows(data.agencyMeetingsAssigned),
+      },
+      {
+        title: "Presentations Assigned",
+        type: "presentation",
+        rows: filterRows(data.presentationsAssigned),
+      },
+      {
+        title: "Other Meetings Assigned",
+        type: "otherMeeting",
+        rows: filterRows(data.otherMeetingsAssigned),
       },
       {
         title: "Agency Notes Created",
@@ -145,16 +199,6 @@ export default function UserActivityDetailPage() {
         rows: filterRows(data.activities),
       },
       {
-        title: "Presentations Created",
-        type: "presentation",
-        rows: filterRows(data.presentationsCreated),
-      },
-      {
-        title: "Presentations Assigned",
-        type: "presentation",
-        rows: filterRows(data.presentationsAssigned),
-      },
-      {
         title: "Owned Customers",
         type: "customer",
         rows: filterRows(data.ownedCustomers),
@@ -163,15 +207,19 @@ export default function UserActivityDetailPage() {
   }, [data, range, q]);
 
   const stats = useMemo(() => {
-    const allRows = sections.flatMap((s) => s.rows);
-
     return {
-      total: allRows.length,
+      total: sections.reduce((sum, s) => sum + s.rows.length, 0),
       tasks: sections
-        .filter((s) => s.type === "crmTask" || s.type === "agencyTask")
+        .filter((s) =>
+          ["crmTask", "crmTaskCreated", "agencyTask", "agencyTaskCreated"].includes(
+            s.type,
+          ),
+        )
         .reduce((sum, s) => sum + s.rows.length, 0),
       meetings: sections
-        .filter((s) => s.type === "agencyMeeting" || s.type === "presentation")
+        .filter((s) =>
+          ["agencyMeeting", "presentation", "otherMeeting"].includes(s.type),
+        )
         .reduce((sum, s) => sum + s.rows.length, 0),
       leads: sections
         .filter((s) => s.type === "leadActivity")
@@ -181,6 +229,13 @@ export default function UserActivityDetailPage() {
         .reduce((sum, s) => sum + s.rows.length, 0),
     };
   }, [sections]);
+
+  function showMore(type: string) {
+    setVisibleCounts((prev) => ({
+      ...prev,
+      [type]: (prev[type] || INITIAL_VISIBLE_ROWS) + INITIAL_VISIBLE_ROWS,
+    }));
+  }
 
   if (loading) return <div className="card">Loading user activity...</div>;
 
@@ -216,10 +271,7 @@ export default function UserActivityDetailPage() {
       </div>
 
       {err ? (
-        <div
-          className="card"
-          style={{ border: "1px solid rgba(239,68,68,.35)" }}
-        >
+        <div className="card" style={{ border: "1px solid rgba(239,68,68,.35)" }}>
           {err}
         </div>
       ) : null}
@@ -234,13 +286,19 @@ export default function UserActivityDetailPage() {
         >
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search activity, lead, customer, agency, task..."
+            onChange={(e) => {
+              setQ(e.target.value);
+              setVisibleCounts({});
+            }}
+            placeholder="Search activity, lead, customer, agency, task, meeting..."
           />
 
           <select
             value={range}
-            onChange={(e) => setRange(e.target.value as RangeKey)}
+            onChange={(e) => {
+              setRange(e.target.value as RangeKey);
+              setVisibleCounts({});
+            }}
           >
             {RANGE_OPTIONS.map((r) => (
               <option key={r.key} value={r.key}>
@@ -258,37 +316,62 @@ export default function UserActivityDetailPage() {
           gap: 12,
         }}
       >
-        <Stat title="Total Records" value={stats.total} />
-        <Stat title="Tasks" value={stats.tasks} />
-        <Stat title="Meetings" value={stats.meetings} />
-        <Stat title="Lead Activity" value={stats.leads} />
-        <Stat title="Customers" value={stats.customers} />
+        <Stat title="Total Records" value={stats.total} tone="info" />
+        <Stat title="Tasks" value={stats.tasks} tone="warning" />
+        <Stat title="Assigned Meetings" value={stats.meetings} tone="success" />
+        <Stat title="Lead Activity" value={stats.leads} tone="danger" />
+        <Stat title="Customers" value={stats.customers} tone="neutral" />
       </div>
 
       {sections.length === 0 ? (
         <div className="card">
           <div style={{ fontWeight: 900 }}>No activity found</div>
           <div className="muted" style={{ marginTop: 4 }}>
-            Try changing the date range or search filter.
+            Try changing the search filter.
           </div>
         </div>
       ) : (
-        sections.map((section) => (
-          <Section
-            key={section.title}
-            title={section.title}
-            type={section.type}
-            rows={section.rows}
-          />
-        ))
+        sections.map((section) => {
+          const visible = visibleCounts[section.type] || INITIAL_VISIBLE_ROWS;
+
+          return (
+            <Section
+              key={section.type}
+              title={section.title}
+              type={section.type}
+              rows={section.rows}
+              visible={visible}
+              onShowMore={() => showMore(section.type)}
+            />
+          );
+        })
       )}
     </div>
   );
 }
 
-function Stat({ title, value }: { title: string; value: number }) {
+function Stat({
+  title,
+  value,
+  tone,
+}: {
+  title: string;
+  value: number;
+  tone: "info" | "warning" | "success" | "danger" | "neutral";
+}) {
+  const color =
+    tone === "success"
+      ? "rgba(34,197,94,.12)"
+      : tone === "warning"
+        ? "rgba(245,158,11,.12)"
+        : tone === "danger"
+          ? "rgba(239,68,68,.12)"
+          : tone === "info"
+            ? "rgba(59,130,246,.12)"
+            : "var(--surface-2)";
+
   return (
-    <div className="card">
+    <div className="card" style={{ background: color }}>
       <div className="muted" style={{ fontSize: 12 }}>
         {title}
       </div>
@@ -301,23 +384,40 @@ function Section({
   title,
   type,
   rows,
+  visible,
+  onShowMore,
 }: {
   title: string;
   type: string;
   rows: any[];
+  visible: number;
+  onShowMore: () => void;
 }) {
+  const visibleRows = rows.slice(0, visible);
+  const hasMore = rows.length > visible;
+
   return (
     <div className="card" style={{ display: "grid", gap: 10 }}>
       <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 900 }}>{title}</div>
-        <span className="badge">{rows.length}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>{getTypeIcon(type)}</span>
+          <div style={{ fontWeight: 900 }}>{title}</div>
+        </div>
+
+        <span className={`badge ${getTypeBadgeClass(type)}`}>{rows.length}</span>
       </div>
 
       <div style={{ display: "grid", gap: 8 }}>
-        {rows.slice(0, 100).map((item: any) => (
+        {visibleRows.map((item: any) => (
           <ActivityCard key={`${type}-${item.id}`} type={type} item={item} />
         ))}
       </div>
+
+      {hasMore ? (
+        <button onClick={onShowMore}>
+          Show more ({rows.length - visible} remaining)
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -329,52 +429,95 @@ function ActivityCard({ type, item }: { type: string; item: any }) {
     item.title ||
     item.fullName ||
     item.name ||
+    item.summary ||
     item.note ||
     item.type ||
     item.status ||
     item.id;
 
   const date =
-    item.createdAt ||
-    item.updatedAt ||
-    item.dueAt ||
     item.meetingAt ||
-    item.presentationAt;
+    item.presentationAt ||
+    item.dueAt ||
+    item.createdAt ||
+    item.updatedAt;
+
+  const timing = getTimingInfo(type, item);
+  const description = getDescription(type, item);
 
   const content = (
     <div
       style={{
         border: "1px solid var(--stroke)",
-        borderRadius: 12,
-        padding: 12,
+        borderRadius: 14,
+        padding: 14,
         background: "var(--surface-2)",
         display: "grid",
-        gap: 7,
+        gap: 8,
         cursor: href ? "pointer" : "default",
+        borderLeft: `5px solid ${getTypeColor(type)}`,
       }}
     >
       <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
-        <div style={{ fontWeight: 900 }}>{title}</div>
+        <div style={{ display: "grid", gap: 3 }}>
+          <div style={{ fontWeight: 900 }}>
+            {getTypeIcon(type)} {title}
+          </div>
 
-        {item.status ? <span className="badge">{item.status}</span> : null}
-      </div>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {date ? new Date(date).toLocaleString() : "-"}
+          </div>
+        </div>
 
-      <div className="muted" style={{ fontSize: 12 }}>
-        {date ? new Date(date).toLocaleString() : "-"}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <span className={`badge ${getTypeBadgeClass(type)}`}>
+            {getTypeLabel(type)}
+          </span>
+
+          {item.status ? (
+            <span className={`badge ${statusBadgeClass(item.status)}`}>
+              {formatStatus(item.status)}
+            </span>
+          ) : null}
+
+          {timing ? (
+            <span className={`badge ${timing.className}`}>{timing.label}</span>
+          ) : null}
+        </div>
       </div>
 
       <MetaLine type={type} item={item} />
 
-      {item.description ? (
-        <div style={{ fontSize: 13 }}>{item.description}</div>
+      {description ? (
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.6,
+            whiteSpace: "pre-wrap",
+            background: "var(--surface)",
+            border: "1px solid var(--stroke)",
+            borderRadius: 10,
+            padding: 10,
+          }}
+        >
+          {description}
+        </div>
       ) : null}
 
-      {item.notesSummary ? (
-        <div style={{ fontSize: 13 }}>{item.notesSummary}</div>
-      ) : null}
-
-      {item.note && type !== "agencyNote" ? (
-        <div style={{ fontSize: 13 }}>{item.note}</div>
+      {item.conclusionNote ? (
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.6,
+            whiteSpace: "pre-wrap",
+            border: "1px solid rgba(34,197,94,.35)",
+            background: "rgba(34,197,94,.08)",
+            borderRadius: 10,
+            padding: 10,
+          }}
+        >
+          <b>Conclusion:</b> {item.conclusionNote}
+        </div>
       ) : null}
     </div>
   );
@@ -382,9 +525,12 @@ function ActivityCard({ type, item }: { type: string; item: any }) {
   if (!href) return content;
 
   return (
-    <Link href={href} target="_blank"
-
-  rel="noopener noreferrer"  style={{ textDecoration: "none", color: "inherit" }}>
+    <Link
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ textDecoration: "none", color: "inherit" }}
+    >
       {content}
     </Link>
   );
@@ -396,60 +542,184 @@ function MetaLine({ type, item }: { type: string; item: any }) {
   if (item.lead?.fullName) parts.push(`Lead: ${item.lead.fullName}`);
   if (item.lead?.phone) parts.push(`Phone: ${item.lead.phone}`);
   if (item.customer?.fullName) parts.push(`Customer: ${item.customer.fullName}`);
+  if (item.customer?.companyName) parts.push(`Company: ${item.customer.companyName}`);
   if (item.agency?.name) parts.push(`Agency: ${item.agency.name}`);
+
+  if (type === "otherMeeting") {
+    if (item.contactName) parts.push(`Contact: ${item.contactName}`);
+    if (item.companyName) parts.push(`Company: ${item.companyName}`);
+    if (item.phone) parts.push(`Phone: ${item.phone}`);
+    if (item.email) parts.push(`Email: ${item.email}`);
+  }
+
   if (item.assignedTo?.name) parts.push(`Assigned to: ${item.assignedTo.name}`);
   if (item.assignedSales?.name) parts.push(`Sales: ${item.assignedSales.name}`);
   if (item.createdBy?.name) parts.push(`Created by: ${item.createdBy.name}`);
   if (item.projectName) parts.push(`Project: ${item.projectName}`);
   if (item.location) parts.push(`Location: ${item.location}`);
-  if (item.outcome) parts.push(`Outcome: ${item.outcome}`);
+  if (item.outcome) parts.push(`Outcome: ${formatOutcome(item.outcome)}`);
   if (item.priority) parts.push(`Priority: ${item.priority}`);
   if (item.type && type === "leadActivity") parts.push(`Activity: ${item.type}`);
+  if (item.callOutcome) parts.push(`Call: ${item.callOutcome}`);
 
   if (parts.length === 0) return null;
 
   return (
-    <div className="muted" style={{ fontSize: 12 }}>
+    <div className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
       {parts.join(" • ")}
     </div>
   );
 }
 
+function getDescription(type: string, item: any) {
+  if (type === "leadActivity") {
+    return item.details || item.summary || item.note || null;
+  }
+
+  return (
+    item.description ||
+    item.notes ||
+    item.notesSummary ||
+    item.note ||
+    item.details ||
+    item.summary ||
+    null
+  );
+}
+
+function getTimingInfo(type: string, item: any) {
+  const date = item.meetingAt || item.presentationAt || item.dueAt;
+  if (!date) return null;
+
+  const time = new Date(date).getTime();
+  const now = Date.now();
+
+  const isTask =
+    type === "crmTask" ||
+    type === "crmTaskCreated" ||
+    type === "agencyTask" ||
+    type === "agencyTaskCreated";
+
+  const isMeeting =
+    type === "agencyMeeting" ||
+    type === "presentation" ||
+    type === "otherMeeting";
+
+  if (isTask) {
+    if (item.status === "DONE") return { label: "Done", className: "success" };
+    if (item.status === "CANCELLED") return { label: "Cancelled", className: "danger" };
+    if (time < now) return { label: "Overdue", className: "danger" };
+    return { label: "Upcoming", className: "info" };
+  }
+
+  if (isMeeting) {
+    if (item.status === "COMPLETED") return { label: "Completed", className: "success" };
+    if (item.status === "CANCELLED") return { label: "Cancelled", className: "danger" };
+    if (time > now) return { label: "Not due yet", className: "info" };
+    if (time < now && item.status !== "COMPLETED") {
+      return { label: "Needs update", className: "warning" };
+    }
+  }
+
+  return null;
+}
+
+function getTypeLabel(type: string) {
+  if (type === "crmTask") return "Assigned Task";
+  if (type === "crmTaskCreated") return "Created Task";
+  if (type === "agencyTask") return "Assigned Agency Task";
+  if (type === "agencyTaskCreated") return "Created Agency Task";
+  if (type === "agencyMeeting") return "Agency Meeting";
+  if (type === "presentation") return "Presentation";
+  if (type === "otherMeeting") return "Other Meeting";
+  if (type === "leadActivity") return "Lead Activity";
+  if (type === "customer") return "Customer";
+  if (type === "agencyNote") return "Agency Note";
+  return type;
+}
+
+function getTypeIcon(type: string) {
+  if (type === "crmTask" || type === "crmTaskCreated") return "✅";
+  if (type === "agencyTask" || type === "agencyTaskCreated") return "🧩";
+  if (type === "agencyMeeting") return "🏢";
+  if (type === "presentation") return "📊";
+  if (type === "otherMeeting") return "🤝";
+  if (type === "leadActivity") return "☎️";
+  if (type === "customer") return "👤";
+  if (type === "agencyNote") return "📝";
+  return "•";
+}
+
+function getTypeColor(type: string) {
+  if (type === "crmTask" || type === "crmTaskCreated") return "#f59e0b";
+  if (type === "agencyTask" || type === "agencyTaskCreated") return "#8b5cf6";
+  if (type === "agencyMeeting") return "#2563eb";
+  if (type === "presentation") return "#16a34a";
+  if (type === "otherMeeting") return "#0f766e";
+  if (type === "leadActivity") return "#dc2626";
+  if (type === "customer") return "#64748b";
+  if (type === "agencyNote") return "#9333ea";
+  return "#94a3b8";
+}
+
+function getTypeBadgeClass(type: string) {
+  if (type === "crmTask" || type === "crmTaskCreated") return "warning";
+  if (type === "agencyTask" || type === "agencyTaskCreated") return "info";
+  if (type === "agencyMeeting") return "info";
+  if (type === "presentation") return "success";
+  if (type === "otherMeeting") return "success";
+  if (type === "leadActivity") return "danger";
+  if (type === "agencyNote") return "warning";
+  return "";
+}
+
+function statusBadgeClass(status?: string | null) {
+  if (status === "DONE" || status === "COMPLETED") return "success";
+  if (status === "CANCELLED") return "danger";
+  if (status === "IN_PROGRESS" || status === "RESCHEDULED") return "warning";
+  return "info";
+}
+
+function formatStatus(status?: string | null) {
+  if (!status) return "-";
+
+  const labels: Record<string, string> = {
+    TODO: "To Do",
+    IN_PROGRESS: "In Progress",
+    DONE: "Done",
+    CANCELLED: "Cancelled",
+    SCHEDULED: "Scheduled",
+    COMPLETED: "Completed",
+    RESCHEDULED: "Rescheduled",
+  };
+
+  return labels[status] || status;
+}
+
+function formatOutcome(outcome?: string | null) {
+  if (!outcome) return "-";
+
+  const labels: Record<string, string> = {
+    POSITIVE: "Positive",
+    NEGATIVE: "Negative",
+    FOLLOW_UP: "Follow-up",
+    NO_DECISION: "No Decision",
+    WON: "Won",
+    LOST: "Lost",
+  };
+
+  return labels[outcome] || outcome;
+}
+
 function getRecordHref(type: string, item: any) {
-  // 🔵 CRM TASK → task detail page
-  if (type === "crmTask") {
-    return `/tasks/${item.id}`;
-  }
-
-  // 🟣 AGENCY TASK → task detail page (same page)
-  if (type === "agencyTask") {
-    return `/tasks/${item.id}`;
-  }
-
-  // 🟢 MEETING → meeting detail page
-  if (type === "agencyMeeting") {
-    return `/meetings/${item.id}`;
-  }
-
-  // 🟡 PRESENTATION (meeting) → presentation detail
-  if (type === "presentation") {
-    return `/meetings/${item.id}`;
-  }
-
-  // 🟠 LEAD ACTIVITY → go to lead
-  if (type === "leadActivity" && item.lead?.id) {
-    return `/leads/${item.lead.id}`;
-  }
-
-  // 🔴 CUSTOMER → customer detail
-  if (type === "customer") {
-    return `/customers/${item.id}`;
-  }
-
-  // 🟤 AGENCY NOTE → agency page
-  if (type === "agencyNote" && item.agency?.id) {
-    return `/agencies/${item.agency.id}`;
-  }
+  if (type === "crmTask" || type === "crmTaskCreated") return `/tasks/${item.id}`;
+  if (type === "agencyTask" || type === "agencyTaskCreated") return `/tasks/${item.id}`;
+  if (type === "agencyMeeting") return `/meetings/${item.id}?kind=AGENCY`;
+  if (type === "presentation") return `/meetings/${item.id}?kind=PRESENTATION`;
+  if (type === "otherMeeting") return `/meetings/${item.id}?kind=OTHER`;
+  if (type === "leadActivity" && item.lead?.id) return `/leads/${item.lead.id}`;
+  if (type === "customer") return `/customers/${item.id}`;
+  if (type === "agencyNote" && item.agency?.id) return `/agencies/${item.agency.id}`;
 
   return null;
 }
