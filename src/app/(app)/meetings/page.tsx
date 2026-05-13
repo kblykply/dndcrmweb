@@ -20,7 +20,7 @@ type CustomerLite = {
   companyName?: string | null;
 };
 
-type SalesUserLite = {
+type UserLite = {
   id: string;
   name: string;
   email: string;
@@ -38,7 +38,8 @@ type MeetingRow = {
 
   agency?: { id: string; name: string } | null;
   customer?: { id: string; fullName: string; companyName?: string | null } | null;
-  assignedSales?: { id: string; name: string; email: string } | null;
+
+  assignedSales?: { id: string; name: string; email: string; role?: string } | null;
   createdBy?: { id: string; name: string; email: string } | null;
 
   projectName?: string | null;
@@ -63,11 +64,7 @@ type MeetingsResponse = {
 
 const KIND_OPTIONS: MeetingKindFilter[] = ["ALL", "AGENCY", "PRESENTATION", "OTHER"];
 
-function safeTranslate(
-  t: (path: string) => string,
-  path: string,
-  fallback?: string | null,
-) {
+function safeTranslate(t: (path: string) => string, path: string, fallback?: string | null) {
   const translated = t(path);
   return translated === path ? fallback ?? path : translated;
 }
@@ -109,7 +106,7 @@ export default function MeetingsPage() {
   const [items, setItems] = useState<MeetingRow[]>([]);
   const [agencies, setAgencies] = useState<AgencyLite[]>([]);
   const [customers, setCustomers] = useState<CustomerLite[]>([]);
-  const [salesUsers, setSalesUsers] = useState<SalesUserLite[]>([]);
+  const [assignableUsers, setAssignableUsers] = useState<UserLite[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [loadingRefs, setLoadingRefs] = useState(false);
@@ -122,7 +119,7 @@ export default function MeetingsPage() {
   const [kind, setKind] = useState<MeetingKindFilter>("ALL");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [salesFilterId, setSalesFilterId] = useState("");
+  const [responsibleFilterId, setResponsibleFilterId] = useState("");
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -148,7 +145,7 @@ export default function MeetingsPage() {
 
   const [agencySearch, setAgencySearch] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
-  const [salesSearch, setSalesSearch] = useState("");
+  const [responsibleSearch, setResponsibleSearch] = useState("");
 
   const role = me?.role as string | undefined;
   const canCreate = role === "ADMIN" || role === "MANAGER" || role === "SALES";
@@ -160,11 +157,9 @@ export default function MeetingsPage() {
 
   function kindLabel(value?: string | null) {
     if (!value) return "-";
-
     if (value === "AGENCY") return locale === "tr" ? "Ajans" : "Agency";
     if (value === "PRESENTATION") return locale === "tr" ? "Sunum" : "Presentation";
     if (value === "OTHER") return locale === "tr" ? "Diğer" : "Other";
-
     return value;
   }
 
@@ -204,18 +199,17 @@ export default function MeetingsPage() {
   const filteredCustomers = useMemo(() => {
     if (!customerSearch.trim()) return customers.slice(0, 80);
     return customers
-      .filter((c) =>
-        optionMatch(`${c.fullName} ${c.companyName || ""}`, customerSearch),
-      )
+      .filter((c) => optionMatch(`${c.fullName} ${c.companyName || ""}`, customerSearch))
       .slice(0, 80);
   }, [customers, customerSearch]);
 
-  const filteredSalesUsers = useMemo(() => {
-    if (!salesSearch.trim()) return salesUsers.slice(0, 80);
-    return salesUsers
-      .filter((s) => optionMatch(`${s.name} ${s.email}`, salesSearch))
+  const filteredAssignableUsers = useMemo(() => {
+    if (!responsibleSearch.trim()) return assignableUsers.slice(0, 80);
+
+    return assignableUsers
+      .filter((u) => optionMatch(`${u.name} ${u.email} ${u.role}`, responsibleSearch))
       .slice(0, 80);
-  }, [salesUsers, salesSearch]);
+  }, [assignableUsers, responsibleSearch]);
 
   async function load(
     nextPage = page,
@@ -224,7 +218,7 @@ export default function MeetingsPage() {
     nextPageSize = pageSize,
     nextFrom = from,
     nextTo = to,
-    nextSalesFilterId = salesFilterId,
+    nextResponsibleFilterId = responsibleFilterId,
   ) {
     setErr(null);
     setLoading(true);
@@ -234,16 +228,14 @@ export default function MeetingsPage() {
 
       if (nextQ.trim()) params.set("q", nextQ.trim());
       if (nextKind !== "ALL") params.set("kind", nextKind);
-      if (nextSalesFilterId) params.set("assignedSalesId", nextSalesFilterId);
+      if (nextResponsibleFilterId) params.set("assignedSalesId", nextResponsibleFilterId);
       if (nextFrom) params.set("from", new Date(nextFrom).toISOString());
       if (nextTo) params.set("to", new Date(nextTo).toISOString());
 
       params.set("page", String(nextPage));
       params.set("pageSize", String(nextPageSize));
 
-      const res = (await authedFetch(
-        `/meetings?${params.toString()}`,
-      )) as MeetingsResponse;
+      const res = (await authedFetch(`/meetings?${params.toString()}`)) as MeetingsResponse;
 
       setItems(Array.isArray(res?.items) ? res.items : []);
       setTotal(res?.total || 0);
@@ -264,11 +256,15 @@ export default function MeetingsPage() {
     setLoadingRefs(true);
 
     try {
-      const [agenciesRes, customersRes, salesRes] = await Promise.all([
+      const [agenciesRes, customersRes, salesRes, managersRes] = await Promise.all([
         authedFetch("/agencies?page=1&pageSize=500"),
         authedFetch("/customers?page=1&pageSize=500"),
         authedFetch("/users?role=SALES"),
+        authedFetch("/users?role=MANAGER"),
       ]);
+
+      const sales = Array.isArray(salesRes) ? salesRes : [];
+      const managers = Array.isArray(managersRes) ? managersRes : [];
 
       setAgencies(Array.isArray(agenciesRes?.items) ? agenciesRes.items : []);
       setCustomers(
@@ -278,11 +274,12 @@ export default function MeetingsPage() {
             ? customersRes
             : [],
       );
-      setSalesUsers(Array.isArray(salesRes) ? salesRes : []);
+
+      setAssignableUsers([...managers, ...sales]);
     } catch {
       setAgencies([]);
       setCustomers([]);
-      setSalesUsers([]);
+      setAssignableUsers([]);
     } finally {
       setLoadingRefs(false);
     }
@@ -304,7 +301,7 @@ export default function MeetingsPage() {
     setEmail("");
     setAgencySearch("");
     setCustomerSearch("");
-    setSalesSearch("");
+    setResponsibleSearch("");
   }
 
   async function createMeeting() {
@@ -319,7 +316,10 @@ export default function MeetingsPage() {
         title: title.trim(),
         notes: notes.trim() || undefined,
         meetingAt: new Date(meetingAt).toISOString(),
-        assignedSalesId: role === "SALES" ? me?.id : assignedSalesId || undefined,
+        assignedSalesId:
+          role === "SALES" || role === "MANAGER"
+            ? me?.id
+            : assignedSalesId || undefined,
       };
 
       if (createKind === "AGENCY") {
@@ -348,7 +348,7 @@ export default function MeetingsPage() {
 
       resetCreateForm();
       setShowCreate(false);
-      await load(1, kind, q, pageSize, from, to, salesFilterId);
+      await load(1, kind, q, pageSize, from, to, responsibleFilterId);
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
@@ -373,7 +373,7 @@ export default function MeetingsPage() {
         method: "DELETE",
       });
 
-      await load(page, kind, q, pageSize, from, to, salesFilterId);
+      await load(page, kind, q, pageSize, from, to, responsibleFilterId);
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
@@ -384,7 +384,7 @@ export default function MeetingsPage() {
   function runSearch() {
     const trimmed = searchInput.trim();
     setQ(trimmed);
-    load(1, kind, trimmed, pageSize, from, to, salesFilterId);
+    load(1, kind, trimmed, pageSize, from, to, responsibleFilterId);
   }
 
   function clearFilters() {
@@ -393,7 +393,7 @@ export default function MeetingsPage() {
     setKind("ALL");
     setFrom("");
     setTo("");
-    setSalesFilterId("");
+    setResponsibleFilterId("");
     setPageSize(20);
     load(1, "ALL", "", 20, "", "", "");
   }
@@ -405,7 +405,7 @@ export default function MeetingsPage() {
 
   useEffect(() => {
     if (!mounted) return;
-    load(1, kind, q, pageSize, from, to, salesFilterId);
+    load(1, kind, q, pageSize, from, to, responsibleFilterId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 
@@ -463,7 +463,7 @@ export default function MeetingsPage() {
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
-            onClick={() => load(page, kind, q, pageSize, from, to, salesFilterId)}
+            onClick={() => load(page, kind, q, pageSize, from, to, responsibleFilterId)}
             disabled={loading}
           >
             {loading ? t("common.loading") : t("common.refresh")}
@@ -534,16 +534,14 @@ export default function MeetingsPage() {
               onChange={(e) => setMeetingAt(e.target.value)}
             />
 
-            {role === "SALES" ? (
+            {role === "SALES" || role === "MANAGER" ? (
               <input value={me?.name || ""} disabled />
             ) : (
               <div style={{ display: "grid", gap: 6 }}>
                 <input
-                  value={salesSearch}
-                  onChange={(e) => setSalesSearch(e.target.value)}
-                  placeholder={
-                    locale === "tr" ? "Satış temsilcisi ara..." : "Search sales rep..."
-                  }
+                  value={responsibleSearch}
+                  onChange={(e) => setResponsibleSearch(e.target.value)}
+                  placeholder={locale === "tr" ? "Sorumlu kişi ara..." : "Search responsible user..."}
                 />
                 <select
                   value={assignedSalesId}
@@ -552,12 +550,12 @@ export default function MeetingsPage() {
                 >
                   <option value="">
                     {locale === "tr"
-                      ? "Satış temsilcisi seçmeden devam et"
-                      : "Continue without sales rep"}
+                      ? "Sorumlu kişi seçmeden devam et"
+                      : "Continue without responsible user"}
                   </option>
-                  {filteredSalesUsers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.email})
+                  {filteredAssignableUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role}) - {u.email}
                     </option>
                   ))}
                 </select>
@@ -578,7 +576,9 @@ export default function MeetingsPage() {
                     disabled={loadingRefs}
                   >
                     <option value="">
-                      {locale === "tr" ? "Ajans seçmeden devam et" : "Continue without agency"}
+                      {locale === "tr"
+                        ? "Ajans seçmeden devam et"
+                        : "Continue without agency"}
                     </option>
                     {filteredAgencies.map((a) => (
                       <option key={a.id} value={a.id}>
@@ -732,7 +732,7 @@ export default function MeetingsPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 160px 180px 180px 180px 140px auto auto",
+            gridTemplateColumns: "1fr 150px 180px 170px 170px 130px auto auto",
             gap: 10,
           }}
         >
@@ -762,14 +762,16 @@ export default function MeetingsPage() {
           </select>
 
           <select
-            value={salesFilterId}
-            onChange={(e) => setSalesFilterId(e.target.value)}
+            value={responsibleFilterId}
+            onChange={(e) => setResponsibleFilterId(e.target.value)}
             disabled={loadingRefs}
           >
-            <option value="">{locale === "tr" ? "Tüm satışlar" : "All sales reps"}</option>
-            {salesUsers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
+            <option value="">
+              {locale === "tr" ? "Tüm sorumlular" : "All responsible users"}
+            </option>
+            {assignableUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.role})
               </option>
             ))}
           </select>
@@ -801,7 +803,7 @@ export default function MeetingsPage() {
               <th>{locale === "tr" ? "Tür" : "Type"}</th>
               <th>{locale === "tr" ? "İlişkili" : "Related"}</th>
               <th>{locale === "tr" ? "Durum" : "Status"}</th>
-              <th>{locale === "tr" ? "Satış" : "Sales"}</th>
+              <th>{locale === "tr" ? "Sorumlu" : "Responsible"}</th>
               <th>{locale === "tr" ? "Tarih" : "Meeting Time"}</th>
               <th>{locale === "tr" ? "Oluşturan" : "Created By"}</th>
               <th>{locale === "tr" ? "İşlem" : "Actions"}</th>
@@ -960,7 +962,7 @@ export default function MeetingsPage() {
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button
               onClick={() =>
-                load(Math.max(1, page - 1), kind, q, pageSize, from, to, salesFilterId)
+                load(Math.max(1, page - 1), kind, q, pageSize, from, to, responsibleFilterId)
               }
               disabled={page <= 1 || loading}
             >
@@ -973,7 +975,7 @@ export default function MeetingsPage() {
 
             <button
               onClick={() =>
-                load(Math.min(totalPages, page + 1), kind, q, pageSize, from, to, salesFilterId)
+                load(Math.min(totalPages, page + 1), kind, q, pageSize, from, to, responsibleFilterId)
               }
               disabled={page >= totalPages || loading}
             >

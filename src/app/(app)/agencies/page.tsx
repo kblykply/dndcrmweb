@@ -19,7 +19,7 @@ type AgencyRow = {
   createdAt?: string;
   updatedAt?: string;
   manager?: { id: string; name: string; email: string } | null;
-  assignedSales?: { id: string; name: string; email: string } | null;
+  assignedSales?: { id: string; name: string; email: string; role?: string } | null;
   _count?: {
     notes: number;
     meetings: number;
@@ -57,8 +57,7 @@ function safeTranslate(
   fallback?: string | null,
 ) {
   const translated = t(path);
-  if (translated === path) return fallback ?? path;
-  return translated;
+  return translated === path ? fallback ?? path : translated;
 }
 
 function normalizeErrorMessage(input: unknown, locale: "tr" | "en") {
@@ -78,21 +77,20 @@ function normalizeErrorMessage(input: unknown, locale: "tr" | "en") {
   }
 
   if (text.includes("Agency name is required")) {
-    return locale === "tr"
-      ? "Ajans adı zorunludur."
-      : "Agency name is required.";
+    return locale === "tr" ? "Ajans adı zorunludur." : "Agency name is required.";
   }
 
-  if (text.includes("Assigned sales user is invalid")) {
+  if (
+    text.includes("Assigned sales user is invalid") ||
+    text.includes("Selected user is not an active SALES rep")
+  ) {
     return locale === "tr"
-      ? "Seçilen satış kullanıcısı geçersiz."
-      : "Selected sales user is invalid.";
+      ? "Seçilen kullanıcı geçersiz."
+      : "Selected user is invalid.";
   }
 
   if (text.includes("Agency not found")) {
-    return locale === "tr"
-      ? "Ajans bulunamadı."
-      : "Agency not found.";
+    return locale === "tr" ? "Ajans bulunamadı." : "Agency not found.";
   }
 
   if (text.includes("No access")) {
@@ -102,9 +100,7 @@ function normalizeErrorMessage(input: unknown, locale: "tr" | "en") {
   }
 
   if (text.includes("Unauthorized")) {
-    return locale === "tr"
-      ? "Oturum süresi doldu."
-      : "Session expired.";
+    return locale === "tr" ? "Oturum süresi doldu." : "Session expired.";
   }
 
   return text;
@@ -117,7 +113,7 @@ export default function AgenciesPage() {
   const [me, setMe] = useState<any>(null);
 
   const [items, setItems] = useState<AgencyRow[]>([]);
-  const [salesUsers, setSalesUsers] = useState<UserRow[]>([]);
+  const [assignableUsers, setAssignableUsers] = useState<UserRow[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -131,6 +127,8 @@ export default function AgenciesPage() {
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+
+  const [filterAssignedId, setFilterAssignedId] = useState("");
 
   const [showCreate, setShowCreate] = useState(false);
 
@@ -147,22 +145,11 @@ export default function AgenciesPage() {
 
   const role = me?.role as string | undefined;
   const isSales = role === "SALES";
-  const canCreate =
-    role === "MANAGER" || role === "ADMIN" || role === "SALES";
+  const canCreate = role === "MANAGER" || role === "ADMIN" || role === "SALES";
   const canDelete = role === "MANAGER" || role === "ADMIN";
 
-
-
-
-const [filterSalesId, setFilterSalesId] = useState<string>("");
-
-
   function hiddenText() {
-    return safeTranslate(
-      t,
-      "common.hidden",
-      locale === "tr" ? "Gizli" : "Hidden",
-    );
+    return safeTranslate(t, "common.hidden", locale === "tr" ? "Gizli" : "Hidden");
   }
 
   function canSeeAgencyContact(a: AgencyRow) {
@@ -181,7 +168,7 @@ const [filterSalesId, setFilterSalesId] = useState<string>("");
     setSource("");
     setNotesSummary("");
     setAssignedSalesId(isSales ? me?.id || "" : "");
-setCreateStatus("ACTIVE");
+    setCreateStatus("ACTIVE");
   }
 
   async function load(
@@ -189,6 +176,7 @@ setCreateStatus("ACTIVE");
     nextStatus = status,
     nextQ = q,
     nextPageSize = pageSize,
+    nextAssignedId = filterAssignedId,
   ) {
     setErr(null);
     setLoading(true);
@@ -198,7 +186,8 @@ setCreateStatus("ACTIVE");
 
       if (nextQ.trim()) params.set("q", nextQ.trim());
       if (nextStatus !== "ALL") params.set("status", nextStatus);
-      if (filterSalesId) params.set("assignedSalesId", filterSalesId);
+      if (nextAssignedId) params.set("assignedSalesId", nextAssignedId);
+
       params.set("page", String(nextPage));
       params.set("pageSize", String(nextPageSize));
 
@@ -217,17 +206,24 @@ setCreateStatus("ACTIVE");
     }
   }
 
-  async function loadSalesUsers() {
+  async function loadAssignableUsers() {
     if (isSales) {
-      setSalesUsers([]);
+      setAssignableUsers([]);
       return;
     }
 
     try {
-      const data = await authedFetch("/users?role=SALES");
-      setSalesUsers(Array.isArray(data) ? data : []);
+      const [salesData, managerData] = await Promise.all([
+        authedFetch("/users?role=SALES"),
+        authedFetch("/users?role=MANAGER"),
+      ]);
+
+      setAssignableUsers([
+        ...(Array.isArray(salesData) ? salesData : []),
+        ...(Array.isArray(managerData) ? managerData : []),
+      ]);
     } catch {
-      setSalesUsers([]);
+      setAssignableUsers([]);
     }
   }
 
@@ -237,20 +233,18 @@ setCreateStatus("ACTIVE");
 
     try {
       const payload = {
-  name: name.trim(),
-  contactName: contactName.trim() || undefined,
-  phone: phone.trim() || undefined,
-  email: email.trim() || undefined,
-  city: city.trim() || undefined,
-  country: country.trim() || undefined,
-  website: website.trim() || undefined,
-  source: source.trim() || undefined,
-  notesSummary: notesSummary.trim() || undefined,
-  status: createStatus,
-  assignedSalesId: isSales ? undefined : assignedSalesId || null,
-};
-
-
+        name: name.trim(),
+        contactName: contactName.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        city: city.trim() || undefined,
+        country: country.trim() || undefined,
+        website: website.trim() || undefined,
+        source: source.trim() || undefined,
+        notesSummary: notesSummary.trim() || undefined,
+        status: createStatus,
+        assignedSalesId: isSales ? undefined : assignedSalesId || null,
+      };
 
       await authedFetch("/agencies", {
         method: "POST",
@@ -259,8 +253,7 @@ setCreateStatus("ACTIVE");
 
       resetCreateForm();
       setShowCreate(false);
-
-      await load(1, status, q, pageSize);
+      await load(1, status, q, pageSize, filterAssignedId);
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, locale));
     } finally {
@@ -283,15 +276,27 @@ setCreateStatus("ACTIVE");
       });
 
       if (items.length === 1 && page > 1) {
-        await load(page - 1, status, q, pageSize);
+        await load(page - 1, status, q, pageSize, filterAssignedId);
       } else {
-        await load(page, status, q, pageSize);
+        await load(page, status, q, pageSize, filterAssignedId);
       }
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, locale));
     } finally {
       setDeletingId(null);
     }
+  }
+
+  function runSearch() {
+    load(1, status, q, pageSize, filterAssignedId);
+  }
+
+  function clearFilters() {
+    setQ("");
+    setStatus("ALL");
+    setFilterAssignedId("");
+    setPageSize(20);
+    load(1, "ALL", "", 20, "");
   }
 
   useEffect(() => {
@@ -301,13 +306,14 @@ setCreateStatus("ACTIVE");
 
   useEffect(() => {
     if (!mounted) return;
-    load(1, status, q, pageSize);
+    load(1, status, q, pageSize, filterAssignedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 
   useEffect(() => {
     if (!mounted) return;
-    loadSalesUsers();
+
+    loadAssignableUsers();
 
     if (isSales) {
       setAssignedSalesId(me?.id || "");
@@ -341,7 +347,7 @@ setCreateStatus("ACTIVE");
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
-            onClick={() => load(page, status, q, pageSize)}
+            onClick={() => load(page, status, q, pageSize, filterAssignedId)}
             disabled={loading}
           >
             {loading ? t("common.loading") : t("common.refresh")}
@@ -462,48 +468,43 @@ setCreateStatus("ACTIVE");
 
             <label style={{ display: "grid", gap: 6 }}>
               <span className="muted" style={{ fontSize: 12 }}>
-                {t("agencies.fields.sales")}
+                {locale === "tr" ? "Sorumlu kişi" : "Assigned user"}
               </span>
               {isSales ? (
-                <input
-                  value={me?.name || ""}
-                  disabled
-                  placeholder={t("agencies.fields.sales")}
-                />
+                <input value={me?.name || ""} disabled />
               ) : (
                 <select
                   value={assignedSalesId}
                   onChange={(e) => setAssignedSalesId(e.target.value)}
                 >
-                  <option value="">{t("agencies.fields.selectSales")}</option>
-                  {salesUsers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.email})
+                  <option value="">
+                    {locale === "tr" ? "Sorumlu seç" : "Select assigned user"}
+                  </option>
+                  {assignableUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role})
                     </option>
                   ))}
                 </select>
               )}
             </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {t("agencies.fields.status")}
+              </span>
+              <select
+                value={createStatus}
+                onChange={(e) => setCreateStatus(e.target.value as AgencyStatus)}
+              >
+                {STATUS_OPTIONS.filter((s): s is AgencyStatus => s !== "ALL").map((s) => (
+                  <option key={s} value={s}>
+                    {safeTranslate(t, `agencyStatuses.${s}`, s)}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-
-<label style={{ display: "grid", gap: 6 }}>
-  <span className="muted" style={{ fontSize: 12 }}>
-    {t("agencies.fields.status")}
-  </span>
-<select
-  value={createStatus}
-  onChange={(e) => setCreateStatus(e.target.value as AgencyStatus)}
->
-  {STATUS_OPTIONS.filter((s): s is AgencyStatus => s !== "ALL").map((s) => (
-    <option key={s} value={s}>
-      {safeTranslate(t, `agencyStatuses.${s}`, s)}
-    </option>
-  ))}
-</select>
-</label>
-
-
-
 
           <label style={{ display: "grid", gap: 6 }}>
             <span className="muted" style={{ fontSize: 12 }}>
@@ -548,7 +549,7 @@ setCreateStatus("ACTIVE");
         <div
           style={{
             display: "grid",
-gridTemplateColumns: "1fr 180px 180px 140px auto",
+            gridTemplateColumns: "1fr 170px 190px 130px auto auto",
             gap: 10,
           }}
         >
@@ -557,9 +558,7 @@ gridTemplateColumns: "1fr 180px 180px 140px auto",
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("agencies.searchPlaceholder")}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                load(1, status, q, pageSize);
-              }
+              if (e.key === "Enter") runSearch();
             }}
           />
 
@@ -576,27 +575,20 @@ gridTemplateColumns: "1fr 180px 180px 140px auto",
             ))}
           </select>
 
-
-
-
-
-
-<select
-  value={filterSalesId}
-  onChange={(e) => setFilterSalesId(e.target.value)}
->
-  <option value="">
-    {locale === "tr" ? "Tüm Sales" : "All Sales"}
-  </option>
-
-  {salesUsers.map((s) => (
-    <option key={s.id} value={s.id}>
-      {s.name}
-    </option>
-  ))}
-</select>
-
-
+          <select
+            value={filterAssignedId}
+            onChange={(e) => setFilterAssignedId(e.target.value)}
+            disabled={isSales}
+          >
+            <option value="">
+              {locale === "tr" ? "Tüm sorumlular" : "All assigned users"}
+            </option>
+            {assignableUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.role})
+              </option>
+            ))}
+          </select>
 
           <select
             value={pageSize}
@@ -607,11 +599,12 @@ gridTemplateColumns: "1fr 180px 180px 140px auto",
             <option value={100}>100 / {t("agencies.perPage")}</option>
           </select>
 
-          <button
-            onClick={() => load(1, status, q, pageSize)}
-            disabled={loading}
-          >
+          <button onClick={runSearch} disabled={loading}>
             {t("agencies.searchAndRefresh")}
+          </button>
+
+          <button onClick={clearFilters} disabled={loading}>
+            {locale === "tr" ? "Temizle" : "Clear"}
           </button>
         </div>
 
@@ -636,7 +629,7 @@ gridTemplateColumns: "1fr 180px 180px 140px auto",
             <tr>
               <th>{t("agencies.table.agency")}</th>
               <th>{t("agencies.table.contact")}</th>
-              <th>{t("agencies.table.sales")}</th>
+              <th>{locale === "tr" ? "Sorumlu" : "Assigned"}</th>
               <th>{t("agencies.table.status")}</th>
               <th>{t("agencies.table.counts")}</th>
               <th>{t("agencies.table.updatedAt")}</th>
@@ -655,9 +648,7 @@ gridTemplateColumns: "1fr 180px 180px 140px auto",
                       <a href={`/agencies/${a.id}`} style={{ fontWeight: 900 }}>
                         {a.name}
                       </a>
-                      <div
-                        style={{ color: "var(--text-secondary)", fontSize: 12 }}
-                      >
+                      <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
                         {canSeeContact ? a.contactName || "-" : hiddenText()}
                       </div>
                     </div>
@@ -666,9 +657,7 @@ gridTemplateColumns: "1fr 180px 180px 140px auto",
                   <td>
                     <div style={{ display: "grid", gap: 4 }}>
                       <div>{canSeeContact ? a.phone || "-" : hiddenText()}</div>
-                      <div
-                        style={{ color: "var(--text-secondary)", fontSize: 12 }}
-                      >
+                      <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
                         {canSeeContact ? a.email || "-" : hiddenText()}
                       </div>
                       <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
@@ -748,7 +737,15 @@ gridTemplateColumns: "1fr 180px 180px 140px auto",
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button
-              onClick={() => load(Math.max(1, page - 1), status, q, pageSize)}
+              onClick={() =>
+                load(
+                  Math.max(1, page - 1),
+                  status,
+                  q,
+                  pageSize,
+                  filterAssignedId,
+                )
+              }
               disabled={page <= 1 || loading}
             >
               {t("common.previous")}
@@ -760,7 +757,13 @@ gridTemplateColumns: "1fr 180px 180px 140px auto",
 
             <button
               onClick={() =>
-                load(Math.min(totalPages, page + 1), status, q, pageSize)
+                load(
+                  Math.min(totalPages, page + 1),
+                  status,
+                  q,
+                  pageSize,
+                  filterAssignedId,
+                )
               }
               disabled={page >= totalPages || loading}
             >

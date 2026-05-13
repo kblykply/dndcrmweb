@@ -10,11 +10,7 @@ import {
   setAccessToken,
 } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
-
 import { COUNTRIES, NATIONALITY_BY_COUNTRY } from "@/lib/locationData";
-
-
-
 
 type CustomerType = "POTENTIAL" | "EXISTING";
 type Gender = "MALE" | "FEMALE" | "OTHER";
@@ -29,7 +25,7 @@ type AgencyRow = {
   name: string;
 };
 
-type SalesRow = {
+type UserRow = {
   id: string;
   name: string;
   email?: string | null;
@@ -53,6 +49,7 @@ type CustomerRow = {
     id: string;
     name: string;
     email?: string | null;
+    role?: string;
   } | null;
   canSeeContactDetails?: boolean;
   _count?: {
@@ -60,7 +57,11 @@ type CustomerRow = {
   };
 };
 
-const TYPE_OPTIONS: Array<"ALL" | CustomerType> = ["ALL", "POTENTIAL", "EXISTING"];
+const TYPE_OPTIONS: Array<"ALL" | CustomerType> = [
+  "ALL",
+  "POTENTIAL",
+  "EXISTING",
+];
 
 function badgeClass(type?: string) {
   if (type === "EXISTING") return "success";
@@ -71,14 +72,12 @@ function badgeClass(type?: string) {
 function safeTranslate(
   t: (path: string) => string,
   path: string,
-  fallback?: string | null
+  fallback?: string | null,
 ) {
   const translated = t(path);
   if (translated === path) return fallback ?? path;
   return translated;
 }
-
-
 
 function projectLabel(project: string, locale: string) {
   switch (project) {
@@ -95,6 +94,10 @@ function projectLabel(project: string, locale: string) {
   }
 }
 
+function optionMatch(text: string, query: string) {
+  return text.toLowerCase().includes(query.trim().toLowerCase());
+}
+
 export default function CustomersPage() {
   const { t, locale } = useLanguage();
 
@@ -103,7 +106,7 @@ export default function CustomersPage() {
 
   const [items, setItems] = useState<CustomerRow[]>([]);
   const [agencies, setAgencies] = useState<AgencyRow[]>([]);
-  const [salesUsers, setSalesUsers] = useState<SalesRow[]>([]);
+  const [ownerUsers, setOwnerUsers] = useState<UserRow[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -112,6 +115,7 @@ export default function CustomersPage() {
 
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState<"ALL" | CustomerType>("ALL");
+  const [ownerFilterId, setOwnerFilterId] = useState("");
 
   const [showCreate, setShowCreate] = useState(false);
 
@@ -128,7 +132,9 @@ export default function CustomersPage() {
   const [agencyId, setAgencyId] = useState("");
   const [ownerId, setOwnerId] = useState("");
 
-  // NEW FIELDS
+  const [agencySearch, setAgencySearch] = useState("");
+  const [ownerSearch, setOwnerSearch] = useState("");
+
   const [language, setLanguage] = useState("");
   const [nationality, setNationality] = useState("");
   const [gender, setGender] = useState<"" | Gender>("");
@@ -136,14 +142,12 @@ export default function CustomersPage() {
   const [job, setJob] = useState("");
   const [project, setProject] = useState<"" | ProjectType>("");
 
-  // UNIT SELECTIONS
   const [unitProject, setUnitProject] = useState<"" | ProjectType>("");
   const [unitNumber, setUnitNumber] = useState("");
   const [unitSelections, setUnitSelections] = useState<
     Array<{ project: ProjectType; unitNumber: string }>
   >([]);
 
-  // FILE
   const [idFile, setIdFile] = useState<File | null>(null);
 
   const role = me?.role as string | undefined;
@@ -152,22 +156,16 @@ export default function CustomersPage() {
   const canCreate = role === "MANAGER" || role === "ADMIN" || role === "SALES";
   const canDelete = role === "MANAGER" || role === "ADMIN";
 
+  function handleCountryChange(nextCountry: string) {
+    setCountry(nextCountry);
+    setNationality(NATIONALITY_BY_COUNTRY[nextCountry] || "");
+  }
 
-
-
-function handleCountryChange(nextCountry: string) {
-  setCountry(nextCountry);
-  setNationality(NATIONALITY_BY_COUNTRY[nextCountry] || "");
-}
-
-
-
-  
   function hiddenText() {
     return safeTranslate(
       t,
       "common.hidden",
-      locale === "tr" ? "Gizli" : "Hidden"
+      locale === "tr" ? "Gizli" : "Hidden",
     );
   }
 
@@ -182,8 +180,11 @@ function handleCountryChange(nextCountry: string) {
     const normalizedUnit = unitNumber.trim();
 
     const exists = unitSelections.some(
-      (u) => u.project === unitProject && u.unitNumber.toLowerCase() === normalizedUnit.toLowerCase()
+      (u) =>
+        u.project === unitProject &&
+        u.unitNumber.toLowerCase() === normalizedUnit.toLowerCase(),
     );
+
     if (exists) return;
 
     setUnitSelections((prev) => [
@@ -193,6 +194,7 @@ function handleCountryChange(nextCountry: string) {
         unitNumber: normalizedUnit,
       },
     ]);
+
     setUnitProject("");
     setUnitNumber("");
   }
@@ -204,6 +206,7 @@ function handleCountryChange(nextCountry: string) {
   async function load() {
     setErr(null);
     setLoading(true);
+
     try {
       const data = await authedFetch("/customers");
       setItems(Array.isArray(data) ? data : []);
@@ -217,24 +220,36 @@ function handleCountryChange(nextCountry: string) {
 
   async function loadAgencies() {
     try {
-      const res = await authedFetch("/agencies?page=1&pageSize=200");
+      const res = await authedFetch("/agencies?page=1&pageSize=500");
       setAgencies(Array.isArray(res?.items) ? res.items : []);
     } catch {
       setAgencies([]);
     }
   }
 
-  async function loadSalesUsers() {
+  async function loadOwnerUsers() {
     if (!isManagerOrAdmin) {
-      setSalesUsers([]);
+      setOwnerUsers([]);
       return;
     }
 
     try {
-      const res = await authedFetch("/users?role=SALES");
-      setSalesUsers(Array.isArray(res) ? res : []);
+      const [salesRes, managerRes] = await Promise.all([
+        authedFetch("/users?role=SALES"),
+        authedFetch("/users?role=MANAGER"),
+      ]);
+
+      const sales = Array.isArray(salesRes) ? salesRes : [];
+      const managers = Array.isArray(managerRes) ? managerRes : [];
+
+      const merged = [...managers, ...sales];
+      const unique = Array.from(
+        new Map(merged.map((u) => [u.id, u])).values(),
+      );
+
+      setOwnerUsers(unique);
     } catch {
-      setSalesUsers([]);
+      setOwnerUsers([]);
     }
   }
 
@@ -281,54 +296,51 @@ function handleCountryChange(nextCountry: string) {
           process.env.NEXT_PUBLIC_API_BASE_URL ||
           "";
 
-      const uploadToken = getAccessToken();
-const refreshToken = getRefreshToken();
+        const uploadToken = getAccessToken();
+        const refreshToken = getRefreshToken();
 
-let uploadRes = await fetch(
-  `${apiBase}/customers/${created.id}/documents/upload`,
-  {
-    method: "POST",
-    headers: uploadToken
-      ? { Authorization: `Bearer ${uploadToken}` }
-      : undefined,
-    body: formData,
-  }
-);
+        let uploadRes = await fetch(
+          `${apiBase}/customers/${created.id}/documents/upload`,
+          {
+            method: "POST",
+            headers: uploadToken
+              ? { Authorization: `Bearer ${uploadToken}` }
+              : undefined,
+            body: formData,
+          },
+        );
 
-// 🔥 AUTO REFRESH IF EXPIRED
-if (uploadRes.status === 401 && refreshToken) {
-  const refreshRes = await fetch(`${apiBase}/auth/refresh`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ refreshToken }),
-  });
+        if (uploadRes.status === 401 && refreshToken) {
+          const refreshRes = await fetch(`${apiBase}/auth/refresh`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ refreshToken }),
+          });
 
-if (!refreshRes.ok) {
-  clearSession();
+          if (!refreshRes.ok) {
+            clearSession();
 
-  if (typeof window !== "undefined") {
-    window.location.href = "/";
-  }
+            if (typeof window !== "undefined") {
+              window.location.href = "/";
+            }
 
-  throw new Error("Session expired");
-}
+            throw new Error("Session expired");
+          }
 
-  const data = await refreshRes.json();
+          const data = await refreshRes.json();
+          setAccessToken(data.accessToken);
 
-  setAccessToken(data.accessToken);
-
-  // 🔁 retry upload
-  uploadRes = await fetch(
-    `${apiBase}/customers/${created.id}/documents/upload`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${data.accessToken}` },
-      body: formData,
-    }
-  );
-}
+          uploadRes = await fetch(
+            `${apiBase}/customers/${created.id}/documents/upload`,
+            {
+              method: "POST",
+              headers: { Authorization: `Bearer ${data.accessToken}` },
+              body: formData,
+            },
+          );
+        }
 
         if (!uploadRes.ok) {
           const text = await uploadRes.text();
@@ -348,7 +360,8 @@ if (!refreshRes.ok) {
       setType("POTENTIAL");
       setAgencyId("");
       setOwnerId(isSales ? me?.id || "" : "");
-
+      setAgencySearch("");
+      setOwnerSearch("");
       setLanguage("");
       setNationality("");
       setGender("");
@@ -359,7 +372,6 @@ if (!refreshRes.ok) {
       setUnitNumber("");
       setUnitSelections([]);
       setIdFile(null);
-
       setShowCreate(false);
 
       await load();
@@ -372,8 +384,9 @@ if (!refreshRes.ok) {
 
   async function deleteCustomer(id: string, name: string) {
     const ok = window.confirm(
-      t("customers.deleteConfirm").replace("{name}", name)
+      t("customers.deleteConfirm").replace("{name}", name),
     );
+
     if (!ok) return;
 
     setErr(null);
@@ -392,6 +405,12 @@ if (!refreshRes.ok) {
     }
   }
 
+  function clearFilters() {
+    setQ("");
+    setTypeFilter("ALL");
+    setOwnerFilterId("");
+  }
+
   useEffect(() => {
     setMounted(true);
     setMe(getUser());
@@ -399,8 +418,10 @@ if (!refreshRes.ok) {
 
   useEffect(() => {
     if (!mounted) return;
+
     load();
     loadAgencies();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 
   useEffect(() => {
@@ -408,28 +429,55 @@ if (!refreshRes.ok) {
 
     if (isSales) {
       setOwnerId(me?.id || "");
-      setSalesUsers([]);
+      setOwnerUsers([]);
     } else {
-      loadSalesUsers();
+      loadOwnerUsers();
     }
-  }, [mounted, isSales, me?.id]);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, isSales, isManagerOrAdmin, me?.id]);
 
-  
+  const filteredAgencies = useMemo(() => {
+    if (!agencySearch.trim()) return agencies.slice(0, 80);
+
+    return agencies
+      .filter((a) => optionMatch(a.name, agencySearch))
+      .slice(0, 80);
+  }, [agencies, agencySearch]);
+
+  const filteredOwnerUsers = useMemo(() => {
+    if (!ownerSearch.trim()) return ownerUsers.slice(0, 80);
+
+    return ownerUsers
+      .filter((u) =>
+        optionMatch(`${u.name} ${u.email || ""} ${u.role || ""}`, ownerSearch),
+      )
+      .slice(0, 80);
+  }, [ownerUsers, ownerSearch]);
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
 
     return items.filter((c) => {
       if (typeFilter !== "ALL" && c.type !== typeFilter) return false;
+
+      if (ownerFilterId && c.owner?.id !== ownerFilterId) return false;
+
       if (!qq) return true;
 
       const searchableText = canSeeContact(c)
-        ? `${c.fullName || ""} ${c.companyName || ""} ${c.phone || ""} ${c.email || ""} ${c.city || ""} ${c.country || ""} ${c.agency?.name || ""} ${c.owner?.name || ""}`
-        : `${c.fullName || ""} ${c.companyName || ""} ${c.agency?.name || ""} ${c.owner?.name || ""}`;
+        ? `${c.fullName || ""} ${c.companyName || ""} ${c.phone || ""} ${
+            c.email || ""
+          } ${c.city || ""} ${c.country || ""} ${c.agency?.name || ""} ${
+            c.owner?.name || ""
+          }`
+        : `${c.fullName || ""} ${c.companyName || ""} ${
+            c.agency?.name || ""
+          } ${c.owner?.name || ""}`;
 
       return searchableText.toLowerCase().includes(qq);
     });
-  }, [items, q, typeFilter, isSales]);
+  }, [items, q, typeFilter, ownerFilterId, isSales]);
 
   if (!mounted) return <div>{t("common.loading")}</div>;
 
@@ -440,7 +488,11 @@ if (!refreshRes.ok) {
           <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
             {t("customers.label")}
           </div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{t("customers.title")}</div>
+
+          <div style={{ fontSize: 28, fontWeight: 900 }}>
+            {t("customers.title")}
+          </div>
+
           <div className="muted" style={{ fontSize: 13 }}>
             {t("customers.subtitle")}
           </div>
@@ -475,7 +527,7 @@ if (!refreshRes.ok) {
             "customers.limitedAccessNotice",
             locale === "tr"
               ? "Size ait olmayan müşteriler için iletişim bilgileri gizlenmiştir. Detay sayfasında yalnızca kendi müşterilerinizi düzenleyebilirsiniz."
-              : "Contact details are hidden for customers that do not belong to you. On the detail page, you can only edit your own customers."
+              : "Contact details are hidden for customers that do not belong to you. On the detail page, you can only edit your own customers.",
           )}
         </div>
       ) : null}
@@ -496,11 +548,13 @@ if (!refreshRes.ok) {
               onChange={(e) => setFullName(e.target.value)}
               placeholder={t("customers.fields.fullName")}
             />
+
             <input
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
               placeholder={t("customers.fields.companyName")}
             />
+
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
@@ -512,34 +566,38 @@ if (!refreshRes.ok) {
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t("customers.fields.email")}
             />
+
             <input
               value={city}
               onChange={(e) => setCity(e.target.value)}
               placeholder={t("customers.fields.city")}
             />
-           <select
-  value={country}
-  onChange={(e) => handleCountryChange(e.target.value)}
->
-  <option value="">
-    {safeTranslate(
-      t,
-      "customers.fields.selectCountry",
-      locale === "tr" ? "Ülke seç" : "Select country"
-    )}
-  </option>
-  {COUNTRIES.map((countryName) => (
-    <option key={countryName} value={countryName}>
-      {countryName}
-    </option>
-  ))}
-</select>
+
+            <select
+              value={country}
+              onChange={(e) => handleCountryChange(e.target.value)}
+            >
+              <option value="">
+                {safeTranslate(
+                  t,
+                  "customers.fields.selectCountry",
+                  locale === "tr" ? "Ülke seç" : "Select country",
+                )}
+              </option>
+
+              {COUNTRIES.map((countryName) => (
+                <option key={countryName} value={countryName}>
+                  {countryName}
+                </option>
+              ))}
+            </select>
 
             <input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder={t("customers.fields.address")}
             />
+
             <input
               value={source}
               onChange={(e) => setSource(e.target.value)}
@@ -553,22 +611,34 @@ if (!refreshRes.ok) {
               <option value="POTENTIAL">
                 {safeTranslate(t, "customerTypes.POTENTIAL", "POTENTIAL")}
               </option>
+
               <option value="EXISTING">
                 {safeTranslate(t, "customerTypes.EXISTING", "EXISTING")}
               </option>
             </select>
 
-            <select
-              value={agencyId}
-              onChange={(e) => setAgencyId(e.target.value)}
-            >
-              <option value="">{t("customers.fields.selectAgency")}</option>
-              {agencies.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: "grid", gap: 6 }}>
+              <input
+                value={agencySearch}
+                onChange={(e) => setAgencySearch(e.target.value)}
+                placeholder={
+                  locale === "tr" ? "Ajans ara..." : "Search agency..."
+                }
+              />
+
+              <select
+                value={agencyId}
+                onChange={(e) => setAgencyId(e.target.value)}
+              >
+                <option value="">{t("customers.fields.selectAgency")}</option>
+
+                {filteredAgencies.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {isSales ? (
               <input
@@ -577,27 +647,39 @@ if (!refreshRes.ok) {
                 placeholder={safeTranslate(
                   t,
                   "customers.fields.ownerSales",
-                  locale === "tr" ? "Sorumlu Sales" : "Owner Sales"
+                  locale === "tr" ? "Sorumlu Kullanıcı" : "Responsible User",
                 )}
               />
             ) : (
-              <select
-                value={ownerId}
-                onChange={(e) => setOwnerId(e.target.value)}
-              >
-                <option value="">
-                  {safeTranslate(
-                    t,
-                    "customers.fields.selectOwnerSales",
-                    locale === "tr" ? "Sorumlu sales seç" : "Select owner sales"
-                  )}
-                </option>
-                {salesUsers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} {s.email ? `(${s.email})` : ""}
+              <div style={{ display: "grid", gap: 6 }}>
+                <input
+                  value={ownerSearch}
+                  onChange={(e) => setOwnerSearch(e.target.value)}
+                  placeholder={
+                    locale === "tr"
+                      ? "Sales / Manager ara..."
+                      : "Search sales / manager..."
+                  }
+                />
+
+                <select
+                  value={ownerId}
+                  onChange={(e) => setOwnerId(e.target.value)}
+                >
+                  <option value="">
+                    {locale === "tr"
+                      ? "Sorumlu kullanıcı seç"
+                      : "Select responsible user"}
                   </option>
-                ))}
-              </select>
+
+                  {filteredOwnerUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} {u.email ? `(${u.email})` : ""}{" "}
+                      {u.role ? `- ${u.role}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
 
             <input
@@ -606,18 +688,20 @@ if (!refreshRes.ok) {
               placeholder={safeTranslate(
                 t,
                 "customers.fields.language",
-                locale === "tr" ? "Dil" : "Language"
+                locale === "tr" ? "Dil" : "Language",
               )}
             />
+
             <input
               value={nationality}
               onChange={(e) => setNationality(e.target.value)}
               placeholder={safeTranslate(
                 t,
                 "customers.fields.nationality",
-                locale === "tr" ? "Uyruk" : "Nationality"
+                locale === "tr" ? "Uyruk" : "Nationality",
               )}
             />
+
             <select
               value={gender}
               onChange={(e) => setGender(e.target.value as "" | Gender)}
@@ -626,28 +710,31 @@ if (!refreshRes.ok) {
                 {safeTranslate(
                   t,
                   "customers.fields.gender",
-                  locale === "tr" ? "Cinsiyet" : "Gender"
+                  locale === "tr" ? "Cinsiyet" : "Gender",
                 )}
               </option>
+
               <option value="MALE">
                 {safeTranslate(
                   t,
                   "genders.MALE",
-                  locale === "tr" ? "Erkek" : "Male"
+                  locale === "tr" ? "Erkek" : "Male",
                 )}
               </option>
+
               <option value="FEMALE">
                 {safeTranslate(
                   t,
                   "genders.FEMALE",
-                  locale === "tr" ? "Kadın" : "Female"
+                  locale === "tr" ? "Kadın" : "Female",
                 )}
               </option>
+
               <option value="OTHER">
                 {safeTranslate(
                   t,
                   "genders.OTHER",
-                  locale === "tr" ? "Diğer" : "Other"
+                  locale === "tr" ? "Diğer" : "Other",
                 )}
               </option>
             </select>
@@ -657,15 +744,17 @@ if (!refreshRes.ok) {
               value={birthday}
               onChange={(e) => setBirthday(e.target.value)}
             />
+
             <input
               value={job}
               onChange={(e) => setJob(e.target.value)}
               placeholder={safeTranslate(
                 t,
                 "customers.fields.job",
-                locale === "tr" ? "Meslek" : "Job"
+                locale === "tr" ? "Meslek" : "Job",
               )}
             />
+
             <select
               value={project}
               onChange={(e) => setProject(e.target.value as "" | ProjectType)}
@@ -674,13 +763,20 @@ if (!refreshRes.ok) {
                 {safeTranslate(
                   t,
                   "customers.fields.project",
-                  locale === "tr" ? "Proje" : "Project"
+                  locale === "tr" ? "Proje" : "Project",
                 )}
               </option>
+
               <option value="LA_JOYA">{projectLabel("LA_JOYA", locale)}</option>
-              <option value="LA_JOYA_PERLA">{projectLabel("LA_JOYA_PERLA", locale)}</option>
-              <option value="LA_JOYA_PERLA_II">{projectLabel("LA_JOYA_PERLA_II", locale)}</option>
-              <option value="LAGOON_VERDE">{projectLabel("LAGOON_VERDE", locale)}</option>
+              <option value="LA_JOYA_PERLA">
+                {projectLabel("LA_JOYA_PERLA", locale)}
+              </option>
+              <option value="LA_JOYA_PERLA_II">
+                {projectLabel("LA_JOYA_PERLA_II", locale)}
+              </option>
+              <option value="LAGOON_VERDE">
+                {projectLabel("LAGOON_VERDE", locale)}
+              </option>
             </select>
           </div>
 
@@ -704,7 +800,7 @@ if (!refreshRes.ok) {
               {safeTranslate(
                 t,
                 "customers.fields.unitSelections",
-                locale === "tr" ? "Ünite Seçimleri" : "Unit Selections"
+                locale === "tr" ? "Ünite Seçimleri" : "Unit Selections",
               )}
             </div>
 
@@ -717,19 +813,30 @@ if (!refreshRes.ok) {
             >
               <select
                 value={unitProject}
-                onChange={(e) => setUnitProject(e.target.value as "" | ProjectType)}
+                onChange={(e) =>
+                  setUnitProject(e.target.value as "" | ProjectType)
+                }
               >
                 <option value="">
                   {safeTranslate(
                     t,
                     "customers.fields.selectProject",
-                    locale === "tr" ? "Proje seç" : "Select project"
+                    locale === "tr" ? "Proje seç" : "Select project",
                   )}
                 </option>
-                <option value="LA_JOYA">{projectLabel("LA_JOYA", locale)}</option>
-                <option value="LA_JOYA_PERLA">{projectLabel("LA_JOYA_PERLA", locale)}</option>
-                <option value="LA_JOYA_PERLA_II">{projectLabel("LA_JOYA_PERLA_II", locale)}</option>
-                <option value="LAGOON_VERDE">{projectLabel("LAGOON_VERDE", locale)}</option>
+
+                <option value="LA_JOYA">
+                  {projectLabel("LA_JOYA", locale)}
+                </option>
+                <option value="LA_JOYA_PERLA">
+                  {projectLabel("LA_JOYA_PERLA", locale)}
+                </option>
+                <option value="LA_JOYA_PERLA_II">
+                  {projectLabel("LA_JOYA_PERLA_II", locale)}
+                </option>
+                <option value="LAGOON_VERDE">
+                  {projectLabel("LAGOON_VERDE", locale)}
+                </option>
               </select>
 
               <input
@@ -738,7 +845,9 @@ if (!refreshRes.ok) {
                 placeholder={safeTranslate(
                   t,
                   "customers.fields.unitNumber",
-                  locale === "tr" ? "Ünite No (A2, B5...)" : "Unit No (A2, B5...)"
+                  locale === "tr"
+                    ? "Ünite No (A2, B5...)"
+                    : "Unit No (A2, B5...)",
                 )}
               />
 
@@ -746,7 +855,7 @@ if (!refreshRes.ok) {
                 {safeTranslate(
                   t,
                   "common.add",
-                  locale === "tr" ? "Ekle" : "Add"
+                  locale === "tr" ? "Ekle" : "Add",
                 )}
               </button>
             </div>
@@ -769,6 +878,7 @@ if (!refreshRes.ok) {
                     <span style={{ fontSize: 13 }}>
                       {projectLabel(u.project, locale)} / {u.unitNumber}
                     </span>
+
                     <button
                       type="button"
                       onClick={() => removeUnitSelection(i)}
@@ -789,7 +899,9 @@ if (!refreshRes.ok) {
                 {safeTranslate(
                   t,
                   "customers.fields.noUnitSelections",
-                  locale === "tr" ? "Henüz ünite eklenmedi." : "No units added yet."
+                  locale === "tr"
+                    ? "Henüz ünite eklenmedi."
+                    : "No units added yet.",
                 )}
               </div>
             )}
@@ -809,7 +921,7 @@ if (!refreshRes.ok) {
               {safeTranslate(
                 t,
                 "customers.fields.idDocument",
-                locale === "tr" ? "Kimlik Belgesi" : "ID Document"
+                locale === "tr" ? "Kimlik Belgesi" : "ID Document",
               )}
             </div>
 
@@ -827,7 +939,10 @@ if (!refreshRes.ok) {
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-            <button onClick={() => setShowCreate(false)}>{t("common.cancel")}</button>
+            <button onClick={() => setShowCreate(false)}>
+              {t("common.cancel")}
+            </button>
+
             <button
               className="primary"
               onClick={createCustomer}
@@ -843,7 +958,9 @@ if (!refreshRes.ok) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr 220px auto",
+            gridTemplateColumns: isSales
+              ? "1fr 220px auto auto"
+              : "1fr 220px 260px auto auto",
             gap: 10,
           }}
         >
@@ -851,6 +968,9 @@ if (!refreshRes.ok) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t("customers.searchPlaceholder")}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") load();
+            }}
           />
 
           <select
@@ -866,8 +986,31 @@ if (!refreshRes.ok) {
             ))}
           </select>
 
+          {!isSales ? (
+            <select
+              value={ownerFilterId}
+              onChange={(e) => setOwnerFilterId(e.target.value)}
+            >
+              <option value="">
+                {locale === "tr"
+                  ? "Tüm Sales / Manager"
+                  : "All Sales / Managers"}
+              </option>
+
+              {ownerUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} {u.role ? `- ${u.role}` : ""}
+                </option>
+              ))}
+            </select>
+          ) : null}
+
           <button onClick={load} disabled={loading}>
             {t("customers.searchAndRefresh")}
+          </button>
+
+          <button onClick={clearFilters} disabled={loading}>
+            {locale === "tr" ? "Temizle" : "Clear"}
           </button>
         </div>
 
@@ -897,7 +1040,7 @@ if (!refreshRes.ok) {
                 {safeTranslate(
                   t,
                   "customers.table.ownerSales",
-                  locale === "tr" ? "Sorumlu Sales" : "Owner Sales"
+                  locale === "tr" ? "Sorumlu Kullanıcı" : "Responsible User",
                 )}
               </th>
               <th>{t("customers.table.type")}</th>
@@ -918,8 +1061,12 @@ if (!refreshRes.ok) {
                       <a href={`/customers/${c.id}`} style={{ fontWeight: 900 }}>
                         {c.fullName}
                       </a>
+
                       <div
-                        style={{ color: "var(--text-secondary)", fontSize: 12 }}
+                        style={{
+                          color: "var(--text-secondary)",
+                          fontSize: 12,
+                        }}
                       >
                         {c.companyName || "-"}
                       </div>
@@ -929,14 +1076,20 @@ if (!refreshRes.ok) {
                   <td>
                     <div style={{ display: "grid", gap: 4 }}>
                       <div>{visible ? c.phone || "-" : hiddenText()}</div>
+
                       <div
-                        style={{ color: "var(--text-secondary)", fontSize: 12 }}
+                        style={{
+                          color: "var(--text-secondary)",
+                          fontSize: 12,
+                        }}
                       >
                         {visible ? c.email || "-" : hiddenText()}
                       </div>
+
                       <div style={{ color: "var(--text-muted)", fontSize: 12 }}>
                         {visible
-                          ? [c.city, c.country].filter(Boolean).join(", ") || "-"
+                          ? [c.city, c.country].filter(Boolean).join(", ") ||
+                            "-"
                           : hiddenText()}
                       </div>
                     </div>
@@ -944,11 +1097,20 @@ if (!refreshRes.ok) {
 
                   <td>{c.agency?.name || "-"}</td>
 
-                  <td>{c.owner?.name || "-"}</td>
+                  <td>
+                    {c.owner?.name || "-"}
+                    {c.owner?.role ? (
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {c.owner.role}
+                      </div>
+                    ) : null}
+                  </td>
 
                   <td>
                     <span className={`badge ${badgeClass(c.type)}`}>
-                      {c.type ? safeTranslate(t, `customerTypes.${c.type}`, c.type) : "-"}
+                      {c.type
+                        ? safeTranslate(t, `customerTypes.${c.type}`, c.type)
+                        : "-"}
                     </span>
                   </td>
 
@@ -956,7 +1118,9 @@ if (!refreshRes.ok) {
 
                   <td>
                     {c.updatedAt
-                      ? new Date(c.updatedAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")
+                      ? new Date(c.updatedAt).toLocaleString(
+                          locale === "tr" ? "tr-TR" : "en-US",
+                        )
                       : "-"}
                   </td>
 
@@ -967,7 +1131,9 @@ if (!refreshRes.ok) {
                         onClick={() => deleteCustomer(c.id, c.fullName)}
                         disabled={deletingId === c.id}
                       >
-                        {deletingId === c.id ? t("customers.deleting") : t("common.delete")}
+                        {deletingId === c.id
+                          ? t("customers.deleting")
+                          : t("common.delete")}
                       </button>
                     </td>
                   ) : null}

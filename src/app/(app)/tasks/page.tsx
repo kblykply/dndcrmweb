@@ -116,6 +116,7 @@ export default function TasksPage() {
   const [myTasks, setMyTasks] = useState<TaskRow[]>([]);
   const [teamTasks, setTeamTasks] = useState<TaskRow[]>([]);
 
+  const [managerUsers, setManagerUsers] = useState<UserRow[]>([]);
   const [salesUsers, setSalesUsers] = useState<UserRow[]>([]);
   const [callcenterUsers, setCallcenterUsers] = useState<UserRow[]>([]);
   const [agencies, setAgencies] = useState<AgencyLite[]>([]);
@@ -183,10 +184,11 @@ export default function TasksPage() {
       if (nextStatus !== "ALL") params.set("status", nextStatus);
       if (nextSearch.trim()) params.set("search", nextSearch.trim());
 
-      const res = await authedFetch(`/tasks/my?${params.toString()}`);
+      const query = params.toString();
+      const res = await authedFetch(`/tasks/my${query ? `?${query}` : ""}`);
       const nextItems = Array.isArray(res) ? res : [];
-      setMyTasks(nextItems);
 
+      setMyTasks(nextItems);
       setSelected((prev) => {
         if (!prev) return null;
         return nextItems.find((x) => x.id === prev.id) || null;
@@ -219,10 +221,11 @@ export default function TasksPage() {
       if (nextSearch.trim()) params.set("search", nextSearch.trim());
       if (nextUserFilterId) params.set("assignedToId", nextUserFilterId);
 
-      const res = await authedFetch(`/tasks?${params.toString()}`);
+      const query = params.toString();
+      const res = await authedFetch(`/tasks${query ? `?${query}` : ""}`);
       const nextItems = Array.isArray(res) ? res : [];
-      setTeamTasks(nextItems);
 
+      setTeamTasks(nextItems);
       setSelected((prev) => {
         if (!prev) return null;
         return nextItems.find((x) => x.id === prev.id) || null;
@@ -240,22 +243,32 @@ export default function TasksPage() {
     if (!canCreate && !canSeeTeam) return;
 
     setLoadingRefs(true);
-    try {
-      const [salesRes, callcenterRes, agenciesRes, customersRes, leadsRes] =
-        await Promise.all([
-          authedFetch("/users?role=SALES"),
-          authedFetch("/users?role=CALLCENTER"),
-          authedFetch("/agencies?page=1&pageSize=300"),
-          authedFetch("/customers"),
-          authedFetch("/leads?page=1&pageSize=300"),
-        ]);
 
+    try {
+      const [
+        managerRes,
+        salesRes,
+        callcenterRes,
+        agenciesRes,
+        customersRes,
+        leadsRes,
+      ] = await Promise.all([
+        authedFetch("/users?role=MANAGER"),
+        authedFetch("/users?role=SALES"),
+        authedFetch("/users?role=CALLCENTER"),
+        authedFetch("/agencies?page=1&pageSize=300"),
+        authedFetch("/customers"),
+        authedFetch("/leads?page=1&pageSize=300"),
+      ]);
+
+      setManagerUsers(Array.isArray(managerRes) ? managerRes : []);
       setSalesUsers(Array.isArray(salesRes) ? salesRes : []);
       setCallcenterUsers(Array.isArray(callcenterRes) ? callcenterRes : []);
       setAgencies(Array.isArray(agenciesRes?.items) ? agenciesRes.items : []);
       setCustomers(Array.isArray(customersRes) ? customersRes : []);
       setLeads(Array.isArray(leadsRes?.items) ? leadsRes.items : []);
     } catch {
+      setManagerUsers([]);
       setSalesUsers([]);
       setCallcenterUsers([]);
       setAgencies([]);
@@ -279,9 +292,7 @@ export default function TasksPage() {
     setErr(null);
 
     try {
-      await authedFetch(`/tasks/${taskId}/done`, {
-        method: "PATCH",
-      });
+      await authedFetch(`/tasks/${taskId}/done`, { method: "PATCH" });
 
       await Promise.all([
         loadMyTasks(status, q),
@@ -299,9 +310,7 @@ export default function TasksPage() {
     setErr(null);
 
     try {
-      await authedFetch(`/tasks/${taskId}/cancel`, {
-        method: "PATCH",
-      });
+      await authedFetch(`/tasks/${taskId}/cancel`, { method: "PATCH" });
 
       await Promise.all([
         loadMyTasks(status, q),
@@ -329,9 +338,7 @@ export default function TasksPage() {
     setErr(null);
 
     try {
-      await authedFetch(`/tasks/${taskId}`, {
-        method: "DELETE",
-      });
+      await authedFetch(`/tasks/${taskId}`, { method: "DELETE" });
 
       setSelected((prev) => (prev?.id === taskId ? null : prev));
 
@@ -500,10 +507,16 @@ export default function TasksPage() {
   }, [tab, canSeeTeam, myTasks, teamTasks]);
 
   const assignableUsers = useMemo(() => {
-    return [...salesUsers, ...callcenterUsers].sort((a, b) =>
+    const map = new Map<string, UserRow>();
+
+    [...managerUsers, ...salesUsers, ...callcenterUsers].forEach((user) => {
+      if (user?.id) map.set(user.id, user);
+    });
+
+    return Array.from(map.values()).sort((a, b) =>
       (a.name || "").localeCompare(b.name || ""),
     );
-  }, [salesUsers, callcenterUsers]);
+  }, [managerUsers, salesUsers, callcenterUsers]);
 
   if (!mounted) {
     return <div>{t("common.loading")}</div>;
@@ -522,11 +535,7 @@ export default function TasksPage() {
           </div>
 
           <div style={{ fontSize: 28, fontWeight: 900 }}>
-            {safeTranslate(
-              t,
-              "tasks.title",
-              locale === "tr" ? "Görevler" : "Tasks",
-            )}
+            {safeTranslate(t, "tasks.title", locale === "tr" ? "Görevler" : "Tasks")}
           </div>
 
           <div className="muted" style={{ fontSize: 13 }}>
@@ -550,11 +559,7 @@ export default function TasksPage() {
                   setSelected(null);
                 }}
               >
-                {safeTranslate(
-                  t,
-                  "tasks.tabs.my",
-                  locale === "tr" ? "Görevlerim" : "My Tasks",
-                )}
+                {safeTranslate(t, "tasks.tabs.my", locale === "tr" ? "Görevlerim" : "My Tasks")}
               </button>
 
               <button
@@ -564,11 +569,7 @@ export default function TasksPage() {
                   setSelected(null);
                 }}
               >
-                {safeTranslate(
-                  t,
-                  "tasks.tabs.team",
-                  locale === "tr" ? "Tüm Görevler" : "All Tasks",
-                )}
+                {safeTranslate(t, "tasks.tabs.team", locale === "tr" ? "Tüm Görevler" : "All Tasks")}
               </button>
             </>
           ) : null}
@@ -577,11 +578,7 @@ export default function TasksPage() {
             <button className="primary" onClick={() => setShowCreate((v) => !v)}>
               {showCreate
                 ? safeTranslate(t, "common.close", locale === "tr" ? "Kapat" : "Close")
-                : safeTranslate(
-                    t,
-                    "tasks.newTask",
-                    locale === "tr" ? "Yeni Görev" : "New Task",
-                  )}
+                : safeTranslate(t, "tasks.newTask", locale === "tr" ? "Yeni Görev" : "New Task")}
             </button>
           ) : null}
 
@@ -638,20 +635,13 @@ export default function TasksPage() {
               ))}
             </select>
 
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as TaskPriority)}
-            >
+            <select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)}>
               <option value="LOW">{priorityLabel("LOW")}</option>
               <option value="MEDIUM">{priorityLabel("MEDIUM")}</option>
               <option value="HIGH">{priorityLabel("HIGH")}</option>
             </select>
 
-            <input
-              type="datetime-local"
-              value={dueAt}
-              onChange={(e) => setDueAt(e.target.value)}
-            />
+            <input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
 
             <select value={leadId} onChange={(e) => setLeadId(e.target.value)} disabled={loadingRefs}>
               <option value="">
@@ -664,17 +654,9 @@ export default function TasksPage() {
               ))}
             </select>
 
-            <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              disabled={loadingRefs}
-            >
+            <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} disabled={loadingRefs}>
               <option value="">
-                {safeTranslate(
-                  t,
-                  "tasks.fields.selectCustomer",
-                  locale === "tr" ? "Müşteri seç" : "Select customer",
-                )}
+                {safeTranslate(t, "tasks.fields.selectCustomer", locale === "tr" ? "Müşteri seç" : "Select customer")}
               </option>
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
@@ -683,17 +665,9 @@ export default function TasksPage() {
               ))}
             </select>
 
-            <select
-              value={agencyId}
-              onChange={(e) => setAgencyId(e.target.value)}
-              disabled={loadingRefs}
-            >
+            <select value={agencyId} onChange={(e) => setAgencyId(e.target.value)} disabled={loadingRefs}>
               <option value="">
-                {safeTranslate(
-                  t,
-                  "tasks.fields.selectAgency",
-                  locale === "tr" ? "Ajans seç" : "Select agency",
-                )}
+                {safeTranslate(t, "tasks.fields.selectAgency", locale === "tr" ? "Ajans seç" : "Select agency")}
               </option>
               {agencies.map((agency) => (
                 <option key={agency.id} value={agency.id}>
@@ -727,8 +701,8 @@ export default function TasksPage() {
               t,
               "tasks.createHint",
               locale === "tr"
-                ? "Aynı görevi lead + müşteri + ajans ile birlikte ilişkilendirebilirsiniz. Görev bir sales veya call center kullanıcısına atanabilir."
-                : "You can link the same task to a lead, customer, and agency together. A task can be assigned to a sales or call center user.",
+                ? "Aynı görevi lead + müşteri + ajans ile birlikte ilişkilendirebilirsiniz. Görev manager, sales veya call center kullanıcısına atanabilir."
+                : "You can link the same task to a lead, customer, and agency together. A task can be assigned to a manager, sales, or call center user.",
             )}
           </div>
 
@@ -743,16 +717,8 @@ export default function TasksPage() {
               disabled={creating || !title.trim() || !assignedToId}
             >
               {creating
-                ? safeTranslate(
-                    t,
-                    "tasks.creating",
-                    locale === "tr" ? "Oluşturuluyor..." : "Creating...",
-                  )
-                : safeTranslate(
-                    t,
-                    "tasks.createTask",
-                    locale === "tr" ? "Görev Oluştur" : "Create Task",
-                  )}
+                ? safeTranslate(t, "tasks.creating", locale === "tr" ? "Oluşturuluyor..." : "Creating...")
+                : safeTranslate(t, "tasks.createTask", locale === "tr" ? "Görev Oluştur" : "Create Task")}
             </button>
           </div>
         </div>
@@ -779,9 +745,7 @@ export default function TasksPage() {
         }}
       >
         <div className="card">
-          <div className="muted">
-            {safeTranslate(t, "tasks.stats.total", locale === "tr" ? "Toplam" : "Total")}
-          </div>
+          <div className="muted">{safeTranslate(t, "tasks.stats.total", locale === "tr" ? "Toplam" : "Total")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.all}</div>
         </div>
 
@@ -818,9 +782,7 @@ export default function TasksPage() {
           style={{
             display: "grid",
             gridTemplateColumns:
-              tab === "team" && canSeeTeam
-                ? "1fr 200px 220px auto"
-                : "1fr 200px auto",
+              tab === "team" && canSeeTeam ? "1fr 200px 220px auto" : "1fr 200px auto",
             gap: 10,
           }}
         >
@@ -828,9 +790,7 @@ export default function TasksPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                refreshActive(status, q);
-              }
+              if (e.key === "Enter") refreshActive(status, q);
             }}
             placeholder={safeTranslate(
               t,
@@ -843,11 +803,7 @@ export default function TasksPage() {
 
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="ALL">
-              {safeTranslate(
-                t,
-                "tasks.filters.allStatuses",
-                locale === "tr" ? "Tüm Durumlar" : "All Statuses",
-              )}
+              {safeTranslate(t, "tasks.filters.allStatuses", locale === "tr" ? "Tüm Durumlar" : "All Statuses")}
             </option>
             <option value="TODO">{statusLabel("TODO")}</option>
             <option value="IN_PROGRESS">{statusLabel("IN_PROGRESS")}</option>
@@ -865,9 +821,7 @@ export default function TasksPage() {
               }}
               disabled={loadingRefs}
             >
-              <option value="">
-                {locale === "tr" ? "Tüm kullanıcılar" : "All users"}
-              </option>
+              <option value="">{locale === "tr" ? "Tüm kullanıcılar" : "All users"}</option>
 
               {assignableUsers.map((u) => (
                 <option key={u.id} value={u.id}>
@@ -878,11 +832,7 @@ export default function TasksPage() {
           ) : null}
 
           <button onClick={() => refreshActive(status, q)} disabled={loadingMy || loadingTeam}>
-            {safeTranslate(
-              t,
-              "tasks.searchAndRefresh",
-              locale === "tr" ? "Ara / Yenile" : "Search / Refresh",
-            )}
+            {safeTranslate(t, "tasks.searchAndRefresh", locale === "tr" ? "Ara / Yenile" : "Search / Refresh")}
           </button>
         </div>
       </div>
@@ -902,13 +852,7 @@ export default function TasksPage() {
                 <th>{safeTranslate(t, "tasks.table.task", locale === "tr" ? "GÖREV" : "TASK")}</th>
                 <th>{safeTranslate(t, "tasks.table.related", locale === "tr" ? "İLİŞKİ" : "RELATED")}</th>
                 {tab === "team" && canSeeTeam ? (
-                  <th>
-                    {safeTranslate(
-                      t,
-                      "tasks.table.assignedTo",
-                      locale === "tr" ? "ATANAN" : "ASSIGNED TO",
-                    )}
-                  </th>
+                  <th>{safeTranslate(t, "tasks.table.assignedTo", locale === "tr" ? "ATANAN" : "ASSIGNED TO")}</th>
                 ) : null}
                 <th>{safeTranslate(t, "tasks.table.priority", locale === "tr" ? "ÖNCELİK" : "PRIORITY")}</th>
                 <th>{safeTranslate(t, "tasks.table.status", locale === "tr" ? "DURUM" : "STATUS")}</th>
@@ -957,22 +901,14 @@ export default function TasksPage() {
 
                     <td>
                       <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
-                        {task.lead ? (
-                          <Link href={`/leads/${task.lead.id}`}>{task.lead.fullName}</Link>
-                        ) : null}
-                        {task.customer ? (
-                          <Link href={`/customers/${task.customer.id}`}>{task.customer.fullName}</Link>
-                        ) : null}
-                        {task.agency ? (
-                          <Link href={`/agencies/${task.agency.id}`}>{task.agency.name}</Link>
-                        ) : null}
+                        {task.lead ? <Link href={`/leads/${task.lead.id}`}>{task.lead.fullName}</Link> : null}
+                        {task.customer ? <Link href={`/customers/${task.customer.id}`}>{task.customer.fullName}</Link> : null}
+                        {task.agency ? <Link href={`/agencies/${task.agency.id}`}>{task.agency.name}</Link> : null}
                         {!task.lead && !task.customer && !task.agency ? "-" : null}
                       </div>
                     </td>
 
-                    {tab === "team" && canSeeTeam ? (
-                      <td>{task.assignedTo?.name || "-"}</td>
-                    ) : null}
+                    {tab === "team" && canSeeTeam ? <td>{task.assignedTo?.name || "-"}</td> : null}
 
                     <td>
                       <span className={`badge ${priorityBadgeClass(task.priority)}`}>
@@ -1006,28 +942,14 @@ export default function TasksPage() {
                             disabled={saving || deleting}
                           >
                             {saving
-                              ? safeTranslate(
-                                  t,
-                                  "tasks.actions.processing",
-                                  locale === "tr" ? "İşleniyor..." : "Processing...",
-                                )
-                              : safeTranslate(
-                                  t,
-                                  "tasks.actions.done",
-                                  locale === "tr" ? "Tamamla" : "Done",
-                                )}
+                              ? safeTranslate(t, "tasks.actions.processing", locale === "tr" ? "İşleniyor..." : "Processing...")
+                              : safeTranslate(t, "tasks.actions.done", locale === "tr" ? "Tamamla" : "Done")}
                           </button>
                         ) : null}
 
-                        {canDelete &&
-                        task.status !== "DONE" &&
-                        task.status !== "CANCELLED" ? (
+                        {canDelete && task.status !== "DONE" && task.status !== "CANCELLED" ? (
                           <button onClick={() => cancelTask(task.id)} disabled={saving || deleting}>
-                            {safeTranslate(
-                              t,
-                              "tasks.actions.cancel",
-                              locale === "tr" ? "İptal Et" : "Cancel",
-                            )}
+                            {safeTranslate(t, "tasks.actions.cancel", locale === "tr" ? "İptal Et" : "Cancel")}
                           </button>
                         ) : null}
 
@@ -1056,11 +978,7 @@ export default function TasksPage() {
 
           {activeTasks.length === 0 ? (
             <div style={{ padding: 14, color: "var(--text-secondary)" }}>
-              {safeTranslate(
-                t,
-                "tasks.noTasks",
-                locale === "tr" ? "Görev bulunamadı." : "No tasks found.",
-              )}
+              {safeTranslate(t, "tasks.noTasks", locale === "tr" ? "Görev bulunamadı." : "No tasks found.")}
             </div>
           ) : null}
         </div>
@@ -1071,22 +989,14 @@ export default function TasksPage() {
               <div style={{ display: "grid", gap: 4 }}>
                 <div style={{ fontWeight: 900, fontSize: 18 }}>{selected.title}</div>
                 <div className="muted" style={{ fontSize: 12 }}>
-                  {safeTranslate(
-                    t,
-                    "tasks.detail.taskInfo",
-                    locale === "tr" ? "Görev Detayı" : "Task Detail",
-                  )}
+                  {safeTranslate(t, "tasks.detail.taskInfo", locale === "tr" ? "Görev Detayı" : "Task Detail")}
                 </div>
               </div>
 
               <div style={{ display: "flex", gap: 8 }}>
                 <Link href={`/tasks/${selected.id}`}>
                   <button>
-                    {safeTranslate(
-                      t,
-                      "tasks.detail.openPage",
-                      locale === "tr" ? "Sayfayı Aç" : "Open Page",
-                    )}
+                    {safeTranslate(t, "tasks.detail.openPage", locale === "tr" ? "Sayfayı Aç" : "Open Page")}
                   </button>
                 </Link>
 
@@ -1107,11 +1017,7 @@ export default function TasksPage() {
 
               {isOverdue(selected) ? (
                 <span className="badge danger">
-                  {safeTranslate(
-                    t,
-                    "tasks.badges.overdue",
-                    locale === "tr" ? "Gecikti" : "Overdue",
-                  )}
+                  {safeTranslate(t, "tasks.badges.overdue", locale === "tr" ? "Gecikti" : "Overdue")}
                 </span>
               ) : null}
             </div>
@@ -1133,26 +1039,12 @@ export default function TasksPage() {
               </div>
 
               <div>
-                <b>
-                  {safeTranslate(
-                    t,
-                    "tasks.detail.assignedTo",
-                    locale === "tr" ? "Atanan" : "Assigned to",
-                  )}
-                  :
-                </b>{" "}
+                <b>{safeTranslate(t, "tasks.detail.assignedTo", locale === "tr" ? "Atanan" : "Assigned to")}:</b>{" "}
                 {selected.assignedTo?.name || "-"}
               </div>
 
               <div>
-                <b>
-                  {safeTranslate(
-                    t,
-                    "tasks.detail.createdBy",
-                    locale === "tr" ? "Oluşturan" : "Created by",
-                  )}
-                  :
-                </b>{" "}
+                <b>{safeTranslate(t, "tasks.detail.createdBy", locale === "tr" ? "Oluşturan" : "Created by")}:</b>{" "}
                 {selected.createdBy?.name || "-"}
               </div>
 
@@ -1165,33 +1057,15 @@ export default function TasksPage() {
 
               {selected.customer ? (
                 <div>
-                  <b>
-                    {safeTranslate(
-                      t,
-                      "tasks.detail.customer",
-                      locale === "tr" ? "Müşteri" : "Customer",
-                    )}
-                    :
-                  </b>{" "}
-                  <Link href={`/customers/${selected.customer.id}`}>
-                    {selected.customer.fullName}
-                  </Link>
+                  <b>{safeTranslate(t, "tasks.detail.customer", locale === "tr" ? "Müşteri" : "Customer")}:</b>{" "}
+                  <Link href={`/customers/${selected.customer.id}`}>{selected.customer.fullName}</Link>
                 </div>
               ) : null}
 
               {selected.agency ? (
                 <div>
-                  <b>
-                    {safeTranslate(
-                      t,
-                      "tasks.detail.agency",
-                      locale === "tr" ? "Ajans" : "Agency",
-                    )}
-                    :
-                  </b>{" "}
-                  <Link href={`/agencies/${selected.agency.id}`}>
-                    {selected.agency.name}
-                  </Link>
+                  <b>{safeTranslate(t, "tasks.detail.agency", locale === "tr" ? "Ajans" : "Agency")}:</b>{" "}
+                  <Link href={`/agencies/${selected.agency.id}`}>{selected.agency.name}</Link>
                 </div>
               ) : null}
             </div>
@@ -1220,31 +1094,17 @@ export default function TasksPage() {
                   disabled={savingId === selected.id || deletingId === selected.id}
                 >
                   {savingId === selected.id
-                    ? safeTranslate(
-                        t,
-                        "tasks.actions.processing",
-                        locale === "tr" ? "İşleniyor..." : "Processing...",
-                      )
-                    : safeTranslate(
-                        t,
-                        "tasks.actions.done",
-                        locale === "tr" ? "Tamamla" : "Done",
-                      )}
+                    ? safeTranslate(t, "tasks.actions.processing", locale === "tr" ? "İşleniyor..." : "Processing...")
+                    : safeTranslate(t, "tasks.actions.done", locale === "tr" ? "Tamamla" : "Done")}
                 </button>
               ) : null}
 
-              {canDelete &&
-              selected.status !== "DONE" &&
-              selected.status !== "CANCELLED" ? (
+              {canDelete && selected.status !== "DONE" && selected.status !== "CANCELLED" ? (
                 <button
                   onClick={() => cancelTask(selected.id)}
                   disabled={savingId === selected.id || deletingId === selected.id}
                 >
-                  {safeTranslate(
-                    t,
-                    "tasks.actions.cancel",
-                    locale === "tr" ? "İptal Et" : "Cancel",
-                  )}
+                  {safeTranslate(t, "tasks.actions.cancel", locale === "tr" ? "İptal Et" : "Cancel")}
                 </button>
               ) : null}
 

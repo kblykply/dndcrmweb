@@ -7,10 +7,16 @@ import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 import Link from "next/link";
 
-
 type AgencyStatus = "ACTIVE" | "PASSIVE" | "PROSPECT" | "DEALING" | "CLOSED";
 type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
 type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
+
+type UserRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
 
 type AgencyDetail = {
   id: string;
@@ -27,40 +33,16 @@ type AgencyDetail = {
   status: AgencyStatus;
   createdAt?: string;
   updatedAt?: string;
-  manager?: { id: string; name: string; email: string };
-  assignedSales?: { id: string; name: string; email: string } | null;
+  manager?: { id: string; name: string; email: string } | null;
+  assignedSales?: { id: string; name: string; email: string; role?: string } | null;
   canSeeContactDetails?: boolean;
   canEdit?: boolean;
-  notes: Array<{
+  notes?: Array<{
     id: string;
     note: string;
     createdAt: string;
     createdBy?: { id: string; name: string; email: string };
   }>;
-  meetings?: Array<{
-        id: string;
-    title: string;
-    notes?: string | null;
-    meetingAt: string;
-    createdBy?: { id: string; name: string; email: string };
-  }>;
-  tasks?: Array<{
-        id: string;
-    title: string;
-    description?: string | null;
-    dueAt?: string | null;
-    status: TaskStatus;
-    priority: TaskPriority;
-    assignedTo?: { id: string; name: string; email: string } | null;
-    createdBy?: { id: string; name: string; email: string };
-  }>;
-};
-
-type UserRow = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
 };
 
 const AGENCY_STATUS_OPTIONS: AgencyStatus[] = [
@@ -78,11 +60,7 @@ const TASK_STATUS_OPTIONS: TaskStatus[] = [
   "CANCELLED",
 ];
 
-const TASK_PRIORITY_OPTIONS: TaskPriority[] = [
-  "LOW",
-  "MEDIUM",
-  "HIGH",
-];
+const TASK_PRIORITY_OPTIONS: TaskPriority[] = ["LOW", "MEDIUM", "HIGH"];
 
 function badgeClass(status?: string) {
   if (status === "ACTIVE" || status === "DEALING" || status === "DONE") return "success";
@@ -98,8 +76,7 @@ function safeTranslate(
   fallback?: string | null,
 ) {
   const translated = t(path);
-  if (translated === path) return fallback ?? path;
-  return translated;
+  return translated === path ? fallback ?? path : translated;
 }
 
 export default function AgencyDetailPage() {
@@ -114,6 +91,7 @@ export default function AgencyDetailPage() {
 
   const [agency, setAgency] = useState<AgencyDetail | null>(null);
   const [salesUsers, setSalesUsers] = useState<UserRow[]>([]);
+  const [assignableUsers, setAssignableUsers] = useState<UserRow[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -144,6 +122,9 @@ export default function AgencyDetailPage() {
   const [taskAssignedToId, setTaskAssignedToId] = useState("");
   const [taskPriority, setTaskPriority] = useState<TaskPriority>("MEDIUM");
 
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+
   const role = me?.role as string | undefined;
   const isAdmin = role === "ADMIN";
   const isManager = role === "MANAGER";
@@ -152,33 +133,21 @@ export default function AgencyDetailPage() {
   const canManage = isManager || isAdmin;
   const canNote = isManager || isAdmin || isSales;
 
-  const isOwnAgencyForSales =
-    !!agency && !!me?.id && agency.assignedSales?.id === me.id;
+  const isOwnAgency = !!agency && !!me?.id && agency.assignedSales?.id === me.id;
 
   const canSeeContactDetails =
-    !isSales || agency?.canSeeContactDetails === true || isOwnAgencyForSales;
+    !isSales || agency?.canSeeContactDetails === true || isOwnAgency;
 
-  const canSalesEditAgency =
-    isSales && (agency?.canEdit === true || isOwnAgencyForSales);
-
+  const canSalesEditAgency = isSales && (agency?.canEdit === true || isOwnAgency);
   const canEditAgencyInfo = canManage || canSalesEditAgency;
 
-
-
   const canCreateTask = canManage || isSales;
-const canUpdateTaskStatus = canManage || isSales;
- 
+  const canUpdateTaskStatus = canManage || isSales;
 
- const [meetings, setMeetings] = useState<any[]>([]);
-const [tasks, setTasks] = useState<any[]>([]);
-
+  const notesList = agency?.notes || [];
 
   function hiddenText() {
-    return safeTranslate(
-      t,
-      "common.hidden",
-      locale === "tr" ? "Gizli" : "Hidden",
-    );
+    return safeTranslate(t, "common.hidden", locale === "tr" ? "Gizli" : "Hidden");
   }
 
   async function load() {
@@ -192,30 +161,36 @@ const [tasks, setTasks] = useState<any[]>([]);
     setLoading(true);
 
     try {
-  const [agencyData, sales, meetingsRes, tasksRes] = await Promise.all([
-  authedFetch(`/agencies/${agencyId}`),
-  authedFetch("/users?role=SALES"),
-  authedFetch(`/meetings?kind=AGENCY&agencyId=${agencyId}`),
-authedFetch(`/tasks?agencyId=${agencyId}`),
-]);
+      const [agencyData, sales, managers, meetingsRes, tasksRes] = await Promise.all([
+        authedFetch(`/agencies/${agencyId}`),
+        authedFetch("/users?role=SALES"),
+        authedFetch("/users?role=MANAGER"),
+        authedFetch(`/meetings?kind=AGENCY&agencyId=${agencyId}`),
+        authedFetch(`/tasks?agencyId=${agencyId}`),
+      ]);
 
-setAgency(agencyData);
-setSalesUsers(Array.isArray(sales) ? sales : []);
-setMeetings(Array.isArray(meetingsRes) ? meetingsRes : meetingsRes?.items || []);
-setTasks(Array.isArray(tasksRes) ? tasksRes : tasksRes?.items || []);
+      const salesList = Array.isArray(sales) ? sales : [];
+      const managerList = Array.isArray(managers) ? managers : [];
 
-setName(agencyData.name || "");
-setContactName(agencyData.contactName || "");
-setPhone(agencyData.phone || "");
-setEmail(agencyData.email || "");
-setCity(agencyData.city || "");
-setCountry(agencyData.country || "");
-setAddress(agencyData.address || "");
-setWebsite(agencyData.website || "");
-setSource(agencyData.source || "");
-setNotesSummary(agencyData.notesSummary || "");
-setStatus(agencyData.status || "ACTIVE");
-setAssignedSalesId(agencyData.assignedSales?.id || "");
+      setAgency(agencyData);
+      setSalesUsers(salesList);
+      setAssignableUsers([...managerList, ...salesList]);
+
+      setMeetings(Array.isArray(meetingsRes) ? meetingsRes : meetingsRes?.items || []);
+      setTasks(Array.isArray(tasksRes) ? tasksRes : tasksRes?.items || []);
+
+      setName(agencyData.name || "");
+      setContactName(agencyData.contactName || "");
+      setPhone(agencyData.phone || "");
+      setEmail(agencyData.email || "");
+      setCity(agencyData.city || "");
+      setCountry(agencyData.country || "");
+      setAddress(agencyData.address || "");
+      setWebsite(agencyData.website || "");
+      setSource(agencyData.source || "");
+      setNotesSummary(agencyData.notesSummary || "");
+      setStatus(agencyData.status || "ACTIVE");
+      setAssignedSalesId(agencyData.assignedSales?.id || "");
     } catch (e: any) {
       setAgency(null);
       setErr(String(e?.message || e));
@@ -229,13 +204,15 @@ setAssignedSalesId(agencyData.assignedSales?.id || "");
 
     setErr(null);
     setSaving(true);
+
     try {
       const body: any = {
         name: name.trim(),
         notesSummary: notesSummary.trim() || undefined,
+        status,
       };
 
-      if (canEditAgencyInfo && canSeeContactDetails) {
+      if (canSeeContactDetails) {
         body.contactName = contactName.trim() || undefined;
         body.phone = phone.trim() || undefined;
         body.email = email.trim() || undefined;
@@ -246,16 +223,12 @@ setAssignedSalesId(agencyData.assignedSales?.id || "");
         body.source = source.trim() || undefined;
       }
 
-    if (canEditAgencyInfo) {
-  body.status = status;
-}
-
       await authedFetch(`/agencies/${agency.id}`, {
         method: "PATCH",
         body: JSON.stringify(body),
       });
 
-      if (canManage) {
+      if (canEditAgencyInfo) {
         await authedFetch(`/agencies/${agency.id}/assign-sales`, {
           method: "POST",
           body: JSON.stringify({
@@ -275,13 +248,16 @@ setAssignedSalesId(agencyData.assignedSales?.id || "");
 
   async function addNote() {
     if (!agency || !newNote.trim()) return;
+
     setSaving(true);
     setErr(null);
+
     try {
       await authedFetch(`/agencies/${agency.id}/notes`, {
         method: "POST",
         body: JSON.stringify({ note: newNote.trim() }),
       });
+
       setNewNote("");
       await load();
     } catch (e: any) {
@@ -293,19 +269,22 @@ setAssignedSalesId(agencyData.assignedSales?.id || "");
 
   async function createMeeting() {
     if (!agency || !meetingTitle.trim() || !meetingAt) return;
+
     setSaving(true);
     setErr(null);
+
     try {
-await authedFetch(`/meetings`, {
-    method: "POST",
-  body: JSON.stringify({
-kind: "AGENCY",
-agencyId: agency.id,
-    title: meetingTitle.trim(),
-    notes: meetingNotes.trim() || undefined,
-    meetingAt: new Date(meetingAt).toISOString(),
-  }),
-});
+      await authedFetch("/meetings", {
+        method: "POST",
+        body: JSON.stringify({
+          kind: "AGENCY",
+          agencyId: agency.id,
+          assignedSalesId: agency.assignedSales?.id || undefined,
+          title: meetingTitle.trim(),
+          notes: meetingNotes.trim() || undefined,
+          meetingAt: new Date(meetingAt).toISOString(),
+        }),
+      });
 
       setMeetingTitle("");
       setMeetingNotes("");
@@ -320,24 +299,24 @@ agencyId: agency.id,
 
   async function createTask() {
     if (!agency || !taskTitle.trim()) return;
+
     setSaving(true);
     setErr(null);
+
     try {
-
-
       const finalAssignedToId = isSales ? me?.id || null : taskAssignedToId || null;
 
-     await authedFetch(`/tasks`, {
-  method: "POST",
-  body: JSON.stringify({
-    agencyId: agency.id,
-    title: taskTitle.trim(),
-    description: taskDescription.trim() || undefined,
-    dueAt: taskDueAt ? new Date(taskDueAt).toISOString() : undefined,
-assignedToId: finalAssignedToId,
-    priority: taskPriority,
-  }),
-});
+      await authedFetch("/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          agencyId: agency.id,
+          title: taskTitle.trim(),
+          description: taskDescription.trim() || undefined,
+          dueAt: taskDueAt ? new Date(taskDueAt).toISOString() : undefined,
+          assignedToId: finalAssignedToId,
+          priority: taskPriority,
+        }),
+      });
 
       setTaskTitle("");
       setTaskDescription("");
@@ -355,11 +334,13 @@ assignedToId: finalAssignedToId,
   async function updateTaskStatus(taskId: string, nextStatus: TaskStatus) {
     setSaving(true);
     setErr(null);
+
     try {
-  await authedFetch(`/tasks/${taskId}`, {
-  method: "PATCH",
-  body: JSON.stringify({ status: nextStatus }),
-});
+      await authedFetch(`/tasks/${taskId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: nextStatus }),
+      });
+
       await load();
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -376,18 +357,19 @@ assignedToId: finalAssignedToId,
   useEffect(() => {
     if (!mounted) return;
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, agencyId]);
 
-   const stats = useMemo(() => {
-  return {
-    notes: agency?.notes?.length || 0,
-    meetings: meetings.length,
-    tasks: tasks.length,
-    openTasks: tasks.filter(
-      (task) => task.status !== "DONE" && task.status !== "CANCELLED",
-    ).length,
-  };
-}, [agency, meetings, tasks]);
+  const stats = useMemo(() => {
+    return {
+      notes: notesList.length,
+      meetings: meetings.length,
+      tasks: tasks.length,
+      openTasks: tasks.filter(
+        (task) => task.status !== "DONE" && task.status !== "CANCELLED",
+      ).length,
+    };
+  }, [notesList.length, meetings, tasks]);
 
   if (!mounted) return <div>{t("common.loading")}</div>;
   if (loading) return <div className="card">{t("agencyDetail.loadingAgency")}</div>;
@@ -410,10 +392,13 @@ assignedToId: finalAssignedToId,
           <a href="/agencies" style={{ fontWeight: 800 }}>
             ← {t("agencyDetail.backToAgencies")}
           </a>
+
           <div style={{ fontSize: 28, fontWeight: 900 }}>{agency.name}</div>
+
           <div className="muted" style={{ fontSize: 13 }}>
-            {t("agencyDetail.managerLabel")}: {agency.manager?.name || "-"} •{" "}
-            {t("agencyDetail.salesLabel")}: {agency.assignedSales?.name || "-"}
+            {locale === "tr" ? "Atanan" : "Assigned"}:{" "}
+            {agency.assignedSales?.name || "-"}
+            {agency.assignedSales?.role ? ` (${agency.assignedSales.role})` : ""}
           </div>
         </div>
 
@@ -453,25 +438,22 @@ assignedToId: finalAssignedToId,
         </div>
       ) : null}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-          gap: 14,
-        }}
-      >
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14 }}>
         <div className="card">
           <div className="muted">{t("agencyDetail.stats.notes")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.notes}</div>
         </div>
+
         <div className="card">
           <div className="muted">{t("agencyDetail.stats.meetings")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.meetings}</div>
         </div>
+
         <div className="card">
           <div className="muted">{t("agencyDetail.stats.tasks")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.tasks}</div>
         </div>
+
         <div className="card">
           <div className="muted">{t("agencyDetail.stats.openTasks")}</div>
           <div style={{ fontSize: 28, fontWeight: 900 }}>{stats.openTasks}</div>
@@ -481,74 +463,24 @@ assignedToId: finalAssignedToId,
       <div className="card" style={{ display: "grid", gap: 12 }}>
         <div style={{ fontWeight: 900 }}>{t("agencyDetail.agencyInfo")}</div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-            gap: 10,
-          }}
-        >
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t("agencies.fields.name")}
-            disabled={!canEditAgencyInfo}
-          />
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10 }}>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("agencies.fields.name")} disabled={!canEditAgencyInfo} />
 
-          <input
-            value={canSeeContactDetails ? contactName || "" : hiddenText()}
-            onChange={(e) => setContactName(e.target.value)}
-            placeholder={t("agencies.fields.contactName")}
-            disabled={!canEditAgencyInfo || !canSeeContactDetails}
-          />
+          <input value={canSeeContactDetails ? contactName || "" : hiddenText()} onChange={(e) => setContactName(e.target.value)} placeholder={t("agencies.fields.contactName")} disabled={!canEditAgencyInfo || !canSeeContactDetails} />
 
-          <input
-            value={canSeeContactDetails ? phone || "" : hiddenText()}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder={t("agencies.fields.phone")}
-            disabled={!canEditAgencyInfo || !canSeeContactDetails}
-          />
+          <input value={canSeeContactDetails ? phone || "" : hiddenText()} onChange={(e) => setPhone(e.target.value)} placeholder={t("agencies.fields.phone")} disabled={!canEditAgencyInfo || !canSeeContactDetails} />
 
-          <input
-            value={canSeeContactDetails ? email || "" : hiddenText()}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder={t("agencies.fields.email")}
-            disabled={!canEditAgencyInfo || !canSeeContactDetails}
-          />
+          <input value={canSeeContactDetails ? email || "" : hiddenText()} onChange={(e) => setEmail(e.target.value)} placeholder={t("agencies.fields.email")} disabled={!canEditAgencyInfo || !canSeeContactDetails} />
 
-          <input
-            value={canSeeContactDetails ? city || "" : hiddenText()}
-            onChange={(e) => setCity(e.target.value)}
-            placeholder={t("agencies.fields.city")}
-            disabled={!canEditAgencyInfo || !canSeeContactDetails}
-          />
+          <input value={canSeeContactDetails ? city || "" : hiddenText()} onChange={(e) => setCity(e.target.value)} placeholder={t("agencies.fields.city")} disabled={!canEditAgencyInfo || !canSeeContactDetails} />
 
-          <input
-            value={canSeeContactDetails ? country || "" : hiddenText()}
-            onChange={(e) => setCountry(e.target.value)}
-            placeholder={t("agencies.fields.country")}
-            disabled={!canEditAgencyInfo || !canSeeContactDetails}
-          />
+          <input value={canSeeContactDetails ? country || "" : hiddenText()} onChange={(e) => setCountry(e.target.value)} placeholder={t("agencies.fields.country")} disabled={!canEditAgencyInfo || !canSeeContactDetails} />
 
-          <input
-            value={canSeeContactDetails ? website || "" : hiddenText()}
-            onChange={(e) => setWebsite(e.target.value)}
-            placeholder={t("agencies.fields.website")}
-            disabled={!canEditAgencyInfo || !canSeeContactDetails}
-          />
+          <input value={canSeeContactDetails ? website || "" : hiddenText()} onChange={(e) => setWebsite(e.target.value)} placeholder={t("agencies.fields.website")} disabled={!canEditAgencyInfo || !canSeeContactDetails} />
 
-          <input
-            value={canSeeContactDetails ? source || "" : hiddenText()}
-            onChange={(e) => setSource(e.target.value)}
-            placeholder={t("agencies.fields.source")}
-            disabled={!canEditAgencyInfo || !canSeeContactDetails}
-          />
+          <input value={canSeeContactDetails ? source || "" : hiddenText()} onChange={(e) => setSource(e.target.value)} placeholder={t("agencies.fields.source")} disabled={!canEditAgencyInfo || !canSeeContactDetails} />
 
-          <select
-  value={status}
-  onChange={(e) => setStatus(e.target.value as AgencyStatus)}
-  disabled={!canEditAgencyInfo}
->
+          <select value={status} onChange={(e) => setStatus(e.target.value as AgencyStatus)} disabled={!canEditAgencyInfo}>
             {AGENCY_STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {safeTranslate(t, `agencyStatuses.${s}`, s)}
@@ -556,22 +488,20 @@ assignedToId: finalAssignedToId,
             ))}
           </select>
 
-          <input
-            value={canSeeContactDetails ? address || "" : hiddenText()}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder={t("agencies.fields.address")}
-            disabled={!canEditAgencyInfo || !canSeeContactDetails}
-          />
+          <input value={canSeeContactDetails ? address || "" : hiddenText()} onChange={(e) => setAddress(e.target.value)} placeholder={t("agencies.fields.address")} disabled={!canEditAgencyInfo || !canSeeContactDetails} />
 
           <select
             value={assignedSalesId}
             onChange={(e) => setAssignedSalesId(e.target.value)}
-            disabled={!canManage}
+            disabled={!canEditAgencyInfo}
           >
-            <option value="">{t("agencies.fields.selectSales")}</option>
-            {salesUsers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.email})
+            <option value="">
+              {locale === "tr" ? "Atanacak kullanıcı seç" : "Select assigned user"}
+            </option>
+
+            {assignableUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.role})
               </option>
             ))}
           </select>
@@ -586,41 +516,22 @@ assignedToId: finalAssignedToId,
 
         {canEditAgencyInfo ? (
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button
-              className="primary"
-              onClick={saveAgency}
-              disabled={saving || !name.trim()}
-            >
+            <button className="primary" onClick={saveAgency} disabled={saving || !name.trim()}>
               {saving ? t("agencies.saving") : t("agencyDetail.saveAgency")}
             </button>
           </div>
         ) : null}
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 14,
-          alignItems: "start",
-        }}
-      >
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
         <div className="card" style={{ display: "grid", gap: 12 }}>
           <div style={{ fontWeight: 900 }}>{t("agencyDetail.notesTitle")}</div>
 
           {canNote ? (
             <div style={{ display: "grid", gap: 10 }}>
-              <textarea
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                placeholder={t("agencyDetail.addNotePlaceholder")}
-              />
+              <textarea value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder={t("agencyDetail.addNotePlaceholder")} />
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  className="primary"
-                  onClick={addNote}
-                  disabled={saving || !newNote.trim()}
-                >
+                <button className="primary" onClick={addNote} disabled={saving || !newNote.trim()}>
                   {t("agencyDetail.addNote")}
                 </button>
               </div>
@@ -628,24 +539,14 @@ assignedToId: finalAssignedToId,
           ) : null}
 
           <div style={{ display: "grid", gap: 10 }}>
-            {agency.notes.length === 0 ? (
+            {notesList.length === 0 ? (
               <div className="muted">{t("agencyDetail.noNotes")}</div>
             ) : (
-              agency.notes.map((n) => (
-                <div
-                  key={n.id}
-                  style={{
-                    border: "1px solid var(--stroke)",
-                    borderRadius: 12,
-                    padding: 12,
-                    background: "var(--surface-2)",
-                  }}
-                >
+              notesList.map((n) => (
+                <div key={n.id} style={{ border: "1px solid var(--stroke)", borderRadius: 12, padding: 12, background: "var(--surface-2)" }}>
                   <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>
                     {n.createdBy?.name || "-"} •{" "}
-                    {new Date(n.createdAt).toLocaleString(
-                      locale === "tr" ? "tr-TR" : "en-US",
-                    )}
+                    {new Date(n.createdAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")}
                   </div>
                   <div>{n.note}</div>
                 </div>
@@ -659,27 +560,11 @@ assignedToId: finalAssignedToId,
 
           {canNote ? (
             <div style={{ display: "grid", gap: 10 }}>
-              <input
-                value={meetingTitle}
-                onChange={(e) => setMeetingTitle(e.target.value)}
-                placeholder={t("agencyDetail.meetingFields.title")}
-              />
-              <input
-                type="datetime-local"
-                value={meetingAt}
-                onChange={(e) => setMeetingAt(e.target.value)}
-              />
-              <textarea
-                value={meetingNotes}
-                onChange={(e) => setMeetingNotes(e.target.value)}
-                placeholder={t("agencyDetail.meetingFields.notes")}
-              />
+              <input value={meetingTitle} onChange={(e) => setMeetingTitle(e.target.value)} placeholder={t("agencyDetail.meetingFields.title")} />
+              <input type="datetime-local" value={meetingAt} onChange={(e) => setMeetingAt(e.target.value)} />
+              <textarea value={meetingNotes} onChange={(e) => setMeetingNotes(e.target.value)} placeholder={t("agencyDetail.meetingFields.notes")} />
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  className="primary"
-                  onClick={createMeeting}
-                  disabled={saving || !meetingTitle.trim() || !meetingAt}
-                >
+                <button className="primary" onClick={createMeeting} disabled={saving || !meetingTitle.trim() || !meetingAt}>
                   {t("agencyDetail.addMeeting")}
                 </button>
               </div>
@@ -687,41 +572,16 @@ assignedToId: finalAssignedToId,
           ) : null}
 
           <div style={{ display: "grid", gap: 10 }}>
-{meetings.length === 0 ? (
-                <div className="muted">{t("agencyDetail.noMeetings")}</div>
+            {meetings.length === 0 ? (
+              <div className="muted">{t("agencyDetail.noMeetings")}</div>
             ) : (
-meetings.map((m) => (
-                  <div
-                  key={m.id}
-                  style={{
-                    border: "1px solid var(--stroke)",
-                    borderRadius: 12,
-                    padding: 12,
-                    background: "var(--surface-2)",
-                    display: "grid",
-                    gap: 6,
-                  }}
-                >
-<Link
-
-  href={`/meetings/${m.id}`}
-
-  target="_blank"
-
-  rel="noopener noreferrer"
-
-  style={{ fontWeight: 800, color: "inherit", textDecoration: "none" }}
-
->
-
-  {m.title}
-
-</Link>
+              meetings.map((m) => (
+                <div key={m.id} style={{ border: "1px solid var(--stroke)", borderRadius: 12, padding: 12, background: "var(--surface-2)", display: "grid", gap: 6 }}>
+                  <Link href={`/meetings/${m.id}?kind=AGENCY`} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 800, color: "inherit", textDecoration: "none" }}>
+                    {m.title}
+                  </Link>
                   <div className="muted" style={{ fontSize: 12 }}>
-                    {new Date(m.meetingAt).toLocaleString(
-                      locale === "tr" ? "tr-TR" : "en-US",
-                    )}{" "}
-                    • {m.createdBy?.name || "-"}
+                    {new Date(m.meetingAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} • {m.createdBy?.name || "-"}
                   </div>
                   <div style={{ fontSize: 13 }}>{m.notes || "-"}</div>
                 </div>
@@ -734,96 +594,54 @@ meetings.map((m) => (
       <div className="card" style={{ display: "grid", gap: 12 }}>
         <div style={{ fontWeight: 900 }}>{t("agencyDetail.tasksTitle")}</div>
 
-        {canCreateTask ? ( 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 180px 180px 140px auto",
-              gap: 10,
-            }}
-          >
-            <input
-              value={taskTitle}
-              onChange={(e) => setTaskTitle(e.target.value)}
-              placeholder={t("agencyDetail.taskFields.title")}
-            />
-            <input
-              value={taskDescription}
-              onChange={(e) => setTaskDescription(e.target.value)}
-              placeholder={t("agencyDetail.taskFields.description")}
-            />
-            <input
-              type="datetime-local"
-              value={taskDueAt}
-              onChange={(e) => setTaskDueAt(e.target.value)}
-            />
-           <select
-  value={taskAssignedToId}
-  onChange={(e) => setTaskAssignedToId(e.target.value)}
->
-  <option value="">{t("agencies.fields.selectSales")}</option>
-  {isSales ? (
-    <option value={me?.id || ""}>{me?.name || "-"}</option>
-  ) : (
-    salesUsers.map((s) => (
-      <option key={s.id} value={s.id}>
-        {s.name}
-      </option>
-    ))
-  )}
-</select>
-            <select
-              value={taskPriority}
-              onChange={(e) => setTaskPriority(e.target.value as TaskPriority)}
-            >
+        {canCreateTask ? (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 180px 180px 140px auto", gap: 10 }}>
+            <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder={t("agencyDetail.taskFields.title")} />
+            <input value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} placeholder={t("agencyDetail.taskFields.description")} />
+            <input type="datetime-local" value={taskDueAt} onChange={(e) => setTaskDueAt(e.target.value)} />
+
+            <select value={taskAssignedToId} onChange={(e) => setTaskAssignedToId(e.target.value)}>
+              <option value="">{t("agencies.fields.selectSales")}</option>
+              {isSales ? (
+                <option value={me?.id || ""}>{me?.name || "-"}</option>
+              ) : (
+                salesUsers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))
+              )}
+            </select>
+
+            <select value={taskPriority} onChange={(e) => setTaskPriority(e.target.value as TaskPriority)}>
               {TASK_PRIORITY_OPTIONS.map((p) => (
                 <option key={p} value={p}>
                   {safeTranslate(t, `taskPriorities.${p}`, p)}
                 </option>
               ))}
             </select>
-            <button
-              className="primary"
-              onClick={createTask}
-              disabled={saving || !taskTitle.trim()}
-            >
+
+            <button className="primary" onClick={createTask} disabled={saving || !taskTitle.trim()}>
               {t("agencyDetail.addTask")}
             </button>
           </div>
         ) : null}
 
         <div style={{ display: "grid", gap: 10 }}>
-{tasks.length === 0 ? (
-              <div className="muted">{t("agencyDetail.noTasks")}</div>
+          {tasks.length === 0 ? (
+            <div className="muted">{t("agencyDetail.noTasks")}</div>
           ) : (
-tasks.map((task) => (
-                <div
-                key={task.id}
-                style={{
-                  border: "1px solid var(--stroke)",
-                  borderRadius: 12,
-                  padding: 12,
-                  background: "var(--surface-2)",
-                  display: "grid",
-                  gap: 8,
-                }}
-              >
+            tasks.map((task) => (
+              <div key={task.id} style={{ border: "1px solid var(--stroke)", borderRadius: 12, padding: 12, background: "var(--surface-2)", display: "grid", gap: 8 }}>
                 <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
                   <div style={{ display: "grid", gap: 4 }}>
-<Link
-  href={`/tasks/${task.id}`}
-  target="_blank"
-  rel="noopener noreferrer"
-  style={{ fontWeight: 800, color: "inherit", textDecoration: "none" }}
->
-  {task.title}
-</Link>
+                    <Link href={`/tasks/${task.id}`} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 800, color: "inherit", textDecoration: "none" }}>
+                      {task.title}
+                    </Link>
                     <div className="muted" style={{ fontSize: 12 }}>
                       {task.assignedTo?.name || t("agencyDetail.unassigned")} •{" "}
                       {task.dueAt
-                        ? new Date(task.dueAt).toLocaleString(
-                            locale === "tr" ? "tr-TR" : "en-US",
-                          )
+                        ? new Date(task.dueAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")
                         : t("agencyDetail.noDate")}
                     </div>
                   </div>
@@ -838,23 +656,17 @@ tasks.map((task) => (
                   </div>
                 </div>
 
-                {task.description ? (
-                  <div style={{ fontSize: 13 }}>{task.description}</div>
-                ) : null}
+                {task.description ? <div style={{ fontSize: 13 }}>{task.description}</div> : null}
 
-            {canUpdateTaskStatus ? (
-  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-    {TASK_STATUS_OPTIONS.map((s) => (
-      <button
-        key={s}
-        onClick={() => updateTaskStatus(task.id, s)}
-        disabled={saving || task.status === s}
-      >
-        {safeTranslate(t, `taskStatuses.${s}`, s)}
-      </button>
-    ))}
-  </div>
-) : null}
+                {canUpdateTaskStatus ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {TASK_STATUS_OPTIONS.map((s) => (
+                      <button key={s} onClick={() => updateTaskStatus(task.id, s)} disabled={saving || task.status === s}>
+                        {safeTranslate(t, `taskStatuses.${s}`, s)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))
           )}
