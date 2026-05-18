@@ -43,7 +43,7 @@ type CalendarItem = {
   assignedUserId?: string | null;
   assignedUserRole?: string | null;
   href?: string;
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
 };
 
 const ITEM_TYPES: CalendarItemType[] = [
@@ -131,17 +131,19 @@ function formatDay(date: string | null | undefined, locale: "tr" | "en") {
 }
 
 function getItemUserId(item: CalendarItem) {
+  const meta = item.meta || {};
   return (
     item.assignedUserId ||
-    item.meta?.assignedUserId ||
-    item.meta?.assignedSalesId ||
-    item.meta?.ownerId ||
+    (typeof meta.assignedUserId === "string" ? meta.assignedUserId : null) ||
+    (typeof meta.assignedSalesId === "string" ? meta.assignedSalesId : null) ||
+    (typeof meta.ownerId === "string" ? meta.ownerId : null) ||
     null
   );
 }
 
 function getItemUserRole(item: CalendarItem) {
-  return item.assignedUserRole || item.meta?.assignedUserRole || null;
+  const metaRole = item.meta?.assignedUserRole;
+  return item.assignedUserRole || (typeof metaRole === "string" ? metaRole : null);
 }
 
 function FilterPill({
@@ -332,6 +334,25 @@ export default function CalendarPage() {
     selectedUserIds.length +
     (selectedTypes.length !== ITEM_TYPES.length ? 1 : 0);
 
+  const typeCounts = useMemo(() => {
+    return ITEM_TYPES.reduce(
+      (acc, itemType) => {
+        acc[itemType] = filteredItems.filter((item) => item.type === itemType).length;
+        return acc;
+      },
+      {} as Record<CalendarItemType, number>,
+    );
+  }, [filteredItems]);
+
+  const nextItem = useMemo(() => {
+    const now = Date.now();
+    return [...filteredItems]
+      .filter((item) => new Date(item.start).getTime() >= now)
+      .sort(
+        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+      )[0];
+  }, [filteredItems]);
+
   const calendarEvents = useMemo(() => {
     return filteredItems.map((item) => ({
       id: item.id,
@@ -406,8 +427,8 @@ export default function CalendarPage() {
 
         const feed = await authedFetch(`/calendar/feed?${params.toString()}`);
         setItems(Array.isArray(feed?.items) ? feed.items : []);
-      } catch (e: any) {
-        setErr(String(e?.message || e));
+      } catch (e: unknown) {
+        setErr(e instanceof Error ? e.message : String(e));
         setItems([]);
       } finally {
         setLoading(false);
@@ -460,62 +481,94 @@ export default function CalendarPage() {
   }
 
   return (
-    <div style={{ display: "grid", gap: 14 }}>
-      <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-            {t("calendar.label")}
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{t("calendar.title")}</div>
-          <div className="muted" style={{ fontSize: 13 }}>
-            {t("calendar.subtitle")}
-          </div>
+    <div className="calendar-page">
+      <section className="calendar-hero">
+        <div className="calendar-hero-copy">
+          <div className="calendar-kicker">{t("calendar.label")}</div>
+          <h1>{t("calendar.title")}</h1>
+          <p>{t("calendar.subtitle")}</p>
         </div>
 
-        <button
-          className="primary"
-          onClick={() => {
-            loadFeed();
-            loadSummary();
-            loadUsers();
-          }}
-          disabled={loading || summaryLoading || loadingUsers}
-        >
-          {loading || summaryLoading || loadingUsers
-            ? t("common.loading")
-            : t("common.refresh")}
-        </button>
-      </div>
+        <div className="calendar-hero-actions">
+          <div className="next-event">
+            <span>{locale === "tr" ? "Sıradaki" : "Next up"}</span>
+            <strong>{nextItem ? formatTime(nextItem.start, locale) : "-"}</strong>
+            <small>{nextItem?.title || (locale === "tr" ? "Planlanan yok" : "Nothing scheduled")}</small>
+          </div>
 
-      <div className="calendar-filter-panel">
+          <button
+            className="primary refresh-button"
+            onClick={() => {
+              loadFeed();
+              loadSummary();
+              loadUsers();
+            }}
+            disabled={loading || summaryLoading || loadingUsers}
+          >
+            {loading || summaryLoading || loadingUsers
+              ? t("common.loading")
+              : t("common.refresh")}
+          </button>
+        </div>
+      </section>
+
+      <section className="calendar-stats" aria-label="Calendar overview">
+        <div className="stat-card featured">
+          <span>{locale === "tr" ? "Görünen" : "Visible"}</span>
+          <strong>{filteredItems.length}</strong>
+          <small>
+            {activeFiltersCount > 0
+              ? locale === "tr"
+                ? `${activeFiltersCount} aktif filtre`
+                : `${activeFiltersCount} active filters`
+              : locale === "tr"
+                ? "Tüm kayıtlar"
+                : "All records"}
+          </small>
+        </div>
+        <div className="stat-card">
+          <span>{t("calendar.todayEvents")}</span>
+          <strong>{filteredTodayItems.length}</strong>
+          <small>{locale === "tr" ? "Bugün planlı" : "Scheduled today"}</small>
+        </div>
+        <div className="stat-card">
+          <span>{t("common.upcoming")}</span>
+          <strong>{filteredUpcomingItems.length}</strong>
+          <small>{locale === "tr" ? "Yaklaşan kayıt" : "Upcoming records"}</small>
+        </div>
+      </section>
+
+      <section className="calendar-filter-panel">
         <div className="filter-header">
           <div>
             <div className="filter-title">
-              {locale === "tr" ? "Detaylı Filtreler" : "Detailed Filters"}
+              {locale === "tr" ? "Filtreler" : "Filters"}
             </div>
             <div className="filter-subtitle">
               {locale === "tr"
-                ? `${filteredItems.length} kayıt gösteriliyor`
-                : `${filteredItems.length} records visible`}
-              {activeFiltersCount > 0 ? ` • ${activeFiltersCount} active` : ""}
+                ? "Takvim, bugün ve yaklaşan listeleri birlikte daraltılır."
+                : "Filters refine the calendar, today list, and upcoming list together."}
             </div>
           </div>
 
-          <button type="button" onClick={clearAllFilters}>
-            {locale === "tr" ? "Filtreleri Sıfırla" : "Reset Filters"}
+          <button type="button" className="quiet-button" onClick={clearAllFilters}>
+            {locale === "tr" ? "Sifirla" : "Reset"}
           </button>
         </div>
 
         <div className="filter-search-row">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={
-              locale === "tr"
-                ? "Başlık, kişi, ajans, müşteri veya not ara..."
-                : "Search title, person, agency, customer, or notes..."
-            }
-          />
+          <div className="search-field">
+            <span aria-hidden="true">/</span>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={
+                locale === "tr"
+                  ? "Başlık, kişi, ajans, müşteri veya not ara..."
+                  : "Search title, person, agency, customer, or notes..."
+              }
+            />
+          </div>
 
           <div className="role-tabs">
             {ROLE_OPTIONS.map((role) => (
@@ -538,67 +591,70 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        <div className="filter-section">
-          <div className="section-heading">
-            <span>{locale === "tr" ? "Kayıt Tipleri" : "Item Types"}</span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" onClick={() => setSelectedTypes(ITEM_TYPES)}>
-                {locale === "tr" ? "Tümünü Seç" : "Select All"}
-              </button>
-              <button type="button" onClick={() => setSelectedTypes([])}>
-                {locale === "tr" ? "Temizle" : "Clear"}
-              </button>
+        <div className="filter-columns">
+          <div className="filter-section">
+            <div className="section-heading">
+              <span>{locale === "tr" ? "Kayıt Tipleri" : "Item Types"}</span>
+              <div className="inline-actions">
+                <button type="button" onClick={() => setSelectedTypes(ITEM_TYPES)}>
+                  {locale === "tr" ? "Tümünü Seç" : "Select All"}
+                </button>
+                <button type="button" onClick={() => setSelectedTypes([])}>
+                  {locale === "tr" ? "Temizle" : "Clear"}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="pill-grid">
-            {ITEM_TYPES.map((itemType) => (
-              <FilterPill
-                key={itemType}
-                active={selectedTypes.includes(itemType)}
-                onClick={() => toggleType(itemType)}
-                dotColor={typeColor(itemType)}
-              >
-                {typeLabel(itemType, t)}
-              </FilterPill>
-            ))}
-          </div>
-        </div>
-
-        <div className="filter-section">
-          <div className="section-heading">
-            <span>{locale === "tr" ? "Kullanıcılar" : "Users"}</span>
-            <button type="button" onClick={() => setSelectedUserIds([])}>
-              {locale === "tr" ? "Kullanıcıları Temizle" : "Clear Users"}
-            </button>
-          </div>
-
-          {loadingUsers ? (
-            <div className="muted">{t("common.loading")}</div>
-          ) : filteredUsers.length === 0 ? (
-            <div className="muted">
-              {locale === "tr" ? "Kullanıcı bulunamadı." : "No users found."}
-            </div>
-          ) : (
-            <div className="user-grid">
-              {filteredUsers.map((user) => (
+            <div className="pill-grid">
+              {ITEM_TYPES.map((itemType) => (
                 <FilterPill
-                  key={user.id}
-                  active={selectedUserIds.includes(user.id)}
-                  onClick={() => toggleUser(user.id)}
+                  key={itemType}
+                  active={selectedTypes.includes(itemType)}
+                  onClick={() => toggleType(itemType)}
+                  dotColor={typeColor(itemType)}
                 >
-                  <span>{user.name}</span>
-                  {user.role ? (
-                    <span className="mini-role">
-                      {safeTranslate(t, `roles.${user.role}`, user.role)}
-                    </span>
-                  ) : null}
+                  {typeLabel(itemType, t)}
+                  <span className="pill-count">{typeCounts[itemType] || 0}</span>
                 </FilterPill>
               ))}
             </div>
-          )}
+          </div>
+
+          <div className="filter-section">
+            <div className="section-heading">
+              <span>{locale === "tr" ? "Kullanıcılar" : "Users"}</span>
+              <button type="button" onClick={() => setSelectedUserIds([])}>
+                {locale === "tr" ? "Temizle" : "Clear"}
+              </button>
+            </div>
+
+            {loadingUsers ? (
+              <div className="empty-filter">{t("common.loading")}</div>
+            ) : filteredUsers.length === 0 ? (
+              <div className="empty-filter">
+                {locale === "tr" ? "Kullanıcı bulunamadı." : "No users found."}
+              </div>
+            ) : (
+              <div className="user-grid">
+                {filteredUsers.map((user) => (
+                  <FilterPill
+                    key={user.id}
+                    active={selectedUserIds.includes(user.id)}
+                    onClick={() => toggleUser(user.id)}
+                  >
+                    <span>{user.name}</span>
+                    {user.role ? (
+                      <span className="mini-role">
+                        {safeTranslate(t, `roles.${user.role}`, user.role)}
+                      </span>
+                    ) : null}
+                  </FilterPill>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </section>
 
       {err ? (
         <div
@@ -613,21 +669,21 @@ export default function CalendarPage() {
         </div>
       ) : null}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: selected ? "1.55fr .75fr" : "1fr",
-          gap: 14,
-          alignItems: "start",
-        }}
-      >
-        <div className="card" style={{ padding: 18 }}>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontWeight: 900, fontSize: 16 }}>
-              {t("calendar.calendar")}
+      <section className={selected ? "calendar-workspace has-detail" : "calendar-workspace"}>
+        <div className="calendar-card">
+          <div className="calendar-card-header">
+            <div>
+              <div className="panel-title">{t("calendar.calendar")}</div>
+              <div className="panel-subtitle">{t("calendar.visibleRange")}</div>
             </div>
-            <div style={{ color: "var(--text-secondary)", fontSize: 12, marginTop: 4 }}>
-              {t("calendar.visibleRange")}
+
+            <div className="calendar-legend">
+              {ITEM_TYPES.slice(0, 4).map((itemType) => (
+                <span key={itemType}>
+                  <i style={{ background: typeColor(itemType) }} />
+                  {typeLabel(itemType, t)}
+                </span>
+              ))}
             </div>
           </div>
 
@@ -664,28 +720,28 @@ export default function CalendarPage() {
           </div>
 
           {loading ? (
-            <div style={{ marginTop: 12, color: "var(--text-secondary)", fontSize: 13 }}>
+            <div className="loading-strip">
               {t("common.loading")}
             </div>
           ) : null}
         </div>
 
         {selected ? (
-          <div className="card" style={{ display: "grid", gap: 12, padding: 18 }}>
-            <div className="flex-between" style={{ gap: 10 }}>
-              <div style={{ display: "grid", gap: 4 }}>
-                <div style={{ fontWeight: 900, fontSize: 16 }}>
-                  {selected.title}
-                </div>
-                <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-                  {formatDateTime(selected.start, locale)}
-                </div>
+          <aside className="detail-panel">
+            <div className="detail-accent" style={{ background: typeColor(selected.type) }} />
+            <div className="detail-header">
+              <div>
+                <div className="detail-eyebrow">{typeLabel(selected.type, t)}</div>
+                <div className="detail-title">{selected.title}</div>
+                <div className="detail-time">{formatDateTime(selected.start, locale)}</div>
               </div>
 
-              <button onClick={() => setSelected(null)}>{t("common.close")}</button>
+              <button className="icon-button" onClick={() => setSelected(null)} aria-label={t("common.close")}>
+                x
+              </button>
             </div>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div className="detail-badges">
               <span className={`badge ${badgeClass(selected.type)}`}>
                 {typeLabel(selected.type, t)}
               </span>
@@ -697,58 +753,38 @@ export default function CalendarPage() {
             </div>
 
             <div className="detail-box">
-              <div style={{ fontSize: 13 }}>
-                <b>{t("calendar.record")}:</b> {selected.entityLabel}
-              </div>
+              <span>{t("calendar.record")}</span>
+              <strong>{selected.entityLabel}</strong>
 
               {selected.subtitle ? (
-                <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-                  {selected.subtitle}
-                </div>
-              ) : null}
-
-              {selected.assignedUser ? (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("common.assignedTo")}: {selected.assignedUser}
-                </div>
+                <p>{selected.subtitle}</p>
               ) : null}
             </div>
 
+            {selected.assignedUser ? (
+              <div className="detail-box compact">
+                <span>{t("common.assignedTo")}</span>
+                <strong>{selected.assignedUser}</strong>
+              </div>
+            ) : null}
+
             {selected.notesPreview ? (
-              <div className="detail-box" style={{ background: "var(--surface)" }}>
-                <div style={{ fontWeight: 800, fontSize: 13 }}>
-                  {t("calendar.notes")}
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: "var(--text-secondary)",
-                    whiteSpace: "pre-wrap",
-                    lineHeight: 1.6,
-                  }}
-                >
-                  {selected.notesPreview}
-                </div>
+              <div className="detail-box notes">
+                <span>{t("calendar.notes")}</span>
+                <p>{selected.notesPreview}</p>
               </div>
             ) : null}
 
             {selected.href ? (
-              <a href={selected.href} style={{ fontWeight: 800 }}>
-                {t("common.openRecord")} →
+              <a href={selected.href} className="open-record-link">
+                {t("common.openRecord")} -&gt;
               </a>
             ) : null}
-          </div>
+          </aside>
         ) : null}
-      </div>
+      </section>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 14,
-          alignItems: "start",
-        }}
-      >
+      <section className="agenda-grid">
         <SummaryListCard
           title={t("calendar.todayEvents")}
           items={filteredTodayItems}
@@ -766,18 +802,142 @@ export default function CalendarPage() {
           t={t}
           locale={locale}
         />
-      </div>
+      </section>
 
       <style jsx global>{`
+        .calendar-page {
+          display: grid;
+          gap: 16px;
+        }
+
+        .calendar-hero {
+          display: flex;
+          justify-content: space-between;
+          align-items: stretch;
+          gap: 18px;
+          padding: 22px;
+          border: 1px solid var(--stroke);
+          border-radius: var(--radius-lg);
+          background: linear-gradient(135deg, color-mix(in srgb, var(--surface) 92%, var(--info)), var(--surface));
+          box-shadow: var(--shadow-sm);
+        }
+
+        .calendar-hero-copy {
+          display: grid;
+          gap: 5px;
+          min-width: 0;
+        }
+
+        .calendar-kicker {
+          width: fit-content;
+          border: 1px solid var(--stroke);
+          border-radius: 999px;
+          padding: 4px 10px;
+          background: var(--surface-2);
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .calendar-hero h1 {
+          margin: 0;
+          font-size: 28px;
+          letter-spacing: 0;
+        }
+
+        .calendar-hero p {
+          max-width: 720px;
+          margin: 0;
+          color: var(--text-secondary);
+          font-size: 14px;
+        }
+
+        .calendar-hero-actions {
+          display: flex;
+          align-items: stretch;
+          gap: 10px;
+          flex: 0 0 auto;
+        }
+
+        .next-event {
+          min-width: 190px;
+          display: grid;
+          align-content: center;
+          gap: 1px;
+          padding: 12px 14px;
+          border: 1px solid var(--stroke);
+          border-radius: var(--radius);
+          background: var(--surface);
+        }
+
+        .next-event span,
+        .stat-card span,
+        .detail-eyebrow,
+        .detail-box span {
+          color: var(--text-muted);
+          font-size: 11px;
+          font-weight: 900;
+          text-transform: uppercase;
+        }
+
+        .next-event strong {
+          color: var(--text-primary);
+          font-size: 18px;
+          line-height: 1.2;
+        }
+
+        .next-event small {
+          max-width: 180px;
+          overflow: hidden;
+          color: var(--text-secondary);
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .refresh-button {
+          align-self: center;
+          min-width: 112px;
+        }
+
+        .calendar-stats {
+          display: grid;
+          grid-template-columns: 1.1fr 1fr 1fr;
+          gap: 12px;
+        }
+
+        .stat-card {
+          display: grid;
+          gap: 3px;
+          padding: 15px 16px;
+          border: 1px solid var(--stroke);
+          border-radius: var(--radius);
+          background: var(--surface);
+          box-shadow: var(--shadow-sm);
+        }
+
+        .stat-card.featured {
+          border-color: color-mix(in srgb, var(--info) 22%, var(--stroke));
+          background: color-mix(in srgb, var(--surface) 88%, var(--info));
+        }
+
+        .stat-card strong {
+          color: var(--text-primary);
+          font-size: 26px;
+          line-height: 1.1;
+        }
+
+        .stat-card small {
+          color: var(--text-secondary);
+        }
+
         .calendar-filter-panel {
           display: grid;
           gap: 16px;
-          padding: 18px;
+          padding: 16px;
           border: 1px solid var(--stroke);
-          border-radius: 20px;
-          background:
-            radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 35%),
-            var(--surface);
+          border-radius: var(--radius-lg);
+          background: var(--surface);
+          box-shadow: var(--shadow-sm);
         }
 
         .filter-header,
@@ -790,7 +950,7 @@ export default function CalendarPage() {
         }
 
         .filter-title {
-          font-size: 17px;
+          font-size: 16px;
           font-weight: 900;
           color: var(--text-primary);
         }
@@ -806,6 +966,37 @@ export default function CalendarPage() {
           grid-template-columns: minmax(240px, 1fr) auto;
           gap: 12px;
           align-items: center;
+        }
+
+        .search-field {
+          display: grid;
+          grid-template-columns: 34px 1fr;
+          align-items: center;
+          border: 1px solid var(--stroke);
+          border-radius: var(--radius);
+          background: var(--surface-2);
+          overflow: hidden;
+        }
+
+        .search-field span {
+          display: grid;
+          place-items: center;
+          color: var(--text-muted);
+          font-weight: 900;
+        }
+
+        .search-field input {
+          height: 42px;
+          border: 0;
+          border-radius: 0;
+          background: transparent;
+          box-shadow: none;
+        }
+
+        .filter-columns {
+          display: grid;
+          grid-template-columns: 1fr 1.2fr;
+          gap: 16px;
         }
 
         .role-tabs {
@@ -834,9 +1025,23 @@ export default function CalendarPage() {
           box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
         }
 
+        .quiet-button,
+        .inline-actions button,
+        .section-heading > button {
+          height: 32px;
+          padding: 0 10px;
+          font-size: 12px;
+        }
+
+        .inline-actions {
+          display: flex;
+          gap: 8px;
+        }
+
         .filter-section {
           display: grid;
           gap: 10px;
+          min-width: 0;
         }
 
         .section-heading {
@@ -856,9 +1061,10 @@ export default function CalendarPage() {
           display: inline-flex;
           align-items: center;
           gap: 8px;
+          min-height: 38px;
           border: 1px solid var(--stroke);
           border-radius: 999px;
-          padding: 9px 12px;
+          padding: 8px 11px;
           background: var(--surface);
           color: var(--text-secondary);
           cursor: pointer;
@@ -901,27 +1107,236 @@ export default function CalendarPage() {
           line-height: 1;
         }
 
+        .pill-count,
         .mini-role {
-          font-size: 10px;
-          padding: 3px 7px;
           border-radius: 999px;
           background: var(--surface-3);
           color: var(--text-muted);
           font-weight: 900;
         }
 
+        .pill-count {
+          min-width: 22px;
+          padding: 2px 6px;
+          font-size: 11px;
+          text-align: center;
+        }
+
+        .mini-role {
+          padding: 3px 7px;
+          font-size: 10px;
+        }
+
+        .empty-filter {
+          display: grid;
+          min-height: 64px;
+          place-items: center;
+          border: 1px dashed var(--stroke);
+          border-radius: var(--radius);
+          color: var(--text-muted);
+          background: var(--surface-2);
+        }
+
+        .calendar-workspace {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: 14px;
+          align-items: start;
+        }
+
+        .calendar-workspace.has-detail {
+          grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+        }
+
+        .calendar-card,
+        .detail-panel {
+          border: 1px solid var(--stroke);
+          border-radius: var(--radius-lg);
+          background: var(--surface);
+          box-shadow: var(--shadow-sm);
+        }
+
+        .calendar-card {
+          min-width: 0;
+          overflow: hidden;
+          padding: 16px;
+        }
+
+        .calendar-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 16px;
+          margin-bottom: 14px;
+        }
+
+        .panel-title {
+          font-size: 16px;
+          font-weight: 900;
+          color: var(--text-primary);
+        }
+
+        .panel-subtitle {
+          margin-top: 3px;
+          color: var(--text-secondary);
+          font-size: 12px;
+        }
+
+        .calendar-legend {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px 12px;
+          flex-wrap: wrap;
+          max-width: 520px;
+        }
+
+        .calendar-legend span {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 800;
+          white-space: nowrap;
+        }
+
+        .calendar-legend i {
+          width: 8px;
+          height: 8px;
+          border-radius: 999px;
+        }
+
+        .loading-strip {
+          margin-top: 12px;
+          border-radius: var(--radius-sm);
+          padding: 10px 12px;
+          background: var(--surface-2);
+          color: var(--text-secondary);
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        .detail-panel {
+          position: sticky;
+          top: 14px;
+          display: grid;
+          gap: 14px;
+          padding: 18px;
+          overflow: hidden;
+        }
+
+        .detail-accent {
+          height: 4px;
+          margin: -18px -18px 2px;
+        }
+
+        .detail-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 10px;
+        }
+
+        .detail-title {
+          margin-top: 4px;
+          color: var(--text-primary);
+          font-size: 18px;
+          font-weight: 900;
+          line-height: 1.25;
+        }
+
+        .detail-time {
+          margin-top: 5px;
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .icon-button {
+          width: 34px;
+          height: 34px;
+          padding: 0;
+          flex: 0 0 auto;
+          border-radius: 999px;
+          font-size: 16px;
+          line-height: 1;
+        }
+
+        .detail-badges {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .detail-box {
+          display: grid;
+          gap: 5px;
+          border: 1px solid var(--stroke);
+          border-radius: var(--radius);
+          background: var(--surface-2);
+          padding: 13px;
+        }
+
+        .detail-box strong {
+          color: var(--text-primary);
+          font-size: 14px;
+          line-height: 1.4;
+        }
+
+        .detail-box p {
+          margin: 0;
+          color: var(--text-secondary);
+          font-size: 13px;
+          line-height: 1.55;
+          white-space: pre-wrap;
+        }
+
+        .detail-box.compact,
+        .detail-box.notes {
+          background: var(--surface);
+        }
+
+        .open-record-link {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 40px;
+          border-radius: var(--radius-sm);
+          background: var(--primary);
+          color: var(--primary-foreground);
+          font-weight: 900;
+        }
+
+        .agenda-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+          align-items: start;
+        }
+
         .summary-item {
           display: grid;
           grid-template-columns: 100px 1fr;
           gap: 14px;
+          min-height: 112px;
           text-align: left;
           padding: 0;
-          border-radius: 18px;
+          border-radius: var(--radius);
           border: 1px solid var(--stroke);
           background: var(--surface);
           cursor: pointer;
           overflow: hidden;
           align-items: stretch;
+          transition:
+            border-color 0.15s ease,
+            box-shadow 0.15s ease,
+            transform 0.15s ease;
+        }
+
+        .summary-item:hover {
+          border-color: var(--stroke-2);
+          box-shadow: var(--shadow-sm);
+          transform: translateY(-1px);
         }
 
         .summary-date {
@@ -966,6 +1381,7 @@ export default function CalendarPage() {
           font-size: 14px;
           color: var(--text-primary);
           line-height: 1.4;
+          overflow-wrap: anywhere;
         }
 
         .summary-subtitle {
@@ -988,15 +1404,6 @@ export default function CalendarPage() {
           white-space: pre-wrap;
         }
 
-        .detail-box {
-          border: 1px solid var(--stroke);
-          border-radius: 12px;
-          background: var(--surface-2);
-          padding: 12px;
-          display: grid;
-          gap: 8px;
-        }
-
         .crm-calendar .fc {
           color: var(--text-primary);
         }
@@ -1010,10 +1417,11 @@ export default function CalendarPage() {
         .crm-calendar .fc-toolbar {
           gap: 10px;
           flex-wrap: wrap;
+          align-items: center;
         }
 
         .crm-calendar .fc-toolbar-title {
-          font-size: 20px;
+          font-size: 18px;
           font-weight: 900;
           color: var(--text-primary);
         }
@@ -1021,8 +1429,10 @@ export default function CalendarPage() {
         .crm-calendar .fc-button {
           background: var(--surface) !important;
           border: 1px solid var(--stroke) !important;
+          border-radius: 10px !important;
           color: var(--text-primary) !important;
           box-shadow: none !important;
+          font-weight: 800 !important;
         }
 
         .crm-calendar .fc-button:hover {
@@ -1047,11 +1457,12 @@ export default function CalendarPage() {
         }
 
         .crm-calendar .fc-event {
-          border-radius: 10px;
-          padding: 2px 6px;
+          border-width: 0 !important;
+          border-radius: 8px;
+          padding: 3px 6px;
           cursor: pointer;
           font-weight: 700;
-          box-shadow: none;
+          box-shadow: 0 6px 14px rgba(15, 23, 42, 0.12);
         }
 
         .crm-calendar .fc-event-title {
@@ -1087,13 +1498,35 @@ export default function CalendarPage() {
           background: var(--surface-2);
         }
 
+        .crm-calendar .fc-scrollgrid {
+          border-radius: var(--radius);
+          overflow: hidden;
+        }
+
         @media (max-width: 980px) {
+          .calendar-hero,
+          .calendar-hero-actions,
+          .calendar-card-header {
+            display: grid;
+          }
+
+          .calendar-stats,
+          .filter-columns,
+          .calendar-workspace.has-detail,
+          .agenda-grid {
+            grid-template-columns: 1fr;
+          }
+
           .filter-search-row {
             grid-template-columns: 1fr;
           }
 
           .summary-item {
             grid-template-columns: 82px 1fr;
+          }
+
+          .detail-panel {
+            position: static;
           }
         }
       `}</style>
