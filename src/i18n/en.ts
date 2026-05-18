@@ -380,8 +380,16 @@ leads: {
   sourceLabel: "Source",
   call: "Call",
   saving: "Saving…",
+  saveCall: "Save call",
+  saveFollowUp: "Save follow-up",
+  callNotePlaceholder: "Call note (optional)",
   searchPlaceholder: "Search name, phone, email or source…",
   dayShort: "d",
+  interest: {
+    active: "Active leads",
+    notInterested: "Not interested",
+    all: "All leads",
+  },
   fields: {
     fullName: "Full Name",
     phone: "Phone",

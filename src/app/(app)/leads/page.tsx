@@ -32,6 +32,16 @@ const OUTCOMES = [
   { key: "WRONG_NUMBER", labelKey: "leadOutcomes.WRONG_NUMBER", fallback: "Wrong number" },
 ] as const;
 
+const INTEREST_FILTERS = [
+  { key: "active", labelKey: "leads.interest.active", fallback: "Active leads" },
+  {
+    key: "notInterested",
+    labelKey: "leads.interest.notInterested",
+    fallback: "Not interested",
+  },
+  { key: "all", labelKey: "leads.interest.all", fallback: "All leads" },
+] as const;
+
 type LeadRow = {
   id: string;
   fullName: string;
@@ -153,6 +163,8 @@ export default function LeadsPage() {
 
   const [statusFilter, setStatusFilter] =
     useState<(typeof STATUSES)[number]>("ALL");
+  const [interestFilter, setInterestFilter] =
+    useState<(typeof INTEREST_FILTERS)[number]["key"]>("active");
   const [q, setQ] = useState("");
   const [searchInput, setSearchInput] = useState("");
 
@@ -166,7 +178,9 @@ export default function LeadsPage() {
 
   const [followById, setFollowById] = useState<Record<string, string>>({});
   const [outcomeById, setOutcomeById] = useState<Record<string, string>>({});
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const [callNoteById, setCallNoteById] = useState<Record<string, string>>({});
+  const [savingCallId, setSavingCallId] = useState<string | null>(null);
+  const [savingFollowId, setSavingFollowId] = useState<string | null>(null);
 
   const canCreate = me?.role === "CALLCENTER" || me?.role === "ADMIN";
 
@@ -175,6 +189,7 @@ export default function LeadsPage() {
     nextStatus = statusFilter,
     nextQ = q,
     nextPageSize = pageSize,
+    nextInterest = interestFilter,
   ) {
     setErr(null);
     setLoading(true);
@@ -184,6 +199,7 @@ export default function LeadsPage() {
 
       if (nextStatus !== "ALL") params.set("status", nextStatus);
       if (nextQ.trim()) params.set("q", nextQ.trim());
+      params.set("interest", nextInterest);
 
       params.set("page", String(nextPage));
       params.set("pageSize", String(nextPageSize));
@@ -209,6 +225,14 @@ export default function LeadsPage() {
         const next = { ...prev };
         for (const l of items) {
           if (next[l.id] === undefined) next[l.id] = "NO_ANSWER";
+        }
+        return next;
+      });
+
+      setCallNoteById((prev) => {
+        const next = { ...prev };
+        for (const l of items) {
+          if (next[l.id] === undefined) next[l.id] = "";
         }
         return next;
       });
@@ -250,7 +274,7 @@ export default function LeadsPage() {
       setSource("Website");
       setShowCreate(false);
 
-      await load(1, statusFilter, q, pageSize);
+      await load(1, statusFilter, q, pageSize, interestFilter);
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, t, locale));
     }
@@ -258,11 +282,11 @@ export default function LeadsPage() {
 
   async function saveOutcome(leadId: string) {
     setErr(null);
-    setSavingId(leadId);
+    setSavingCallId(leadId);
 
     try {
       const outcome = outcomeById[leadId] || "NO_ANSWER";
-      const followLocal = followById[leadId] || "";
+      const note = (callNoteById[leadId] || "").trim();
 
       const body: any = {
         type: "CALL",
@@ -274,12 +298,8 @@ export default function LeadsPage() {
         )}`,
       };
 
-      if (followLocal) {
-        const parsed = new Date(followLocal);
-        if (Number.isNaN(parsed.getTime())) {
-          throw new Error(locale === "tr" ? "Geçersiz takip tarihi." : "Invalid follow-up date.");
-        }
-        body.nextFollowUpAt = parsed.toISOString();
+      if (note) {
+        body.details = note;
       }
 
       await authedFetch(`/leads/${leadId}/activity`, {
@@ -287,12 +307,44 @@ export default function LeadsPage() {
         body: JSON.stringify(body),
       });
 
-      setFollowById((p) => ({ ...p, [leadId]: "" }));
-      await load(page, statusFilter, q, pageSize);
+      setCallNoteById((p) => ({ ...p, [leadId]: "" }));
+      await load(page, statusFilter, q, pageSize, interestFilter);
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, t, locale));
     } finally {
-      setSavingId(null);
+      setSavingCallId(null);
+    }
+  }
+
+  async function saveFollowUp(leadId: string) {
+    setErr(null);
+    setSavingFollowId(leadId);
+
+    try {
+      const followLocal = followById[leadId] || "";
+
+      if (!followLocal) {
+        throw new Error(
+          locale === "tr" ? "Takip tarihi seçin." : "Select a follow-up date.",
+        );
+      }
+
+      const parsed = new Date(followLocal);
+      if (Number.isNaN(parsed.getTime())) {
+        throw new Error(locale === "tr" ? "Geçersiz takip tarihi." : "Invalid follow-up date.");
+      }
+
+      await authedFetch(`/leads/${leadId}/follow-up`, {
+        method: "PATCH",
+        body: JSON.stringify({ nextFollowUpAt: parsed.toISOString() }),
+      });
+
+      setFollowById((p) => ({ ...p, [leadId]: "" }));
+      await load(page, statusFilter, q, pageSize, interestFilter);
+    } catch (e: any) {
+      setErr(normalizeErrorMessage(e?.message || e, t, locale));
+    } finally {
+      setSavingFollowId(null);
     }
   }
 
@@ -304,7 +356,7 @@ export default function LeadsPage() {
     const nextQ = searchInput.trim();
     setQ(nextQ);
     setPage(1);
-    load(1, statusFilter, nextQ, pageSize);
+    load(1, statusFilter, nextQ, pageSize, interestFilter);
   }
 
   useEffect(() => {
@@ -314,16 +366,16 @@ export default function LeadsPage() {
 
   useEffect(() => {
     if (!mounted) return;
-    load(1, statusFilter, q, pageSize);
+    load(1, statusFilter, q, pageSize, interestFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 
   useEffect(() => {
     if (!mounted) return;
     setPage(1);
-    load(1, statusFilter, q, pageSize);
+    load(1, statusFilter, q, pageSize, interestFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, pageSize]);
+  }, [statusFilter, interestFilter, pageSize]);
 
   const pageInfoText = useMemo(() => {
     if (!total) return t("common.noRecords");
@@ -435,7 +487,7 @@ export default function LeadsPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(260px,1fr) 220px 130px auto",
+            gridTemplateColumns: "minmax(260px,1fr) 220px 220px 130px auto",
             gap: 10,
             alignItems: "center",
           }}
@@ -458,6 +510,21 @@ export default function LeadsPage() {
                 {s === "ALL"
                   ? t("leads.allStatuses")
                   : safeTranslate(t, `leadStatuses.${s}`, s)}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={interestFilter}
+            onChange={(e) =>
+              setInterestFilter(
+                e.target.value as (typeof INTEREST_FILTERS)[number]["key"],
+              )
+            }
+          >
+            {INTEREST_FILTERS.map((item) => (
+              <option key={item.key} value={item.key}>
+                {safeTranslate(t, item.labelKey, item.fallback)}
               </option>
             ))}
           </select>
@@ -492,7 +559,7 @@ export default function LeadsPage() {
               <th>{t("leads.table.contact")}</th>
               <th>{t("leads.table.status")}</th>
               <th style={{ width: 260 }}>{t("leads.table.followUp")}</th>
-              <th style={{ width: 260 }}>{t("leads.table.callResult")}</th>
+              <th style={{ width: 300 }}>{t("leads.table.callResult")}</th>
               <th style={{ width: 120 }}>{t("leads.table.save")}</th>
             </tr>
           </thead>
@@ -500,7 +567,9 @@ export default function LeadsPage() {
           <tbody>
             {leads.map((l) => {
               const tone = followTone(l.nextFollowUpAt);
-              const saving = savingId === l.id;
+              const savingCall = savingCallId === l.id;
+              const savingFollow = savingFollowId === l.id;
+              const hasFollowDraft = Boolean(followById[l.id]);
 
               return (
                 <tr key={l.id}>
@@ -587,6 +656,21 @@ export default function LeadsPage() {
                         <button onClick={() => preset(l.id, 72)}>+3{t("leads.dayShort")}</button>
                         <button onClick={() => preset(l.id, 168)}>+7{t("leads.dayShort")}</button>
                       </div>
+
+                      <input
+                        type="datetime-local"
+                        value={followById[l.id] ?? ""}
+                        onChange={(e) =>
+                          setFollowById((p) => ({ ...p, [l.id]: e.target.value }))
+                        }
+                      />
+
+                      <button
+                        onClick={() => saveFollowUp(l.id)}
+                        disabled={savingFollow || !hasFollowDraft}
+                      >
+                        {savingFollow ? t("leads.saving") : t("leads.saveFollowUp")}
+                      </button>
                     </div>
                   </td>
 
@@ -605,12 +689,14 @@ export default function LeadsPage() {
                         ))}
                       </select>
 
-                      <input
-                        type="datetime-local"
-                        value={followById[l.id] ?? ""}
+                      <textarea
+                        value={callNoteById[l.id] ?? ""}
                         onChange={(e) =>
-                          setFollowById((p) => ({ ...p, [l.id]: e.target.value }))
+                          setCallNoteById((p) => ({ ...p, [l.id]: e.target.value }))
                         }
+                        rows={2}
+                        placeholder={t("leads.callNotePlaceholder")}
+                        style={{ resize: "vertical", minHeight: 64 }}
                       />
                     </div>
                   </td>
@@ -619,9 +705,9 @@ export default function LeadsPage() {
                     <button
                       className="primary"
                       onClick={() => saveOutcome(l.id)}
-                      disabled={saving}
+                      disabled={savingCall}
                     >
-                      {saving ? t("leads.saving") : t("common.save")}
+                      {savingCall ? t("leads.saving") : t("leads.saveCall")}
                     </button>
                   </td>
                 </tr>
@@ -653,7 +739,9 @@ export default function LeadsPage() {
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button
-              onClick={() => load(Math.max(1, page - 1), statusFilter, q, pageSize)}
+              onClick={() =>
+                load(Math.max(1, page - 1), statusFilter, q, pageSize, interestFilter)
+              }
               disabled={page <= 1 || loading}
             >
               {t("common.previous")}
@@ -664,7 +752,9 @@ export default function LeadsPage() {
             </span>
 
             <button
-              onClick={() => load(Math.min(totalPages, page + 1), statusFilter, q, pageSize)}
+              onClick={() =>
+                load(Math.min(totalPages, page + 1), statusFilter, q, pageSize, interestFilter)
+              }
               disabled={page >= totalPages || loading}
             >
               {t("common.next")}

@@ -386,8 +386,16 @@ leads: {
   sourceLabel: "Kaynak",
   call: "Ara",
   saving: "Kaydediliyor…",
+  saveCall: "Aramayı kaydet",
+  saveFollowUp: "Takibi kaydet",
+  callNotePlaceholder: "Arama notu (opsiyonel)",
   searchPlaceholder: "İsim, telefon, email veya kaynak ara…",
   dayShort: "g",
+  interest: {
+    active: "Aktif leadler",
+    notInterested: "İlgilenmeyenler",
+    all: "Tüm leadler",
+  },
   fields: {
     fullName: "Ad Soyad",
     phone: "Telefon",
