@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import {
@@ -42,6 +43,9 @@ type CustomerRow = {
   country?: string | null;
   type?: CustomerType;
   notesSummary?: string | null;
+  identityNumber?: string | null;
+  oldCustomerCode?: string | null;
+  oldCariCodes?: string | null;
   createdAt?: string;
   updatedAt?: string;
   agency?: AgencyRow | null;
@@ -137,6 +141,8 @@ export default function CustomersPage() {
 
   const [language, setLanguage] = useState("");
   const [nationality, setNationality] = useState("");
+  const [identityNumber, setIdentityNumber] = useState("");
+  const [oldCustomerCode, setOldCustomerCode] = useState("");
   const [gender, setGender] = useState<"" | Gender>("");
   const [birthday, setBirthday] = useState("");
   const [job, setJob] = useState("");
@@ -274,6 +280,9 @@ export default function CustomersPage() {
 
         language: language.trim() || undefined,
         nationality: nationality.trim() || undefined,
+        identityNumber: identityNumber.trim() || undefined,
+        oldCustomerCode: oldCustomerCode.trim() || undefined,
+        oldCariCodes: oldCustomerCode.trim() || undefined,
         gender: gender || undefined,
         birthday: birthday ? new Date(birthday).toISOString() : undefined,
         job: job.trim() || undefined,
@@ -364,6 +373,8 @@ export default function CustomersPage() {
       setOwnerSearch("");
       setLanguage("");
       setNationality("");
+      setIdentityNumber("");
+      setOldCustomerCode("");
       setGender("");
       setBirthday("");
       setJob("");
@@ -499,6 +510,29 @@ export default function CustomersPage() {
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link
+            href="/customers/nationality-report"
+            style={{
+              minHeight: 38,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "0 14px",
+              borderRadius: "var(--radius-sm)",
+              border: "1px solid var(--stroke)",
+              background: "var(--surface)",
+              color: "var(--text-primary)",
+              fontWeight: 800,
+              textDecoration: "none",
+            }}
+          >
+            {safeTranslate(
+              t,
+              "customers.nationalityReport",
+              locale === "tr" ? "Uyruk Haritası" : "Nationality Map",
+            )}
+          </Link>
+
           <button onClick={load} disabled={loading}>
             {loading ? t("common.loading") : t("common.refresh")}
           </button>
@@ -699,6 +733,26 @@ export default function CustomersPage() {
                 t,
                 "customers.fields.nationality",
                 locale === "tr" ? "Uyruk" : "Nationality",
+              )}
+            />
+
+            <input
+              value={identityNumber}
+              onChange={(e) => setIdentityNumber(e.target.value)}
+              placeholder={safeTranslate(
+                t,
+                "customers.fields.identityNumber",
+                locale === "tr" ? "Kimlik / Pasaport No" : "Identity / Passport No",
+              )}
+            />
+
+            <input
+              value={oldCustomerCode}
+              onChange={(e) => setOldCustomerCode(e.target.value)}
+              placeholder={safeTranslate(
+                t,
+                "customers.fields.oldCustomerCode",
+                locale === "tr" ? "Eski Cari Kod" : "Old customer code",
               )}
             />
 

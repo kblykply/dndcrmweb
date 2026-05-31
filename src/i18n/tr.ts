@@ -43,7 +43,9 @@ create: "Oluştur" ,
       tasks: "Görevler"
 ,
 meetings: "Toplantılar",
-    orgChart: "Organizasyon Şeması"
+    orgChart: "Organizasyon Şeması",
+    nationalityReport: "Uyruk Haritası",
+    demographicsReport: "Demografi"
 
   },
 
@@ -120,9 +122,10 @@ customers: {
   deleting: "Siliniyor...",
   allTypes: "Tüm Tipler",
   searchAndRefresh: "Ara / Yenile",
-  searchPlaceholder: "Müşteri, telefon, e-posta, ajans ara...",
+  searchPlaceholder: "Müşteri, telefon, e-posta, kimlik, eski kod, ajans ara...",
   noCustomers: "Müşteri bulunamadı.",
   deleteConfirm: "\"{name}\" müşterisini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.",
+  nationalityReport: "Uyruk Haritası",
   fields: {
     fullName: "Ad Soyad",
     companyName: "Şirket / Kurum",
@@ -132,6 +135,16 @@ customers: {
     country: "Ülke",
     address: "Adres",
     source: "Kaynak",
+    identityNumber: "Kimlik / Pasaport No",
+    oldCustomerCode: "Eski cari kod",
+    oldCariCodes: "Orijinal cari kodları",
+    selectCountry: "Ülke seç",
+    language: "Dil",
+    nationality: "Uyruk",
+    gender: "Cinsiyet",
+    birthday: "Doğum tarihi",
+    job: "Meslek",
+    project: "Proje",
     notesSummary: "Özet not",
     selectAgency: "Ajans seç",
     ownerSales: "Sorumlu Sales",
@@ -155,6 +168,56 @@ customers: {
 
 
 
+},
+
+nationalityReport: {
+  label: "Müşteri Raporları",
+  title: "Uyruk ve Ülke Haritası",
+  subtitle: "Müşterilerin gerçek ülke ve uyruk dağılımı",
+  backToCustomers: "Müşterilere Dön",
+  totalCustomers: "Toplam müşteri",
+  mappedCustomers: "Haritada gösterilen",
+  needsReview: "Kontrol gereken",
+  topCountry: "En yoğun ülke",
+  mapTitle: "Müşteri Haritası",
+  mapHint: "Dairelerin boyutu müşteri sayısına göre değişir.",
+  distribution: "Dağılım",
+  distributionHint: "Ülke ve uyruk bazında müşteri sayısı",
+  unmappedTitle: "Kontrol Edilecek Kodlar",
+  unmappedHint: "Bu kodlar otomatik olarak ülkeye çevrilmedi.",
+},
+
+demographicsReport: {
+  label: "Müşteri Raporları",
+  title: "Demografik Analiz",
+  subtitle: "Yaş, cinsiyet, meslek, dil ve profil doluluk raporu",
+  averageAge: "Ortalama yaş",
+  profileCompletion: "Profil doluluğu",
+  manualFields: "Manuel alanlar",
+  distribution: "Dağılım",
+  dataQuality: "Veri Kalitesi",
+  dataQualityHint: "Eksik alanları önceliklendirir",
+  bestFields: "En dolu alanlar",
+  allBreakdowns: "Tüm Kırılımlar",
+  allBreakdownsHint: "Manuel veri girişi ilerledikçe bu tablo zenginleşir",
+  section: "Bölüm",
+  noData: "Henüz veri yok",
+  noDataText: "Müşteri detaylarından bu alanları doldurdukça rapor oluşacak.",
+  sections: {
+    age: "Yaş",
+    gender: "Cinsiyet",
+    jobs: "Meslek",
+    languages: "Dil",
+    projects: "Proje",
+    types: "Müşteri Tipi",
+    sources: "Kaynak",
+  },
+},
+
+genders: {
+  MALE: "Erkek",
+  FEMALE: "Kadın",
+  OTHER: "Diğer",
 },
 
 

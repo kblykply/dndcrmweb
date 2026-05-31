@@ -36,7 +36,9 @@ create:  "Create",
     help: "Help & Support",
       tasks: "Tasks",
 meetings: "Meetings",
-    orgChart: "Organizational Chart"
+    orgChart: "Organizational Chart",
+    nationalityReport: "Nationality Map",
+    demographicsReport: "Demographics"
 
       
   },
@@ -117,9 +119,10 @@ customers: {
   deleting: "Deleting...",
   allTypes: "All Types",
   searchAndRefresh: "Search / Refresh",
-  searchPlaceholder: "Search customer, phone, email, agency...",
+  searchPlaceholder: "Search customer, phone, email, identity, old code, agency...",
   noCustomers: "No customers found.",
   deleteConfirm: "Are you sure you want to delete customer \"{name}\"? This action cannot be undone.",
+  nationalityReport: "Nationality Map",
   fields: {
     fullName: "Full Name",
     companyName: "Company / Organization",
@@ -129,6 +132,16 @@ customers: {
     country: "Country",
     address: "Address",
     source: "Source",
+    identityNumber: "Identity / Passport No",
+    oldCustomerCode: "Old customer code",
+    oldCariCodes: "Original cari codes",
+    selectCountry: "Select country",
+    language: "Language",
+    nationality: "Nationality",
+    gender: "Gender",
+    birthday: "Birthday",
+    job: "Job",
+    project: "Project",
     notesSummary: "Summary note",
     selectAgency: "Select agency",
     ownerSales: "Owner Sales",
@@ -150,6 +163,56 @@ customers: {
 
 
 
+},
+
+nationalityReport: {
+  label: "Customer Reports",
+  title: "Nationality & Country Map",
+  subtitle: "Real country and nationality distribution for customers",
+  backToCustomers: "Back to Customers",
+  totalCustomers: "Total customers",
+  mappedCustomers: "Mapped customers",
+  needsReview: "Needs review",
+  topCountry: "Top country",
+  mapTitle: "Customer Map",
+  mapHint: "Circle size follows customer count.",
+  distribution: "Distribution",
+  distributionHint: "Customer count by country and nationality",
+  unmappedTitle: "Codes To Review",
+  unmappedHint: "These values were not automatically mapped to a country.",
+},
+
+demographicsReport: {
+  label: "Customer Reports",
+  title: "Demographic Analytics",
+  subtitle: "Age, gender, job, language and profile-completion reporting",
+  averageAge: "Average age",
+  profileCompletion: "Profile completion",
+  manualFields: "Manual fields",
+  distribution: "Distribution",
+  dataQuality: "Data Quality",
+  dataQualityHint: "Prioritizes missing fields",
+  bestFields: "Best-filled fields",
+  allBreakdowns: "All Breakdowns",
+  allBreakdownsHint: "This table grows as manual customer data improves",
+  section: "Section",
+  noData: "No data yet",
+  noDataText: "This report will populate as these fields are filled from customer details.",
+  sections: {
+    age: "Age",
+    gender: "Gender",
+    jobs: "Job",
+    languages: "Language",
+    projects: "Project",
+    types: "Customer Type",
+    sources: "Source",
+  },
+},
+
+genders: {
+  MALE: "Male",
+  FEMALE: "Female",
+  OTHER: "Other",
 },
 
 

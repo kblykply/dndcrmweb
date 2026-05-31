@@ -11,6 +11,7 @@ import {
   setAccessToken,
 } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
+import { COUNTRIES, NATIONALITY_BY_COUNTRY } from "@/lib/locationData";
 
 type PresentationStatus =
   | "SCHEDULED"
@@ -70,6 +71,9 @@ type CustomerDetail = {
 
   language?: string | null;
   nationality?: string | null;
+  identityNumber?: string | null;
+  oldCustomerCode?: string | null;
+  oldCariCodes?: string | null;
   gender?: Gender | null;
   birthday?: string | null;
   job?: string | null;
@@ -244,6 +248,8 @@ export default function CustomerDetailPage() {
 
   const [language, setLanguage] = useState("");
   const [nationality, setNationality] = useState("");
+  const [identityNumber, setIdentityNumber] = useState("");
+  const [oldCustomerCode, setOldCustomerCode] = useState("");
   const [gender, setGender] = useState<"" | Gender>("");
   const [birthday, setBirthday] = useState("");
   const [job, setJob] = useState("");
@@ -299,6 +305,11 @@ export default function CustomerDetailPage() {
     );
   }
 
+  function handleCountryChange(nextCountry: string) {
+    setCountry(nextCountry);
+    setNationality(NATIONALITY_BY_COUNTRY[nextCountry] || "");
+  }
+
   function formatDateTime(date?: string | null) {
     if (!date) return "-";
     return new Date(date).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
@@ -318,6 +329,8 @@ export default function CustomerDetailPage() {
 
     setLanguage(data.language || "");
     setNationality(data.nationality || "");
+    setIdentityNumber(data.identityNumber || "");
+    setOldCustomerCode(data.oldCustomerCode || data.oldCariCodes || "");
     setGender((data.gender as "" | Gender) || "");
     setBirthday(data.birthday ? String(data.birthday).slice(0, 10) : "");
     setJob(data.job || "");
@@ -427,6 +440,9 @@ export default function CustomerDetailPage() {
           type: customerType,
           language: language.trim() || null,
           nationality: nationality.trim() || null,
+          identityNumber: identityNumber.trim() || null,
+          oldCustomerCode: oldCustomerCode.trim() || null,
+          oldCariCodes: oldCustomerCode.trim() || null,
           gender: gender || null,
           birthday: birthday ? new Date(birthday).toISOString() : null,
           job: job.trim() || null,
@@ -907,15 +923,23 @@ export default function CustomerDetailPage() {
               placeholder={safeTranslate(t, "customers.fields.city", "City")}
             />
 
-            <input
+            <select
               value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              placeholder={safeTranslate(
-                t,
-                "customers.fields.country",
-                "Country",
-              )}
-            />
+              onChange={(e) => handleCountryChange(e.target.value)}
+            >
+              <option value="">
+                {safeTranslate(
+                  t,
+                  "customers.fields.selectCountry",
+                  locale === "tr" ? "Ülke seç" : "Select country",
+                )}
+              </option>
+              {COUNTRIES.map((countryName) => (
+                <option key={countryName} value={countryName}>
+                  {countryName}
+                </option>
+              ))}
+            </select>
 
             <input
               value={address}
@@ -944,6 +968,26 @@ export default function CustomerDetailPage() {
                 t,
                 "customers.fields.nationality",
                 "Nationality",
+              )}
+            />
+
+            <input
+              value={identityNumber}
+              onChange={(e) => setIdentityNumber(e.target.value)}
+              placeholder={safeTranslate(
+                t,
+                "customers.fields.identityNumber",
+                locale === "tr" ? "Kimlik / Pasaport No" : "Identity / Passport No",
+              )}
+            />
+
+            <input
+              value={oldCustomerCode}
+              onChange={(e) => setOldCustomerCode(e.target.value)}
+              placeholder={safeTranslate(
+                t,
+                "customers.fields.oldCustomerCode",
+                locale === "tr" ? "Eski Cari Kod" : "Old customer code",
               )}
             />
 
@@ -1050,6 +1094,32 @@ export default function CustomerDetailPage() {
                 {safeTranslate(t, "customers.fields.nationality", "Nationality")}:
               </b>{" "}
               {customer.nationality || "-"}
+            </div>
+
+            <div>
+              <b>
+                {safeTranslate(
+                  t,
+                  "customers.fields.identityNumber",
+                  locale === "tr" ? "Kimlik / Pasaport No" : "Identity / Passport No",
+                )}
+                :
+              </b>{" "}
+              {canSeeContactDetails ? customer.identityNumber || "-" : hiddenText()}
+            </div>
+
+            <div>
+              <b>
+                {safeTranslate(
+                  t,
+                  "customers.fields.oldCustomerCode",
+                  locale === "tr" ? "Eski Cari Kod" : "Old customer code",
+                )}
+                :
+              </b>{" "}
+              {canSeeContactDetails
+                ? customer.oldCariCodes || customer.oldCustomerCode || "-"
+                : hiddenText()}
             </div>
 
             <div>

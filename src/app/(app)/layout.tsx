@@ -110,6 +110,54 @@ function CustomersIcon() {
   );
 }
 
+function NationalityMapIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M8 5 4 7v12l4-2 8 2 4-2V5l-4 2-8-2Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 5v12M16 7v12"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle cx="12" cy="11.5" r="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M12 13.7c1.5-1.4 2.6-2.8 2.6-4.2A2.6 2.6 0 0 0 12 6.9a2.6 2.6 0 0 0-2.6 2.6c0 1.4 1.1 2.8 2.6 4.2Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function DemographicsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M5 19V9M12 19V5M19 19v-7"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M4 19.5h16"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle cx="5" cy="7" r="2" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="12" cy="3.5" r="1.8" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="19" cy="10" r="2" stroke="currentColor" strokeWidth="1.7" />
+    </svg>
+  );
+}
+
 function AgenciesIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -369,6 +417,25 @@ const isMeetingsActive = useMemo(
   () => pathname === "/meetings" || pathname.startsWith("/meetings/"),
   [pathname],
 );
+  const isNationalityReportActive = useMemo(
+    () =>
+      pathname === "/customers/nationality-report" ||
+      pathname.startsWith("/customers/nationality-report/"),
+    [pathname],
+  );
+  const isDemographicsReportActive = useMemo(
+    () =>
+      pathname === "/customers/demographics-report" ||
+      pathname.startsWith("/customers/demographics-report/"),
+    [pathname],
+  );
+  const isCustomersActive = useMemo(
+    () =>
+      (pathname === "/customers" || pathname.startsWith("/customers/")) &&
+      !isNationalityReportActive &&
+      !isDemographicsReportActive,
+    [pathname, isNationalityReportActive, isDemographicsReportActive],
+  );
   const isManagerQueueActive = useMemo(
     () => pathname === "/manager/queue" || pathname.startsWith("/manager/queue/"),
     [pathname],
@@ -465,11 +532,29 @@ const isMeetingsActive = useMemo(
 
 
             {canSeeCRM ? (
-              <Link href="/customers" style={navItemStyle(pathname.startsWith("/customers"))}>
+              <Link href="/customers" style={navItemStyle(isCustomersActive)}>
                 <NavIconWrap>
                   <CustomersIcon />
                 </NavIconWrap>
                 {t("nav.customers")}
+              </Link>
+            ) : null}
+
+            {canSeeCRM ? (
+              <Link href="/customers/nationality-report" style={navItemStyle(isNationalityReportActive)}>
+                <NavIconWrap>
+                  <NationalityMapIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.nationalityReport", "Nationality Map")}
+              </Link>
+            ) : null}
+
+            {canSeeCRM ? (
+              <Link href="/customers/demographics-report" style={navItemStyle(isDemographicsReportActive)}>
+                <NavIconWrap>
+                  <DemographicsIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.demographicsReport", "Demographics")}
               </Link>
             ) : null}
 
