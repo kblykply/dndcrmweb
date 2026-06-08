@@ -45,7 +45,8 @@ create: "Oluştur" ,
 meetings: "Toplantılar",
     orgChart: "Organizasyon Şeması",
     nationalityReport: "Uyruk Haritası",
-    demographicsReport: "Demografi"
+    demographicsReport: "Demografi",
+    units: "Tüm Unitler"
 
   },
 

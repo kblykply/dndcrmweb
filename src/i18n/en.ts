@@ -38,7 +38,8 @@ create:  "Create",
 meetings: "Meetings",
     orgChart: "Organizational Chart",
     nationalityReport: "Nationality Map",
-    demographicsReport: "Demographics"
+    demographicsReport: "Demographics",
+    units: "All Units"
 
       
   },

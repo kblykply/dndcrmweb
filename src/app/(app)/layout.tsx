@@ -110,6 +110,32 @@ function CustomersIcon() {
   );
 }
 
+function UnitsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4.5 20V5.5A1.5 1.5 0 0 1 6 4h7a1.5 1.5 0 0 1 1.5 1.5V20"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14.5 10H18a1.5 1.5 0 0 1 1.5 1.5V20M3 20h18"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 8h3M8 12h3M8 16h3M16.5 14h.01M16.5 17h.01"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function NationalityMapIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -429,6 +455,10 @@ const isMeetingsActive = useMemo(
       pathname.startsWith("/customers/demographics-report/"),
     [pathname],
   );
+  const isUnitsActive = useMemo(
+    () => pathname === "/units" || pathname.startsWith("/units/"),
+    [pathname],
+  );
   const isCustomersActive = useMemo(
     () =>
       (pathname === "/customers" || pathname.startsWith("/customers/")) &&
@@ -537,6 +567,15 @@ const isMeetingsActive = useMemo(
                   <CustomersIcon />
                 </NavIconWrap>
                 {t("nav.customers")}
+              </Link>
+            ) : null}
+
+            {canSeeCRM ? (
+              <Link href="/units" style={navItemStyle(isUnitsActive)}>
+                <NavIconWrap>
+                  <UnitsIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.units", "All Units")}
               </Link>
             ) : null}
 
