@@ -543,6 +543,7 @@ roles: {
   CALLCENTER: "Çağrı Merkezi",
   MANAGER: "Yönetici",
   SALES: "Satış",
+  AFTERSALES: "Satış Sonrası",
 },
 
 admin: {

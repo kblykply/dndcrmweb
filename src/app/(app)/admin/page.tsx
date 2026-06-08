@@ -272,6 +272,7 @@ export default function AdminPage() {
       CALLCENTER: "#3b82f6",
       MANAGER: "#f59e0b",
       SALES: "#22c55e",
+      AFTERSALES: "#14b8a6",
     };
 
     return (data?.users?.byRole || []).map((r: any) => ({

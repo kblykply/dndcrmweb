@@ -421,8 +421,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const role = me?.role as string | undefined;
   const isManager = role === "MANAGER" || role === "ADMIN";
   const isAdmin = role === "ADMIN";
+  const isAftersales = role === "AFTERSALES";
   const canSeeCRM =
     role === "ADMIN" || role === "MANAGER" || role === "SALES" || role === "CALLCENTER";
+  const canSeeUnits = canSeeCRM || isAftersales;
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
 
@@ -476,6 +478,11 @@ const isMeetingsActive = useMemo(
     [pathname],
   );
 
+  useEffect(() => {
+    if (!isAftersales || isUnitsActive) return;
+    window.location.replace("/units");
+  }, [isAftersales, isUnitsActive]);
+
   return (
     <div
       style={{
@@ -519,19 +526,23 @@ const isMeetingsActive = useMemo(
               marginTop: 8,
             }}
           >
+            {canSeeCRM ? (
             <Link href="/leads" style={navItemStyle(pathname.startsWith("/leads"))}>
               <NavIconWrap>
                 <LeadsIcon />
               </NavIconWrap>
               {t("nav.leads")}
             </Link>
+            ) : null}
 
+            {canSeeCRM ? (
             <Link href="/calendar" style={navItemStyle(pathname.startsWith("/calendar"))}>
               <NavIconWrap>
                 <CalendarIcon />
               </NavIconWrap>
               {t("nav.calendar")}
             </Link>
+            ) : null}
 
 
 
@@ -570,7 +581,7 @@ const isMeetingsActive = useMemo(
               </Link>
             ) : null}
 
-            {canSeeCRM ? (
+            {canSeeUnits ? (
               <Link href="/units" style={navItemStyle(isUnitsActive)}>
                 <NavIconWrap>
                   <UnitsIcon />
@@ -687,12 +698,14 @@ const isMeetingsActive = useMemo(
               borderTop: "1px solid var(--stroke)",
             }}
           >
+            {canSeeCRM ? (
             <Link href="/help" style={navItemStyle(pathname.startsWith("/help"))}>
               <NavIconWrap>
                 <HelpIcon />
               </NavIconWrap>
               {t("nav.help")}
             </Link>
+            ) : null}
           </div>
         </aside>
       ) : null}
@@ -727,7 +740,7 @@ const isMeetingsActive = useMemo(
             }}
           >
             <LanguageSwitcher />
-            <Notifications />
+            {isAftersales ? null : <Notifications />}
             <TopbarUser />
           </div>
         </header>
