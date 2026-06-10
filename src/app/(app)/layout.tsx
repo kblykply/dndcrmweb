@@ -136,6 +136,38 @@ function UnitsIcon() {
   );
 }
 
+function RentProjectionIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 19.5h16"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M7 19.5V7.8A1.8 1.8 0 0 1 8.8 6h6.4A1.8 1.8 0 0 1 17 7.8v11.7"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.5 10h5M9.5 13h5M9.5 16h2.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M14.5 16.5c.4.5 1 .8 1.7.8 1 0 1.8-.5 1.8-1.3 0-1.9-3.2-1-3.2-2.8 0-.8.7-1.3 1.7-1.3.6 0 1.2.2 1.6.6M16.5 11.3v.7M16.5 17.3v.7"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function NationalityMapIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -461,6 +493,10 @@ const isMeetingsActive = useMemo(
     () => pathname === "/units" || pathname.startsWith("/units/"),
     [pathname],
   );
+  const isRentProjectionActive = useMemo(
+    () => pathname === "/rent-projection" || pathname.startsWith("/rent-projection/"),
+    [pathname],
+  );
   const isCustomersActive = useMemo(
     () =>
       (pathname === "/customers" || pathname.startsWith("/customers/")) &&
@@ -587,6 +623,15 @@ const isMeetingsActive = useMemo(
                   <UnitsIcon />
                 </NavIconWrap>
                 {safeTranslate(t, "nav.units", "All Units")}
+              </Link>
+            ) : null}
+
+            {canSeeCRM ? (
+              <Link href="/rent-projection" style={navItemStyle(isRentProjectionActive)}>
+                <NavIconWrap>
+                  <RentProjectionIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.rentProjection", "Rent Projection")}
               </Link>
             ) : null}
 

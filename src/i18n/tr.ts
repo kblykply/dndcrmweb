@@ -46,7 +46,8 @@ meetings: "Toplantılar",
     orgChart: "Organizasyon Şeması",
     nationalityReport: "Uyruk Haritası",
     demographicsReport: "Demografi",
-    units: "Tüm Unitler"
+    units: "Tüm Unitler",
+    rentProjection: "Kira Projeksiyonu"
 
   },
 

@@ -39,7 +39,8 @@ meetings: "Meetings",
     orgChart: "Organizational Chart",
     nationalityReport: "Nationality Map",
     demographicsReport: "Demographics",
-    units: "All Units"
+    units: "All Units",
+    rentProjection: "Rent Projection"
 
       
   },
