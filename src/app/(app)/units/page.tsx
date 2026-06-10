@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
@@ -103,12 +104,6 @@ function deliveryBadgeClass(status: UnitDeliveryStatus) {
   return "warning";
 }
 
-function deliveryTone(status: UnitDeliveryStatus) {
-  if (status === "DELIVERED") return "success";
-  if (status === "READY_TO_DELIVER") return "info";
-  return "warning";
-}
-
 function companyLabel(status: UnitCompanyStatus, locale: string) {
   if (status === "DND") return "DND";
   if (status === "OTHER") return locale === "tr" ? "Diğer" : "Other";
@@ -175,31 +170,9 @@ function StatBox({
   );
 }
 
-function FieldArea({
-  label,
-  value,
-  onChange,
-  minRows = 3,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  minRows?: number;
-}) {
-  return (
-    <label className="units-field-label">
-      <span>{label}</span>
-      <textarea
-        value={value}
-        rows={minRows}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </label>
-  );
-}
-
 export default function UnitsPage() {
   const { t, locale } = useLanguage();
+  const router = useRouter();
 
   const [items, setItems] = useState<UnitRow[]>([]);
   const [stats, setStats] = useState<UnitStats>({
@@ -208,29 +181,12 @@ export default function UnitsPage() {
     byDeliveryStatus: [],
     byCompanyStatus: [],
   });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<"" | ProjectType>("");
   const [deliveryFilter, setDeliveryFilter] = useState<"" | UnitDeliveryStatus>("");
   const [companyFilter, setCompanyFilter] = useState<"" | UnitCompanyStatus>("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  const [deliveryStatus, setDeliveryStatus] =
-    useState<UnitDeliveryStatus>("NOT_READY");
-  const [companyStatus, setCompanyStatus] =
-    useState<UnitCompanyStatus>("UNKNOWN");
-  const [generalInfo, setGeneralInfo] = useState("");
-  const [unitInfo, setUnitInfo] = useState("");
-  const [customerRequest, setCustomerRequest] = useState("");
-  const [customerComplaint, setCustomerComplaint] = useState("");
-  const [unitComplaint, setUnitComplaint] = useState("");
-
-  const selected = useMemo(
-    () => items.find((item) => item.id === selectedId) || null,
-    [items, selectedId],
-  );
 
   const statusCounts = useMemo(() => {
     const next: Record<UnitDeliveryStatus, number> = {
@@ -344,11 +300,6 @@ export default function UnitsPage() {
           byCompanyStatus: [],
         },
       );
-      setSelectedId((current) =>
-        current && nextItems.some((item) => item.id === current)
-          ? current
-          : nextItems[0]?.id || null,
-      );
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
@@ -364,62 +315,10 @@ export default function UnitsPage() {
     load({ projectFilter: "", deliveryFilter: "", companyFilter: "", q: "" });
   }
 
-  async function saveSelected() {
-    if (!selected) return;
-
-    setErr(null);
-    setSaving(true);
-
-    try {
-      const updated = (await authedFetch(`/units/${selected.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          deliveryStatus,
-          companyStatus,
-          generalInfo,
-          unitInfo,
-          customerRequest,
-          customerComplaint,
-          unitComplaint,
-        }),
-      })) as UnitRow;
-
-      setItems((prev) =>
-        prev.map((item) => (item.id === updated.id ? updated : item)),
-      );
-      setSelectedId(updated.id);
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setSaving(false);
-    }
-  }
-
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectFilter, deliveryFilter, companyFilter]);
-
-  useEffect(() => {
-    if (!selected) {
-      setDeliveryStatus("NOT_READY");
-      setCompanyStatus("UNKNOWN");
-      setGeneralInfo("");
-      setUnitInfo("");
-      setCustomerRequest("");
-      setCustomerComplaint("");
-      setUnitComplaint("");
-      return;
-    }
-
-    setDeliveryStatus(selected.deliveryStatus || "NOT_READY");
-    setCompanyStatus(selected.companyStatus || "UNKNOWN");
-    setGeneralInfo(selected.generalInfo || "");
-    setUnitInfo(selected.unitInfo || "");
-    setCustomerRequest(selected.customerRequest || "");
-    setCustomerComplaint(selected.customerComplaint || "");
-    setUnitComplaint(selected.unitComplaint || "");
-  }, [selected]);
 
   return (
     <div className="units-page">
@@ -672,7 +571,7 @@ export default function UnitsPage() {
 
         .units-workspace {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
+          grid-template-columns: minmax(0, 1fr);
           gap: 14px;
           align-items: start;
         }
@@ -769,6 +668,16 @@ export default function UnitsPage() {
           font-size: 18px;
           letter-spacing: 0;
           font-variant-numeric: tabular-nums;
+        }
+
+        .units-unit-link {
+          color: var(--text-primary);
+          font-weight: 900;
+          text-decoration: none;
+        }
+
+        .units-unit-link:hover {
+          color: var(--primary);
         }
 
         .units-secondary-text {
@@ -1246,15 +1155,21 @@ export default function UnitsPage() {
                 {items.map((item) => (
                   <tr
                     key={item.id}
-                    className={`units-row ${selectedId === item.id ? "active" : ""}`}
-                    onClick={() => setSelectedId(item.id)}
+                    className="units-row"
+                    onClick={() => router.push(`/units/${item.id}`)}
                   >
                     <td>
                       <span className="badge info">{projectLabel(item.project)}</span>
                     </td>
                     <td>
                       <div className="units-cell-stack">
-                        <div className="units-primary-text units-unit-code">{item.unitNumber}</div>
+                        <Link
+                          href={`/units/${item.id}`}
+                          className="units-unit-link units-unit-code"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {item.unitNumber}
+                        </Link>
                         <div className="units-secondary-text">#{item.id.slice(-6)}</div>
                       </div>
                     </td>
@@ -1341,168 +1256,6 @@ export default function UnitsPage() {
             </div>
           ) : null}
         </div>
-
-        <aside className="units-detail">
-          {selected ? (
-            <>
-              <div className="units-detail-head">
-                <div className="units-cell-stack">
-                  <div className="units-secondary-text">{projectLabel(selected.project)}</div>
-                  <h2>{selected.unitNumber}</h2>
-                </div>
-                <div className="units-note-badges">
-                  <span className={`units-status-pill ${deliveryBadgeClass(deliveryStatus)}`}>
-                    <span className="units-status-dot" />
-                    {deliveryLabel(deliveryStatus, locale)}
-                  </span>
-                  <span className={`units-status-pill ${companyBadgeClass(companyStatus)}`}>
-                    <span className="units-status-dot" />
-                    {companyLabel(companyStatus, locale)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="units-detail-body">
-                <div className="units-detail-grid">
-                  <div className="units-info-line">
-                    <div className="units-info-label">{locale === "tr" ? "Müşteri" : "Customer"}</div>
-                    <Link href={`/customers/${selected.customer.id}`} className="units-info-value">
-                      {selected.customer.fullName}
-                    </Link>
-                  </div>
-                  <div className="units-info-line">
-                    <div className="units-info-label">{locale === "tr" ? "Sorumlu" : "Owner"}</div>
-                    <div className="units-info-value">{selected.customer.owner?.name || "-"}</div>
-                  </div>
-                  <div className="units-info-line">
-                    <div className="units-info-label">{locale === "tr" ? "Telefon" : "Phone"}</div>
-                    <div className="units-info-value">{selected.customer.phone || "-"}</div>
-                  </div>
-                  <div className="units-info-line">
-                    <div className="units-info-label">{locale === "tr" ? "E-posta" : "Email"}</div>
-                    <div className="units-info-value">{selected.customer.email || "-"}</div>
-                  </div>
-                  <div className="units-info-line">
-                    <div className="units-info-label">{locale === "tr" ? "Ajans" : "Agency"}</div>
-                    <div className="units-info-value">{selected.customer.agency?.name || "-"}</div>
-                  </div>
-                  <div className="units-info-line">
-                    <div className="units-info-label">{locale === "tr" ? "Uyruk" : "Nationality"}</div>
-                    <div className="units-info-value">{selected.customer.nationality || "-"}</div>
-                  </div>
-                </div>
-
-                <section className="units-detail-section">
-                  <div className="units-section-title">
-                    <span>{locale === "tr" ? "Teslim durumu" : "Delivery status"}</span>
-                    <span className="units-secondary-text">
-                      {formatShortDate(selected.updatedAt, locale)}
-                    </span>
-                  </div>
-
-                  <div className="units-status-picker">
-                    {DELIVERY_STATUSES.map((status) => (
-                      <button
-                        key={status}
-                        type="button"
-                        className={`units-status-choice ${deliveryTone(status)}`}
-                        aria-pressed={deliveryStatus === status}
-                        onClick={() => setDeliveryStatus(status)}
-                      >
-                        {deliveryLabel(status, locale)}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="units-detail-section">
-                  <div className="units-section-title">
-                    <span>{locale === "tr" ? "Firma durumu" : "Company status"}</span>
-                  </div>
-
-                  <div className="units-status-picker">
-                    {COMPANY_STATUSES.map((status) => (
-                      <button
-                        key={status}
-                        type="button"
-                        className={`units-status-choice ${companyBadgeClass(status)}`}
-                        aria-pressed={companyStatus === status}
-                        onClick={() => setCompanyStatus(status)}
-                      >
-                        {companyLabel(status, locale)}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="units-detail-section">
-                  <div className="units-section-title">
-                    <span>{locale === "tr" ? "Unit bilgileri" : "Unit information"}</span>
-                  </div>
-
-                  <div className="units-editor-grid">
-                    <FieldArea
-                      label={locale === "tr" ? "Genel bilgi" : "General info"}
-                      value={generalInfo}
-                      onChange={setGeneralInfo}
-                    />
-                    <FieldArea
-                      label={locale === "tr" ? "Unit bilgisi" : "Unit info"}
-                      value={unitInfo}
-                      onChange={setUnitInfo}
-                    />
-                  </div>
-                </section>
-
-                <section className="units-detail-section">
-                  <div className="units-section-title">
-                    <span>{locale === "tr" ? "Müşteri kayıtları" : "Customer records"}</span>
-                  </div>
-
-                  <div className="units-editor-grid">
-                    <FieldArea
-                      label={locale === "tr" ? "Müşteri talebi" : "Customer request"}
-                      value={customerRequest}
-                      onChange={setCustomerRequest}
-                    />
-                    <FieldArea
-                      label={locale === "tr" ? "Müşteri şikayeti" : "Customer complaint"}
-                      value={customerComplaint}
-                      onChange={setCustomerComplaint}
-                    />
-                    <FieldArea
-                      label={locale === "tr" ? "Unit şikayeti" : "Unit complaint"}
-                      value={unitComplaint}
-                      onChange={setUnitComplaint}
-                    />
-                  </div>
-                </section>
-              </div>
-
-              <div className="units-detail-footer">
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={saveSelected}
-                  disabled={saving}
-                >
-                  {saving
-                    ? safeTranslate(t, "common.saving", locale === "tr" ? "Kaydediliyor..." : "Saving...")
-                    : safeTranslate(t, "common.save", locale === "tr" ? "Kaydet" : "Save")}
-                </button>
-
-                <div className="units-secondary-text">
-                  {locale === "tr" ? "Son güncelleme" : "Last updated"}:{" "}
-                  {formatDate(selected.updatedAt, locale)}
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="units-empty">
-              {locale === "tr" ? "Unit seçili değil." : "No unit selected."}
-            </div>
-          )}
-        </aside>
       </div>
     </div>
   );
