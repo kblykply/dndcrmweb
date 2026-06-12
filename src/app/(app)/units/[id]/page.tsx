@@ -177,6 +177,24 @@ function rentalStatusLabel(status: string | undefined, locale: string) {
   return locale === "tr" ? "İlgilenmiyor" : "Not interested";
 }
 
+function installmentTypeLabel(type: string | undefined, locale: string) {
+  if (type === "DEPOSIT") return locale === "tr" ? "Depozito" : "Deposit";
+  if (type === "AIDAT") return "Aidat";
+  return locale === "tr" ? "Taksit" : "Installment";
+}
+
+function paymentTone(status: string | undefined) {
+  return status === "PAID" ? "success" : "warning";
+}
+
+function formatAmount(value: number | null | undefined, locale: string) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+
+  return new Intl.NumberFormat(locale === "tr" ? "tr-TR" : "en-US", {
+    maximumFractionDigits: 2,
+  }).format(Number(value));
+}
+
 function fieldLabel(field: string, locale: string) {
   const labels: Record<string, { en: string; tr: string }> = {
     deliveryStatus: { en: "Delivery status", tr: "Teslim durumu" },
@@ -425,6 +443,23 @@ export default function UnitDetailPage() {
     () => logs.filter((log) => log.section === "CUSTOMER_RECORDS"),
     [logs],
   );
+  const installmentSummary = useMemo(() => {
+    return installments.reduce(
+      (acc, item) => {
+        const amount = Number(item.amount || 0);
+        acc.total += amount;
+        if (item.status === "PAID") {
+          acc.paid += amount;
+          acc.paidCount += 1;
+        } else {
+          acc.unpaid += amount;
+          acc.unpaidCount += 1;
+        }
+        return acc;
+      },
+      { total: 0, paid: 0, unpaid: 0, paidCount: 0, unpaidCount: 0 },
+    );
+  }, [installments]);
 
   const isDirty = useMemo(() => {
     if (!unit) return false;
@@ -646,7 +681,7 @@ export default function UnitDetailPage() {
       <style jsx global>{`
         .unit-detail-page {
           display: grid;
-          gap: 16px;
+          gap: 18px;
           min-width: 0;
         }
 
@@ -654,18 +689,23 @@ export default function UnitDetailPage() {
           display: flex;
           align-items: flex-start;
           justify-content: space-between;
-          gap: 16px;
+          gap: 18px;
           flex-wrap: wrap;
+          padding: 18px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface);
+          box-shadow: var(--shadow-sm);
         }
 
         .unit-detail-title {
           display: grid;
-          gap: 7px;
+          gap: 8px;
           min-width: min(100%, 440px);
         }
 
         .unit-detail-title h1 {
-          font-size: 30px;
+          font-size: 34px;
           line-height: 1.1;
           letter-spacing: 0;
         }
@@ -686,6 +726,7 @@ export default function UnitDetailPage() {
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
+          justify-content: flex-end;
         }
 
         .unit-detail-link,
@@ -703,6 +744,18 @@ export default function UnitDetailPage() {
           border: 1px solid var(--stroke);
           background: var(--surface);
           color: var(--text-primary);
+        }
+
+        .unit-detail-save-note {
+          display: inline-flex;
+          align-items: center;
+          min-height: 28px;
+          padding: 0 10px;
+          border-radius: 999px;
+          background: var(--surface-2);
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 900;
         }
 
         .unit-detail-status-bar {
@@ -725,6 +778,16 @@ export default function UnitDetailPage() {
           display: grid;
           gap: 6px;
           border-left: 4px solid var(--text-muted);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .unit-detail-stat::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, rgba(15, 23, 42, 0.035), transparent 44%);
+          pointer-events: none;
         }
 
         .unit-detail-stat.success {
@@ -743,45 +806,64 @@ export default function UnitDetailPage() {
           color: var(--text-primary);
           font-size: 17px;
           overflow-wrap: anywhere;
+          position: relative;
+          z-index: 1;
         }
 
         .unit-detail-body {
           display: grid;
-          grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
-          gap: 14px;
+          grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+          gap: 16px;
           align-items: start;
         }
 
         .unit-detail-column {
           display: grid;
-          gap: 14px;
+          gap: 16px;
           min-width: 0;
+        }
+
+        .unit-detail-side {
+          position: sticky;
+          top: 14px;
         }
 
         .unit-detail-panel {
           display: grid;
-          gap: 14px;
-          padding: 14px;
+          gap: 16px;
+          padding: 16px;
+          overflow: hidden;
         }
 
         .unit-detail-panel-head,
         .unit-detail-subhead,
         .unit-detail-log-top {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: space-between;
           gap: 10px;
+          flex-wrap: wrap;
         }
 
         .unit-detail-panel-head h2 {
-          font-size: 17px;
+          font-size: 18px;
           line-height: 1.2;
+        }
+
+        .unit-detail-panel-title {
+          display: grid;
+          gap: 4px;
+          min-width: 0;
         }
 
         .unit-detail-info-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 12px;
+        }
+
+        .unit-detail-side-info-grid {
+          grid-template-columns: 1fr;
         }
 
         .unit-detail-info-line {
@@ -805,6 +887,79 @@ export default function UnitDetailPage() {
           overflow-wrap: anywhere;
         }
 
+        .unit-detail-badge-strip,
+        .unit-detail-summary-grid {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .unit-detail-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          align-items: stretch;
+        }
+
+        .unit-detail-summary-card {
+          display: grid;
+          gap: 4px;
+          min-width: 0;
+          padding: 12px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface-2);
+        }
+
+        .unit-detail-summary-card span {
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .unit-detail-summary-card strong {
+          color: var(--text-primary);
+          font-size: 18px;
+          font-weight: 900;
+          overflow-wrap: anywhere;
+        }
+
+        .unit-detail-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          min-height: 28px;
+          max-width: 100%;
+          padding: 0 10px;
+          border: 1px solid var(--stroke);
+          border-radius: 999px;
+          background: var(--surface-2);
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .unit-detail-pill::before {
+          content: "";
+          width: 7px;
+          height: 7px;
+          border-radius: 999px;
+          background: var(--text-muted);
+          flex: 0 0 auto;
+        }
+
+        .unit-detail-pill.success::before {
+          background: var(--success);
+        }
+
+        .unit-detail-pill.warning::before {
+          background: var(--warning);
+        }
+
+        .unit-detail-pill.info::before {
+          background: var(--info);
+        }
+
         .unit-detail-status-picker {
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -812,12 +967,14 @@ export default function UnitDetailPage() {
         }
 
         .unit-detail-status-choice {
-          min-height: 40px;
+          min-height: 42px;
           border-radius: 8px;
           background: var(--surface-2);
           color: var(--text-secondary);
           font-weight: 900;
           padding: 0 10px;
+          white-space: normal;
+          line-height: 1.2;
         }
 
         .unit-detail-status-choice[aria-pressed="true"] {
@@ -847,6 +1004,7 @@ export default function UnitDetailPage() {
         .unit-detail-field {
           display: grid;
           gap: 6px;
+          min-width: 0;
         }
 
         .unit-detail-field textarea {
@@ -857,6 +1015,7 @@ export default function UnitDetailPage() {
         .unit-detail-field input,
         .unit-detail-field select {
           width: 100%;
+          min-width: 0;
         }
 
         .unit-detail-mini-grid {
@@ -867,29 +1026,63 @@ export default function UnitDetailPage() {
 
         .unit-detail-installments {
           display: grid;
+          gap: 12px;
+          min-width: 0;
+        }
+
+        .unit-detail-installment-list {
+          display: grid;
           gap: 10px;
+          min-width: 0;
         }
 
         .unit-detail-installment-row {
           display: grid;
-          grid-template-columns: minmax(120px, 0.8fr) minmax(160px, 1fr) minmax(90px, 0.6fr) minmax(130px, 0.8fr) minmax(110px, 0.7fr) auto;
+          grid-template-columns: minmax(96px, 0.85fr) minmax(128px, 1.25fr) minmax(78px, 0.7fr) minmax(112px, 0.95fr) minmax(96px, 0.8fr) 40px;
           gap: 8px;
           align-items: end;
+          min-width: 0;
           padding: 10px;
           border: 1px solid var(--stroke);
           border-radius: 8px;
           background: var(--surface-2);
         }
 
-        .unit-detail-installment-row button {
+        .unit-detail-installment-row .unit-detail-field {
+          gap: 5px;
+        }
+
+        .unit-detail-installment-row .unit-detail-field span {
+          font-size: 11px;
+        }
+
+        .unit-detail-installment-row input,
+        .unit-detail-installment-row select {
+          min-height: 38px;
+          padding-inline: 10px;
+        }
+
+        .unit-detail-icon-button {
+          width: 38px;
+          height: 38px;
           min-height: 38px;
           border-radius: 8px;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--danger);
+          font-size: 24px;
+          font-weight: 900;
+          line-height: 1;
+          background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+          border-color: color-mix(in srgb, var(--danger) 22%, var(--stroke));
         }
 
         .unit-detail-contact-actions {
-          display: flex;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 8px;
-          flex-wrap: wrap;
         }
 
         .unit-detail-contact-actions button,
@@ -900,17 +1093,52 @@ export default function UnitDetailPage() {
           font-weight: 900;
         }
 
-        .unit-detail-danger {
+        .unit-detail-add-row {
+          background: var(--surface);
+        }
+
+        .unit-detail-notice {
+          padding: 10px 12px;
+          border: 1px solid color-mix(in srgb, var(--success) 28%, var(--stroke));
+          border-radius: 8px;
+          background: color-mix(in srgb, var(--success) 8%, var(--surface));
+          color: var(--text-primary);
+          font-weight: 800;
+        }
+
+        .unit-detail-cancel-strip {
+          gap: 10px;
+          padding: 12px;
           border-color: color-mix(in srgb, var(--danger) 34%, var(--stroke));
-          background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+          background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+        }
+
+        .unit-detail-cancel-strip h2 {
+          font-size: 15px;
+        }
+
+        .unit-detail-cancel-body {
+          display: grid;
+          grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1fr);
+          gap: 10px;
+          align-items: start;
         }
 
         .unit-detail-danger-toggle {
           display: inline-flex;
           align-items: center;
           gap: 8px;
+          min-height: 42px;
+          padding: 0 12px;
+          border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--stroke));
+          border-radius: 8px;
+          background: var(--surface);
           color: var(--text-primary);
           font-weight: 900;
+        }
+
+        .unit-detail-cancel-strip textarea {
+          min-height: 72px;
         }
 
         .unit-detail-history {
@@ -988,6 +1216,10 @@ export default function UnitDetailPage() {
           .unit-detail-status-bar {
             grid-template-columns: 1fr;
           }
+
+          .unit-detail-side {
+            position: static;
+          }
         }
 
         @media (max-width: 720px) {
@@ -1000,10 +1232,17 @@ export default function UnitDetailPage() {
           .unit-detail-info-grid,
           .unit-detail-status-picker,
           .unit-detail-mini-grid,
+          .unit-detail-summary-grid,
+          .unit-detail-contact-actions,
+          .unit-detail-cancel-body,
           .unit-detail-installment-row,
           .unit-detail-diff {
             grid-template-columns: 1fr;
             width: 100%;
+          }
+
+          .unit-detail-header {
+            padding: 14px;
           }
         }
       `}</style>
@@ -1020,6 +1259,11 @@ export default function UnitDetailPage() {
         </div>
 
         <div className="unit-detail-actions">
+          <span className="unit-detail-save-note">
+            {isDirty
+              ? locale === "tr" ? "Kaydedilmemiş değişiklik var" : "Unsaved changes"
+              : locale === "tr" ? "Güncel" : "Up to date"}
+          </span>
           <Link href="/units" className="unit-detail-link">
             {locale === "tr" ? "Tüm Unitler" : "All Units"}
           </Link>
@@ -1069,41 +1313,15 @@ export default function UnitDetailPage() {
             <div className="unit-detail-column">
               <section className="unit-detail-panel">
                 <div className="unit-detail-panel-head">
-                  <h2>{locale === "tr" ? "Müşteri özeti" : "Customer summary"}</h2>
-                </div>
-
-                <div className="unit-detail-info-grid">
-                  <div className="unit-detail-info-line">
-                    <span>{locale === "tr" ? "Müşteri" : "Customer"}</span>
-                    <Link href={`/customers/${unit.customer.id}`}>{unit.customer.fullName}</Link>
+                  <div className="unit-detail-panel-title">
+                    <h2>{locale === "tr" ? "Unit bilgileri" : "Unit information"}</h2>
+                    <span className="unit-detail-muted">
+                      {locale === "tr" ? "Teslim, firma ve unit notları" : "Delivery, company and unit notes"}
+                    </span>
                   </div>
-                  <div className="unit-detail-info-line">
-                    <span>{locale === "tr" ? "Sorumlu" : "Owner"}</span>
-                    <strong>{unit.customer.owner?.name || "-"}</strong>
-                  </div>
-                  <div className="unit-detail-info-line">
-                    <span>{locale === "tr" ? "Telefon" : "Phone"}</span>
-                    <strong>{unit.customer.phone || "-"}</strong>
-                  </div>
-                  <div className="unit-detail-info-line">
-                    <span>{locale === "tr" ? "E-posta" : "Email"}</span>
-                    <strong>{unit.customer.email || "-"}</strong>
-                  </div>
-                  <div className="unit-detail-info-line">
-                    <span>{locale === "tr" ? "Ajans" : "Agency"}</span>
-                    <strong>{unit.customer.agency?.name || unit.customer.companyName || "-"}</strong>
-                  </div>
-                  <div className="unit-detail-info-line">
-                    <span>{locale === "tr" ? "Uyruk" : "Nationality"}</span>
-                    <strong>{unit.customer.nationality || "-"}</strong>
-                  </div>
-                </div>
-              </section>
-
-              <section className="unit-detail-panel">
-                <div className="unit-detail-panel-head">
-                  <h2>{locale === "tr" ? "Unit bilgileri" : "Unit information"}</h2>
-                  <span className="unit-detail-muted">{unitInformationLogs.length}</span>
+                  <span className="unit-detail-pill info">
+                    {unitInformationLogs.length} {locale === "tr" ? "log" : "logs"}
+                  </span>
                 </div>
 
                 <div className="unit-detail-status-picker">
@@ -1158,10 +1376,37 @@ export default function UnitDetailPage() {
 
               <section className="unit-detail-panel">
                 <div className="unit-detail-panel-head">
-                  <h2>{locale === "tr" ? "Muhasebe" : "Accounting"}</h2>
-                  <span className="unit-detail-muted">
-                    {paymentLabel(kdvStatus, locale)} / {paymentLabel(trafoStatus, locale)}
-                  </span>
+                  <div className="unit-detail-panel-title">
+                    <h2>{locale === "tr" ? "Muhasebe" : "Accounting"}</h2>
+                    <span className="unit-detail-muted">
+                      {installments.length} {locale === "tr" ? "ödeme satırı" : "payment rows"}
+                    </span>
+                  </div>
+                  <div className="unit-detail-badge-strip">
+                    <span className={`unit-detail-pill ${paymentTone(kdvStatus)}`}>
+                      KDV {paymentLabel(kdvStatus, locale)}
+                    </span>
+                    <span className={`unit-detail-pill ${paymentTone(trafoStatus)}`}>
+                      Trafo {paymentLabel(trafoStatus, locale)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="unit-detail-summary-grid">
+                  <div className="unit-detail-summary-card">
+                    <span>{locale === "tr" ? "Toplam" : "Total"}</span>
+                    <strong>{formatAmount(installmentSummary.total, locale)}</strong>
+                  </div>
+                  <div className="unit-detail-summary-card">
+                    <span>{locale === "tr" ? "Ödendi" : "Paid"}</span>
+                    <strong>{formatAmount(installmentSummary.paid, locale)}</strong>
+                    <span>{installmentSummary.paidCount} {locale === "tr" ? "satır" : "rows"}</span>
+                  </div>
+                  <div className="unit-detail-summary-card">
+                    <span>{locale === "tr" ? "Ödenmedi" : "Unpaid"}</span>
+                    <strong>{formatAmount(installmentSummary.unpaid, locale)}</strong>
+                    <span>{installmentSummary.unpaidCount} {locale === "tr" ? "satır" : "rows"}</span>
+                  </div>
                 </div>
 
                 <div className="unit-detail-mini-grid">
@@ -1193,60 +1438,74 @@ export default function UnitDetailPage() {
                     </button>
                   </div>
 
-                  {installments.map((item) => (
-                    <div key={item.id} className="unit-detail-installment-row">
-                      <FieldSelect
-                        label={locale === "tr" ? "Tip" : "Type"}
-                        value={item.type}
-                        onChange={(value) => updateInstallment(item.id, { type: value as UnitInstallment["type"] })}
-                        options={["INSTALLMENT", "DEPOSIT", "AIDAT"]}
-                        labelFor={(value) =>
-                          value === "DEPOSIT"
-                            ? locale === "tr" ? "Depozito" : "Deposit"
-                            : value === "AIDAT"
-                              ? "Aidat"
-                              : locale === "tr" ? "Taksit" : "Installment"
-                        }
-                      />
-                      <label className="unit-detail-field">
-                        <span>{locale === "tr" ? "Başlık" : "Title"}</span>
-                        <input
-                          value={item.title}
-                          onChange={(e) => updateInstallment(item.id, { title: e.target.value })}
-                        />
-                      </label>
-                      <label className="unit-detail-field">
-                        <span>{locale === "tr" ? "Tutar" : "Amount"}</span>
-                        <input
-                          inputMode="decimal"
-                          value={item.amount ?? ""}
-                          onChange={(e) =>
-                            updateInstallment(item.id, {
-                              amount: e.target.value ? Number(e.target.value) : null,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="unit-detail-field">
-                        <span>{locale === "tr" ? "Vade" : "Due date"}</span>
-                        <input
-                          type="date"
-                          value={item.dueDate || ""}
-                          onChange={(e) => updateInstallment(item.id, { dueDate: e.target.value })}
-                        />
-                      </label>
-                      <FieldSelect
-                        label={locale === "tr" ? "Durum" : "Status"}
-                        value={item.status}
-                        onChange={(value) => updateInstallment(item.id, { status: value as PaymentStatus })}
-                        options={PAYMENT_STATUSES}
-                        labelFor={(value) => paymentLabel(value, locale)}
-                      />
-                      <button type="button" onClick={() => removeInstallment(item.id)}>
-                        {locale === "tr" ? "Sil" : "Delete"}
-                      </button>
+                  {installments.length > 0 ? (
+                    <div className="unit-detail-installment-list">
+                      {installments.map((item) => (
+                        <div key={item.id} className="unit-detail-installment-row">
+                          <FieldSelect
+                            label={locale === "tr" ? "Tip" : "Type"}
+                            value={item.type}
+                            onChange={(value) =>
+                              updateInstallment(item.id, {
+                                type: value as UnitInstallment["type"],
+                              })
+                            }
+                            options={["INSTALLMENT", "DEPOSIT", "AIDAT"]}
+                            labelFor={(value) => installmentTypeLabel(value, locale)}
+                          />
+                          <label className="unit-detail-field">
+                            <span>{locale === "tr" ? "Başlık" : "Title"}</span>
+                            <input
+                              value={item.title}
+                              onChange={(e) =>
+                                updateInstallment(item.id, { title: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label className="unit-detail-field">
+                            <span>{locale === "tr" ? "Tutar" : "Amount"}</span>
+                            <input
+                              inputMode="decimal"
+                              value={item.amount ?? ""}
+                              onChange={(e) =>
+                                updateInstallment(item.id, {
+                                  amount: e.target.value ? Number(e.target.value) : null,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="unit-detail-field">
+                            <span>{locale === "tr" ? "Vade" : "Due date"}</span>
+                            <input
+                              type="date"
+                              value={item.dueDate || ""}
+                              onChange={(e) =>
+                                updateInstallment(item.id, { dueDate: e.target.value })
+                              }
+                            />
+                          </label>
+                          <FieldSelect
+                            label={locale === "tr" ? "Durum" : "Status"}
+                            value={item.status}
+                            onChange={(value) =>
+                              updateInstallment(item.id, { status: value as PaymentStatus })
+                            }
+                            options={PAYMENT_STATUSES}
+                            labelFor={(value) => paymentLabel(value, locale)}
+                          />
+                          <button
+                            type="button"
+                            className="unit-detail-icon-button"
+                            aria-label={locale === "tr" ? "Satırı sil" : "Delete row"}
+                            title={locale === "tr" ? "Satırı sil" : "Delete row"}
+                            onClick={() => removeInstallment(item.id)}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : null}
 
                   {installments.length === 0 ? (
                     <div className="unit-detail-empty">
@@ -1258,7 +1517,15 @@ export default function UnitDetailPage() {
 
               <section className="unit-detail-panel">
                 <div className="unit-detail-panel-head">
-                  <h2>{locale === "tr" ? "Bağlantılar ve kiralama" : "Utilities and rental"}</h2>
+                  <div className="unit-detail-panel-title">
+                    <h2>{locale === "tr" ? "Bağlantılar ve kiralama" : "Utilities and rental"}</h2>
+                    <span className="unit-detail-muted">
+                      {electricityLabel(electricityProvider, locale)} / {waterLabel(waterAccessStatus, locale)}
+                    </span>
+                  </div>
+                  <span className="unit-detail-pill info">
+                    {rentalStatusLabel(rentalStatus, locale)}
+                  </span>
                 </div>
 
                 <div className="unit-detail-mini-grid">
@@ -1303,33 +1570,100 @@ export default function UnitDetailPage() {
               </section>
 
               {isAdmin ? (
-                <section className="unit-detail-panel unit-detail-danger">
+                <section className="unit-detail-panel unit-detail-cancel-strip">
                   <div className="unit-detail-panel-head">
-                    <h2>{locale === "tr" ? "Admin iptal" : "Admin cancellation"}</h2>
+                    <div className="unit-detail-panel-title">
+                      <h2>{locale === "tr" ? "Admin iptal" : "Admin cancellation"}</h2>
+                      <span className="unit-detail-muted">
+                        {isCanceled
+                          ? locale === "tr" ? "Unit iptal olarak işaretli" : "Unit is marked canceled"
+                          : locale === "tr" ? "Sadece admin düzenler" : "Admin only"}
+                      </span>
+                    </div>
                   </div>
-                  <label className="unit-detail-danger-toggle">
-                    <input
-                      type="checkbox"
-                      checked={isCanceled}
-                      onChange={(e) => setIsCanceled(e.target.checked)}
-                    />
-                    {locale === "tr" ? "Bu unit iptal edildi" : "This unit is canceled"}
-                  </label>
-                  <FieldArea
-                    label={locale === "tr" ? "İptal nedeni" : "Cancel reason"}
-                    value={cancelReason}
-                    onChange={setCancelReason}
-                    minRows={3}
-                  />
+
+                  <div className="unit-detail-cancel-body">
+                    <label className="unit-detail-danger-toggle">
+                      <input
+                        type="checkbox"
+                        checked={isCanceled}
+                        onChange={(e) => setIsCanceled(e.target.checked)}
+                      />
+                      {locale === "tr" ? "Unit iptal" : "Canceled unit"}
+                    </label>
+
+                    {(isCanceled || cancelReason.trim()) ? (
+                      <FieldArea
+                        label={locale === "tr" ? "İptal nedeni" : "Cancel reason"}
+                        value={cancelReason}
+                        onChange={setCancelReason}
+                        minRows={2}
+                      />
+                    ) : (
+                      <div className="unit-detail-muted">
+                        {locale === "tr"
+                          ? "İptal seçilirse neden alanı açılır."
+                          : "The reason field appears when cancellation is selected."}
+                      </div>
+                    )}
+                  </div>
                 </section>
               ) : null}
             </div>
 
-            <div className="unit-detail-column">
+            <div className="unit-detail-column unit-detail-side">
               <section className="unit-detail-panel">
                 <div className="unit-detail-panel-head">
-                  <h2>{locale === "tr" ? "Müşteri kayıtları" : "Customer records"}</h2>
-                  <span className="unit-detail-muted">{customerRecordLogs.length}</span>
+                  <div className="unit-detail-panel-title">
+                    <h2>{locale === "tr" ? "Müşteri özeti" : "Customer summary"}</h2>
+                    <span className="unit-detail-muted">
+                      {unit.customer.owner?.name || (locale === "tr" ? "Sorumlu yok" : "No owner")}
+                    </span>
+                  </div>
+                  <Link href={`/customers/${unit.customer.id}`} className="unit-detail-link">
+                    {locale === "tr" ? "Kart" : "Card"}
+                  </Link>
+                </div>
+
+                <div className="unit-detail-info-grid unit-detail-side-info-grid">
+                  <div className="unit-detail-info-line">
+                    <span>{locale === "tr" ? "Müşteri" : "Customer"}</span>
+                    <strong>{unit.customer.fullName}</strong>
+                  </div>
+                  <div className="unit-detail-info-line">
+                    <span>{locale === "tr" ? "Sorumlu" : "Owner"}</span>
+                    <strong>{unit.customer.owner?.name || "-"}</strong>
+                  </div>
+                  <div className="unit-detail-info-line">
+                    <span>{locale === "tr" ? "Telefon" : "Phone"}</span>
+                    <strong>{unit.customer.phone || "-"}</strong>
+                  </div>
+                  <div className="unit-detail-info-line">
+                    <span>{locale === "tr" ? "E-posta" : "Email"}</span>
+                    <strong>{unit.customer.email || "-"}</strong>
+                  </div>
+                  <div className="unit-detail-info-line">
+                    <span>{locale === "tr" ? "Ajans" : "Agency"}</span>
+                    <strong>{unit.customer.agency?.name || unit.customer.companyName || "-"}</strong>
+                  </div>
+                  <div className="unit-detail-info-line">
+                    <span>{locale === "tr" ? "Uyruk" : "Nationality"}</span>
+                    <strong>{unit.customer.nationality || "-"}</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section className="unit-detail-panel">
+                <div className="unit-detail-panel-head">
+                  <div className="unit-detail-panel-title">
+                    <h2>{locale === "tr" ? "Müşteri kayıtları" : "Customer records"}</h2>
+                    <span className="unit-detail-muted">
+                      {locale === "tr" ? "Talep, şikayet ve genel notlar" : "Requests, complaints and general notes"}
+                    </span>
+                  </div>
+                  <span className="unit-detail-pill info">
+                    {customerRecordLogs.length} {locale === "tr" ? "log" : "logs"}
+                  </span>
                 </div>
 
                 <div className="unit-detail-fields">
@@ -1361,10 +1695,12 @@ export default function UnitDetailPage() {
 
               <section className="unit-detail-panel">
                 <div className="unit-detail-panel-head">
-                  <h2>{locale === "tr" ? "İletişim" : "Communication"}</h2>
-                  <span className="unit-detail-muted">
-                    {unit.customer.email || unit.customer.phone || "-"}
-                  </span>
+                  <div className="unit-detail-panel-title">
+                    <h2>{locale === "tr" ? "İletişim" : "Communication"}</h2>
+                    <span className="unit-detail-muted">
+                      {unit.customer.email || unit.customer.phone || "-"}
+                    </span>
+                  </div>
                 </div>
 
                 <FieldArea
@@ -1375,7 +1711,7 @@ export default function UnitDetailPage() {
                 />
 
                 {communicationNotice ? (
-                  <div className="unit-detail-empty">{communicationNotice}</div>
+                  <div className="unit-detail-notice">{communicationNotice}</div>
                 ) : null}
 
                 <div className="unit-detail-contact-actions">
