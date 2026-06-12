@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
+import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type ProjectType =
@@ -14,6 +15,8 @@ type ProjectType =
 
 type UnitDeliveryStatus = "NOT_READY" | "READY_TO_DELIVER" | "DELIVERED";
 type UnitCompanyStatus = "UNKNOWN" | "DND" | "OTHER";
+type PaymentStatus = "UNPAID" | "PAID";
+type RentalStatus = "SHORT_TERM" | "LONG_TERM" | "DND_UNITS" | "NOT_INTERESTED";
 
 type UnitCustomer = {
   id: string;
@@ -42,6 +45,10 @@ type UnitRow = {
   customerRequest?: string | null;
   customerComplaint?: string | null;
   unitComplaint?: string | null;
+  isCanceled?: boolean;
+  kdvStatus?: PaymentStatus | string;
+  trafoStatus?: PaymentStatus | string;
+  rentalStatus?: RentalStatus | string;
   createdAt?: string;
   updatedAt?: string;
   customer: UnitCustomer;
@@ -52,6 +59,20 @@ type UnitStats = {
   byProject: Array<{ project: ProjectType; count: number }>;
   byDeliveryStatus: Array<{ deliveryStatus: UnitDeliveryStatus; count: number }>;
   byCompanyStatus: Array<{ companyStatus: UnitCompanyStatus; count: number }>;
+};
+
+type UnitDayReport = {
+  date: string;
+  total: number;
+  byUser: Array<{ user?: { name?: string | null; role?: string | null } | null; count: number }>;
+  items: Array<{
+    id: string;
+    section: string;
+    field: string;
+    createdAt?: string;
+    createdBy?: { name?: string | null; role?: string | null } | null;
+    unit: { id: string; unitNumber: string; customer?: { fullName?: string | null } | null };
+  }>;
 };
 
 const PROJECTS: ProjectType[] = [
@@ -68,6 +89,7 @@ const DELIVERY_STATUSES: UnitDeliveryStatus[] = [
 ];
 
 const COMPANY_STATUSES: UnitCompanyStatus[] = ["UNKNOWN", "DND", "OTHER"];
+const DEFAULT_PROJECT: ProjectType = "LA_JOYA_PERLA";
 
 function safeTranslate(
   t: (path: string) => string,
@@ -116,6 +138,45 @@ function companyBadgeClass(status: UnitCompanyStatus) {
   return "";
 }
 
+function paymentLabel(status: string | undefined, locale: string) {
+  return status === "PAID"
+    ? locale === "tr" ? "Ödendi" : "Paid"
+    : locale === "tr" ? "Ödenmedi" : "Unpaid";
+}
+
+function rentalStatusLabel(status: string | undefined, locale: string) {
+  if (status === "SHORT_TERM") return locale === "tr" ? "Kısa dönem" : "Short term";
+  if (status === "LONG_TERM") return locale === "tr" ? "Uzun dönem" : "Long term";
+  if (status === "DND_UNITS") return "DND Units";
+  return locale === "tr" ? "İlgilenmiyor" : "Not interested";
+}
+
+function fieldLabelForReport(field: string, locale: string) {
+  const labels: Record<string, { en: string; tr: string }> = {
+    deliveryStatus: { en: "Delivery status", tr: "Teslim durumu" },
+    companyStatus: { en: "Company status", tr: "Firma durumu" },
+    unitInfo: { en: "Unit info", tr: "Unit bilgisi" },
+    unitComplaint: { en: "Unit complaint", tr: "Unit şikayeti" },
+    generalInfo: { en: "General info", tr: "Genel bilgi" },
+    customerRequest: { en: "Customer request", tr: "Müşteri talebi" },
+    customerComplaint: { en: "Customer complaint", tr: "Müşteri şikayeti" },
+    isCanceled: { en: "Canceled", tr: "İptal" },
+    cancelReason: { en: "Cancel reason", tr: "İptal nedeni" },
+    kdvStatus: { en: "KDV status", tr: "KDV durumu" },
+    trafoStatus: { en: "Trafo status", tr: "Trafo durumu" },
+    installments: { en: "Installments", tr: "Taksitler" },
+    electricityProvider: { en: "Electricity", tr: "Elektrik" },
+    waterAccessStatus: { en: "Water access", tr: "Su erişimi" },
+    rentalPackage: { en: "Rental package", tr: "Kiralama paketi" },
+    customFurniture: { en: "Custom furniture", tr: "Özel mobilya" },
+    rentalStatus: { en: "Rental status", tr: "Kiralama durumu" },
+    EMAIL: { en: "Email", tr: "E-posta" },
+    WHATSAPP: { en: "WhatsApp", tr: "WhatsApp" },
+  };
+
+  return labels[field]?.[locale === "tr" ? "tr" : "en"] || field;
+}
+
 function hasText(value?: string | null) {
   return Boolean(value?.trim());
 }
@@ -146,6 +207,16 @@ function formatShortDate(value: string | undefined, locale: string) {
 
   return new Date(value).toLocaleDateString(locale === "tr" ? "tr-TR" : "en-US", {
     month: "short",
+    day: "numeric",
+  });
+}
+
+function formatLongDate(value: string | undefined, locale: string) {
+  if (!value) return "-";
+
+  return new Date(value).toLocaleDateString(locale === "tr" ? "tr-TR" : "en-US", {
+    year: "numeric",
+    month: "long",
     day: "numeric",
   });
 }
@@ -181,12 +252,17 @@ export default function UnitsPage() {
     byDeliveryStatus: [],
     byCompanyStatus: [],
   });
-  const [projectFilter, setProjectFilter] = useState<"" | ProjectType>("");
+  const [projectFilter, setProjectFilter] = useState<"" | ProjectType>(DEFAULT_PROJECT);
   const [deliveryFilter, setDeliveryFilter] = useState<"" | UnitDeliveryStatus>("");
   const [companyFilter, setCompanyFilter] = useState<"" | UnitCompanyStatus>("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [me, setMe] = useState<any>(null);
+  const [dayReport, setDayReport] = useState<UnitDayReport | null>(null);
+
+  const canSeeDayReport =
+    me?.role === "ADMIN" || me?.role === "MANAGER" || me?.role === "AFTERSALES";
 
   const statusCounts = useMemo(() => {
     const next: Record<UnitDeliveryStatus, number> = {
@@ -307,18 +383,42 @@ export default function UnitsPage() {
     }
   }
 
+  async function loadDayReport() {
+    if (!canSeeDayReport) return;
+
+    try {
+      const data = (await authedFetch("/units/reports/end-of-day")) as UnitDayReport;
+      setDayReport(data);
+    } catch {
+      setDayReport(null);
+    }
+  }
+
+  function printDayReport() {
+    window.print();
+  }
+
   function clearFilters() {
-    setProjectFilter("");
+    setProjectFilter(DEFAULT_PROJECT);
     setDeliveryFilter("");
     setCompanyFilter("");
     setQ("");
-    load({ projectFilter: "", deliveryFilter: "", companyFilter: "", q: "" });
+    load({ projectFilter: DEFAULT_PROJECT, deliveryFilter: "", companyFilter: "", q: "" });
   }
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectFilter, deliveryFilter, companyFilter]);
+
+  useEffect(() => {
+    setMe(getUser());
+  }, []);
+
+  useEffect(() => {
+    loadDayReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canSeeDayReport]);
 
   return (
     <div className="units-page">
@@ -441,7 +541,7 @@ export default function UnitsPage() {
 
         .units-project-strip {
           display: grid;
-          grid-template-columns: repeat(5, minmax(0, 1fr));
+          grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 8px;
         }
 
@@ -485,6 +585,59 @@ export default function UnitsPage() {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           gap: 10px;
+        }
+
+        .units-report-panel {
+          background: var(--surface);
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          box-shadow: var(--shadow-sm);
+          padding: 14px;
+          display: grid;
+          gap: 12px;
+        }
+
+        .units-report-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .units-report-head h2 {
+          font-size: 16px;
+        }
+
+        .units-report-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .units-report-actions button {
+          min-height: 34px;
+        }
+
+        .units-report-list {
+          display: grid;
+          gap: 8px;
+        }
+
+        .units-report-row {
+          display: grid;
+          grid-template-columns: minmax(120px, 0.4fr) minmax(0, 1fr) minmax(140px, 0.5fr);
+          gap: 10px;
+          padding: 10px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface-2);
+        }
+
+        .units-print-report {
+          display: none;
         }
 
         .units-stat {
@@ -622,7 +775,7 @@ export default function UnitsPage() {
         }
 
         .units-table-wrap table {
-          min-width: 1020px;
+          min-width: 1180px;
         }
 
         .units-table-wrap th {
@@ -638,6 +791,10 @@ export default function UnitsPage() {
 
         .units-row {
           cursor: pointer;
+        }
+
+        .units-row.canceled td {
+          background: color-mix(in srgb, var(--danger) 6%, var(--surface));
         }
 
         .units-row td:first-child {
@@ -902,6 +1059,98 @@ export default function UnitsPage() {
           white-space: pre-wrap;
         }
 
+        @media print {
+          @page {
+            margin: 14mm;
+          }
+
+          body * {
+            visibility: hidden !important;
+          }
+
+          .units-print-report,
+          .units-print-report * {
+            visibility: visible !important;
+          }
+
+          .units-print-report {
+            display: grid !important;
+            gap: 18px;
+            position: absolute;
+            inset: 0 auto auto 0;
+            width: 100%;
+            padding: 0;
+            background: #fff;
+            color: #111827;
+            font-family: Arial, sans-serif;
+          }
+
+          .units-print-head {
+            display: grid;
+            gap: 6px;
+            padding-bottom: 14px;
+            border-bottom: 2px solid #111827;
+          }
+
+          .units-print-head h1 {
+            margin: 0;
+            font-size: 24px;
+          }
+
+          .units-print-head p,
+          .units-print-muted {
+            margin: 0;
+            color: #4b5563;
+            font-size: 12px;
+          }
+
+          .units-print-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+          }
+
+          .units-print-box {
+            display: grid;
+            gap: 4px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 10px;
+            break-inside: avoid;
+          }
+
+          .units-print-box span {
+            color: #4b5563;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+          }
+
+          .units-print-box strong {
+            color: #111827;
+            font-size: 18px;
+          }
+
+          .units-print-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10.5px;
+          }
+
+          .units-print-table th,
+          .units-print-table td {
+            border: 1px solid #d1d5db;
+            padding: 7px;
+            text-align: left;
+            vertical-align: top;
+          }
+
+          .units-print-table th {
+            background: #f3f4f6;
+            font-weight: 800;
+          }
+        }
+
         @media (max-width: 1180px) {
           .units-workspace {
             grid-template-columns: 1fr;
@@ -921,6 +1170,7 @@ export default function UnitsPage() {
           .units-command-main,
           .units-project-strip,
           .units-kpis,
+          .units-report-row,
           .units-status-picker,
           .units-detail-grid {
             grid-template-columns: 1fr;
@@ -1000,9 +1250,8 @@ export default function UnitsPage() {
             <span className="units-select-label">{locale === "tr" ? "Proje" : "Project"}</span>
             <select
               value={projectFilter}
-              onChange={(e) => setProjectFilter(e.target.value as "" | ProjectType)}
+              onChange={(e) => setProjectFilter(e.target.value as ProjectType)}
             >
-              <option value="">{locale === "tr" ? "Tüm projeler" : "All projects"}</option>
               {PROJECTS.map((project) => (
                 <option key={project} value={project}>
                   {projectLabel(project)}
@@ -1063,14 +1312,6 @@ export default function UnitsPage() {
         </div>
 
         <div className="units-project-strip">
-          <button
-            type="button"
-            className={`units-project-chip ${projectFilter === "" ? "active" : ""}`}
-            onClick={() => setProjectFilter("")}
-          >
-            <span>{locale === "tr" ? "Tümü" : "All"}</span>
-            <strong>{stats.total}</strong>
-          </button>
           {PROJECTS.map((project) => (
             <button
               key={project}
@@ -1113,6 +1354,142 @@ export default function UnitsPage() {
         />
       </div>
 
+      {canSeeDayReport ? (
+        <div className="units-report-panel">
+          <div className="units-report-head">
+            <div>
+              <h2>{locale === "tr" ? "Gün sonu unit raporu" : "End-of-day unit report"}</h2>
+              <div className="units-secondary-text">
+                {dayReport
+                  ? `${dayReport.total} ${locale === "tr" ? "aktivite" : "activities"}`
+                  : locale === "tr" ? "Bugün kayıt yok" : "No activity today"}
+              </div>
+            </div>
+            <div className="units-report-actions">
+              <div className="units-note-badges">
+                {(dayReport?.byUser || []).slice(0, 4).map((item, index) => (
+                  <span key={`${item.user?.name || "system"}-${index}`} className="badge info">
+                    {item.user?.name || "System"}: {item.count}
+                  </span>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="primary"
+                onClick={printDayReport}
+                disabled={!dayReport}
+              >
+                {locale === "tr" ? "PDF / Yazdır" : "PDF / Print"}
+              </button>
+            </div>
+          </div>
+
+          {dayReport?.items?.length ? (
+            <div className="units-report-list">
+              {dayReport.items.slice(0, 6).map((item) => (
+                <div key={item.id} className="units-report-row">
+                  <div className="units-primary-text">{item.unit.unitNumber}</div>
+                  <div className="units-secondary-text">
+                    {fieldLabelForReport(item.field, locale)} · {item.unit.customer?.fullName || "-"}
+                  </div>
+                  <div className="units-secondary-text">
+                    {item.createdBy?.name || "System"} · {formatShortDate(item.createdAt, locale)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {canSeeDayReport && dayReport ? (
+        <section className="units-print-report" aria-hidden="true">
+          <div className="units-print-head">
+            <h1>{locale === "tr" ? "Gün Sonu Unit Raporu" : "End-of-Day Unit Report"}</h1>
+            <p>
+              {locale === "tr" ? "Rapor tarihi" : "Report date"}:{" "}
+              {formatLongDate(dayReport.date, locale)}
+            </p>
+            <p>
+              {locale === "tr" ? "Proje" : "Project"}:{" "}
+              {projectFilter ? projectLabel(projectFilter) : locale === "tr" ? "Tüm projeler" : "All projects"}
+            </p>
+          </div>
+
+          <div className="units-print-grid">
+            <div className="units-print-box">
+              <span>{locale === "tr" ? "Toplam aktivite" : "Total activities"}</span>
+              <strong>{dayReport.total}</strong>
+            </div>
+            <div className="units-print-box">
+              <span>{locale === "tr" ? "Aktif kullanıcı" : "Active users"}</span>
+              <strong>{dayReport.byUser.length}</strong>
+            </div>
+            <div className="units-print-box">
+              <span>{locale === "tr" ? "Oluşturma zamanı" : "Generated at"}</span>
+              <strong>
+                {new Date().toLocaleTimeString(locale === "tr" ? "tr-TR" : "en-US", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </strong>
+            </div>
+          </div>
+
+          {dayReport.byUser.length ? (
+            <table className="units-print-table">
+              <thead>
+                <tr>
+                  <th>{locale === "tr" ? "Kullanıcı" : "User"}</th>
+                  <th>{locale === "tr" ? "Rol" : "Role"}</th>
+                  <th>{locale === "tr" ? "Aktivite" : "Activities"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dayReport.byUser.map((item, index) => (
+                  <tr key={`${item.user?.name || "system"}-${index}`}>
+                    <td>{item.user?.name || "System"}</td>
+                    <td>{item.user?.role || "-"}</td>
+                    <td>{item.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+
+          <table className="units-print-table">
+            <thead>
+              <tr>
+                <th>{locale === "tr" ? "Saat" : "Time"}</th>
+                <th>{locale === "tr" ? "Unit" : "Unit"}</th>
+                <th>{locale === "tr" ? "Müşteri" : "Customer"}</th>
+                <th>{locale === "tr" ? "Alan" : "Field"}</th>
+                <th>{locale === "tr" ? "Kullanıcı" : "User"}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dayReport.items.length ? (
+                dayReport.items.map((item) => (
+                  <tr key={item.id}>
+                    <td>{formatDate(item.createdAt, locale)}</td>
+                    <td>{item.unit.unitNumber}</td>
+                    <td>{item.unit.customer?.fullName || "-"}</td>
+                    <td>{fieldLabelForReport(item.field, locale)}</td>
+                    <td>{item.createdBy?.name || "System"}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="units-print-muted">
+                    {locale === "tr" ? "Bugün aktivite yok." : "No activity today."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
+
       <div className="units-workspace">
         <div className="units-table-panel">
           <div className="units-panel-head">
@@ -1146,6 +1523,8 @@ export default function UnitsPage() {
                   <th>{locale === "tr" ? "Sorumlu" : "Owner"}</th>
                   <th>{locale === "tr" ? "Teslim" : "Delivery"}</th>
                   <th>{locale === "tr" ? "Firma" : "Company"}</th>
+                  <th>{locale === "tr" ? "Kiralama" : "Rental"}</th>
+                  <th>{locale === "tr" ? "Muhasebe" : "Accounting"}</th>
                   <th>{locale === "tr" ? "Kayıtlar" : "Records"}</th>
                   <th>{locale === "tr" ? "Güncelleme" : "Updated"}</th>
                 </tr>
@@ -1155,7 +1534,7 @@ export default function UnitsPage() {
                 {items.map((item) => (
                   <tr
                     key={item.id}
-                    className="units-row"
+                    className={`units-row ${item.isCanceled ? "canceled" : ""}`}
                     onClick={() => router.push(`/units/${item.id}`)}
                   >
                     <td>
@@ -1170,6 +1549,11 @@ export default function UnitsPage() {
                         >
                           {item.unitNumber}
                         </Link>
+                        {item.isCanceled ? (
+                          <span className="badge danger">
+                            {locale === "tr" ? "İptal" : "Canceled"}
+                          </span>
+                        ) : null}
                         <div className="units-secondary-text">#{item.id.slice(-6)}</div>
                       </div>
                     </td>
@@ -1207,6 +1591,22 @@ export default function UnitsPage() {
                         <span className="units-status-dot" />
                         {companyLabel(item.companyStatus, locale)}
                       </span>
+                    </td>
+                    <td>
+                      <span className="units-status-pill info">
+                        <span className="units-status-dot" />
+                        {rentalStatusLabel(item.rentalStatus, locale)}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="units-note-badges">
+                        <span className={`badge ${item.kdvStatus === "PAID" ? "success" : "warning"}`}>
+                          KDV: {paymentLabel(item.kdvStatus, locale)}
+                        </span>
+                        <span className={`badge ${item.trafoStatus === "PAID" ? "success" : "warning"}`}>
+                          Trafo: {paymentLabel(item.trafoStatus, locale)}
+                        </span>
+                      </div>
                     </td>
                     <td>
                       <div className="units-note-badges">

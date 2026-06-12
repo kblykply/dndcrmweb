@@ -7,6 +7,7 @@ import { useLanguage } from "@/app/_ui/LanguageProvider";
 type CurrencyCode = "USD" | "EUR" | "GBP" | "TRY";
 
 const CUSTOMER_SHARE = 0.65;
+const COMPANY_SHARE = 0.35;
 const CURRENCIES: CurrencyCode[] = ["USD", "EUR", "GBP", "TRY"];
 
 function clampNumber(value: number, min: number, max: number) {
@@ -87,9 +88,13 @@ export default function RentProjectionPage() {
   const dailyPriceValue = clampNumber(parseNumericInput(dailyPrice), 0, 1000000);
   const daysValue = Math.round(clampNumber(parseNumericInput(rentedDaysPerYear), 0, 365));
   const yearsValue = Math.round(clampNumber(parseNumericInput(years), 1, 30));
-  const customerYearlyIncome = dailyPriceValue * daysValue * CUSTOMER_SHARE;
+  const grossYearlyIncome = dailyPriceValue * daysValue;
+  const customerYearlyIncome = grossYearlyIncome * CUSTOMER_SHARE;
+  const companyYearlyIncome = grossYearlyIncome * COMPANY_SHARE;
+  const grossTotalIncome = grossYearlyIncome * yearsValue;
   const customerTotalIncome = customerYearlyIncome * yearsValue;
-  const averageMonthlyIncome = customerYearlyIncome / 12;
+  const companyTotalIncome = companyYearlyIncome * yearsValue;
+  const averageMonthlyIncome = grossYearlyIncome / 12;
   const occupancyRate = (daysValue / 365) * 100;
 
   const rows = useMemo(
@@ -97,10 +102,12 @@ export default function RentProjectionPage() {
       Array.from({ length: yearsValue }, (_, index) => ({
         year: index + 1,
         days: daysValue,
-        yearlyIncome: customerYearlyIncome,
-        cumulativeIncome: customerYearlyIncome * (index + 1),
+        grossIncome: grossYearlyIncome,
+        customerIncome: customerYearlyIncome,
+        companyIncome: companyYearlyIncome,
+        cumulativeGrossIncome: grossYearlyIncome * (index + 1),
       })),
-    [customerYearlyIncome, daysValue, yearsValue],
+    [companyYearlyIncome, customerYearlyIncome, daysValue, grossYearlyIncome, yearsValue],
   );
 
   function reset() {
@@ -109,6 +116,10 @@ export default function RentProjectionPage() {
     setRentedDaysPerYear("180");
     setYears("3");
     setProjectionName("");
+  }
+
+  function printReport() {
+    window.print();
   }
 
   return (
@@ -164,6 +175,12 @@ export default function RentProjectionPage() {
           padding: 0 14px;
           border-radius: 8px;
           font-weight: 900;
+        }
+
+        .rent-actions button.primary {
+          background: var(--primary);
+          color: var(--primary-foreground);
+          border-color: transparent;
         }
 
         .rent-layout {
@@ -321,8 +338,8 @@ export default function RentProjectionPage() {
           gap: 10px;
           padding: 14px;
           border-radius: 8px;
-          border: 1px solid color-mix(in srgb, var(--success) 24%, var(--stroke));
-          background: color-mix(in srgb, var(--success) 8%, var(--surface));
+          border: 1px solid color-mix(in srgb, var(--info) 24%, var(--stroke));
+          background: color-mix(in srgb, var(--info) 8%, var(--surface));
         }
 
         .rent-summary-label {
@@ -333,7 +350,7 @@ export default function RentProjectionPage() {
         }
 
         .rent-summary-value {
-          color: var(--success);
+          color: var(--text-primary);
           font-size: 38px;
           line-height: 1;
           font-weight: 950;
@@ -347,7 +364,7 @@ export default function RentProjectionPage() {
         }
 
         .rent-breakdown table {
-          min-width: 620px;
+          min-width: 860px;
         }
 
         .rent-breakdown th {
@@ -368,8 +385,111 @@ export default function RentProjectionPage() {
         }
 
         .rent-breakdown td:nth-child(3),
-        .rent-breakdown th:nth-child(3) {
+        .rent-breakdown th:nth-child(3),
+        .rent-breakdown td:nth-child(4),
+        .rent-breakdown th:nth-child(4),
+        .rent-breakdown td:nth-child(5),
+        .rent-breakdown th:nth-child(5) {
           text-align: right;
+        }
+
+        .rent-print-report {
+          display: none;
+        }
+
+        @media print {
+          @page {
+            margin: 14mm;
+          }
+
+          body * {
+            visibility: hidden !important;
+          }
+
+          .rent-print-report,
+          .rent-print-report * {
+            visibility: visible !important;
+          }
+
+          .rent-print-report {
+            display: grid !important;
+            gap: 18px;
+            position: absolute;
+            inset: 0 auto auto 0;
+            width: 100%;
+            padding: 0;
+            background: #fff;
+            color: #111827;
+            font-family: Arial, sans-serif;
+          }
+
+          .rent-print-head {
+            display: grid;
+            gap: 6px;
+            padding-bottom: 14px;
+            border-bottom: 2px solid #111827;
+          }
+
+          .rent-print-head h1 {
+            font-size: 24px;
+            margin: 0;
+          }
+
+          .rent-print-head p,
+          .rent-print-muted {
+            margin: 0;
+            color: #4b5563;
+            font-size: 12px;
+          }
+
+          .rent-print-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+          }
+
+          .rent-print-box {
+            display: grid;
+            gap: 4px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 10px;
+          }
+
+          .rent-print-box span {
+            color: #4b5563;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+          }
+
+          .rent-print-box strong {
+            color: #111827;
+            font-size: 18px;
+          }
+
+          .rent-print-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+          }
+
+          .rent-print-table th,
+          .rent-print-table td {
+            border: 1px solid #d1d5db;
+            padding: 7px;
+            text-align: left;
+          }
+
+          .rent-print-table th {
+            background: #f3f4f6;
+            font-weight: 800;
+          }
+
+          .rent-print-table td:nth-child(n + 3),
+          .rent-print-table th:nth-child(n + 3) {
+            text-align: right;
+          }
         }
 
         @media (max-width: 1060px) {
@@ -405,12 +525,15 @@ export default function RentProjectionPage() {
           <h1>{locale === "tr" ? "Kira Projeksiyonu" : "Rent Projection"}</h1>
           <p>
             {locale === "tr"
-              ? "Günlük fiyat, yıllık kiralanacak gün ve süreyi girerek müşteriye gösterilecek net gelir projeksiyonunu hesaplayın."
-              : "Enter a daily price, rented days per year and duration to calculate the customer-facing income projection."}
+              ? "Günlük fiyat, yıllık kiralanacak gün ve süreyi girerek toplam gelir, şirket geliri ve müşteriye ödenecek tutarı hesaplayın."
+              : "Enter a daily price, rented days per year and duration to calculate total income, company income and customer payout."}
           </p>
         </div>
 
         <div className="rent-actions">
+          <button type="button" className="primary" onClick={printReport}>
+            {locale === "tr" ? "PDF / Yazdır" : "PDF / Print"}
+          </button>
           <button type="button" onClick={reset}>
             {locale === "tr" ? "Sıfırla" : "Reset"}
           </button>
@@ -511,29 +634,41 @@ export default function RentProjectionPage() {
 
           <div className="rent-summary">
             <div className="rent-summary-label">
-              {locale === "tr" ? "Müşteriye gösterilecek toplam gelir" : "Total projected customer income"}
+              {locale === "tr" ? "Toplam kira geliri" : "Total rental income"}
             </div>
             <div className="rent-summary-value">
-              {formatMoney(customerTotalIncome, currency, locale)}
+              {formatMoney(grossTotalIncome, currency, locale)}
             </div>
             <div className="rent-muted">
               {locale === "tr"
-                ? `${yearsValue} yıl için hesaplandı.`
-                : `Calculated for ${yearsValue} ${yearsValue === 1 ? "year" : "years"}.`}
+                ? `${yearsValue} yıl için toplam brüt kira geliri.`
+                : `Gross rental income calculated for ${yearsValue} ${yearsValue === 1 ? "year" : "years"}.`}
             </div>
           </div>
 
           <div className="rent-stat-grid">
             <Stat
-              label={locale === "tr" ? "Yıllık müşteri geliri" : "Yearly customer income"}
-              value={formatMoney(customerYearlyIncome, currency, locale)}
-              detail={locale === "tr" ? "Her yıl için tahmini" : "Estimated per year"}
+              label={locale === "tr" ? "Müşteriye ödenecek" : "Customer payout"}
+              value={formatMoney(customerTotalIncome, currency, locale)}
+              detail={locale === "tr" ? "Toplam gelirin %65'i" : "65% of total income"}
               tone="success"
             />
             <Stat
-              label={locale === "tr" ? "Aylık ortalama" : "Average monthly"}
+              label={locale === "tr" ? "Şirket geliri" : "Company income"}
+              value={formatMoney(companyTotalIncome, currency, locale)}
+              detail={locale === "tr" ? "Toplam gelirin %35'i" : "35% of total income"}
+              tone="warning"
+            />
+            <Stat
+              label={locale === "tr" ? "Yıllık toplam gelir" : "Yearly total income"}
+              value={formatMoney(grossYearlyIncome, currency, locale)}
+              detail={locale === "tr" ? "Brüt yıllık kira" : "Gross yearly rental income"}
+              tone="info"
+            />
+            <Stat
+              label={locale === "tr" ? "Aylık ortalama toplam" : "Average monthly total"}
               value={formatMoney(averageMonthlyIncome, currency, locale)}
-              detail={locale === "tr" ? "12 aya bölünmüş görünüm" : "Spread across 12 months"}
+              detail={locale === "tr" ? "Toplam yıllık gelirin aylık görünümü" : "Monthly view of yearly total"}
               tone="info"
             />
             <Stat
@@ -555,8 +690,10 @@ export default function RentProjectionPage() {
                 <tr>
                   <th>{locale === "tr" ? "Yıl" : "Year"}</th>
                   <th>{locale === "tr" ? "Gün" : "Days"}</th>
-                  <th>{locale === "tr" ? "Yıllık gelir" : "Yearly income"}</th>
-                  <th>{locale === "tr" ? "Toplam" : "Cumulative"}</th>
+                  <th>{locale === "tr" ? "Toplam gelir" : "Total income"}</th>
+                  <th>{locale === "tr" ? "Müşteri" : "Customer"}</th>
+                  <th>{locale === "tr" ? "Şirket" : "Company"}</th>
+                  <th>{locale === "tr" ? "Kümülatif toplam" : "Cumulative total"}</th>
                 </tr>
               </thead>
               <tbody>
@@ -566,8 +703,10 @@ export default function RentProjectionPage() {
                       {locale === "tr" ? `${row.year}. yıl` : `Year ${row.year}`}
                     </td>
                     <td>{row.days}</td>
-                    <td>{formatMoney(row.yearlyIncome, currency, locale)}</td>
-                    <td>{formatMoney(row.cumulativeIncome, currency, locale)}</td>
+                    <td>{formatMoney(row.grossIncome, currency, locale)}</td>
+                    <td>{formatMoney(row.customerIncome, currency, locale)}</td>
+                    <td>{formatMoney(row.companyIncome, currency, locale)}</td>
+                    <td>{formatMoney(row.cumulativeGrossIncome, currency, locale)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -575,6 +714,86 @@ export default function RentProjectionPage() {
           </div>
         </section>
       </div>
+
+      <section className="rent-print-report" aria-hidden="true">
+        <div className="rent-print-head">
+          <h1>{projectionName.trim() || (locale === "tr" ? "Kira Projeksiyonu" : "Rent Projection")}</h1>
+          <p>
+            {locale === "tr"
+              ? `${daysValue} gün/yıl · ${yearsValue} yıl · Günlük fiyat ${formatMoney(dailyPriceValue, currency, locale)}`
+              : `${daysValue} days/year · ${yearsValue} ${yearsValue === 1 ? "year" : "years"} · Daily price ${formatMoney(dailyPriceValue, currency, locale)}`}
+          </p>
+          <p>
+            {locale === "tr" ? "Rapor tarihi" : "Report date"}:{" "}
+            {new Date().toLocaleDateString(locale === "tr" ? "tr-TR" : "en-US", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </p>
+        </div>
+
+        <div className="rent-print-grid">
+          <div className="rent-print-box">
+            <span>{locale === "tr" ? "Toplam kira geliri" : "Total rental income"}</span>
+            <strong>{formatMoney(grossTotalIncome, currency, locale)}</strong>
+          </div>
+          <div className="rent-print-box">
+            <span>{locale === "tr" ? "Müşteriye ödenecek" : "Customer payout"}</span>
+            <strong>{formatMoney(customerTotalIncome, currency, locale)}</strong>
+            <p className="rent-print-muted">
+              {locale === "tr" ? "Toplam gelirin %65'i" : "65% of total income"}
+            </p>
+          </div>
+          <div className="rent-print-box">
+            <span>{locale === "tr" ? "Şirket geliri" : "Company income"}</span>
+            <strong>{formatMoney(companyTotalIncome, currency, locale)}</strong>
+            <p className="rent-print-muted">
+              {locale === "tr" ? "Toplam gelirin %35'i" : "35% of total income"}
+            </p>
+          </div>
+          <div className="rent-print-box">
+            <span>{locale === "tr" ? "Yıllık toplam" : "Yearly total"}</span>
+            <strong>{formatMoney(grossYearlyIncome, currency, locale)}</strong>
+          </div>
+          <div className="rent-print-box">
+            <span>{locale === "tr" ? "Kiralanacak gün" : "Rented days"}</span>
+            <strong>{daysValue}</strong>
+            <p className="rent-print-muted">
+              {formatNumber(occupancyRate, locale)}% {locale === "tr" ? "yıllık kullanım" : "yearly usage"}
+            </p>
+          </div>
+          <div className="rent-print-box">
+            <span>{locale === "tr" ? "Aylık ortalama toplam" : "Average monthly total"}</span>
+            <strong>{formatMoney(averageMonthlyIncome, currency, locale)}</strong>
+          </div>
+        </div>
+
+        <table className="rent-print-table">
+          <thead>
+            <tr>
+              <th>{locale === "tr" ? "Yıl" : "Year"}</th>
+              <th>{locale === "tr" ? "Gün" : "Days"}</th>
+              <th>{locale === "tr" ? "Toplam gelir" : "Total income"}</th>
+              <th>{locale === "tr" ? "Müşteri" : "Customer"}</th>
+              <th>{locale === "tr" ? "Şirket" : "Company"}</th>
+              <th>{locale === "tr" ? "Kümülatif toplam" : "Cumulative total"}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.year}>
+                <td>{locale === "tr" ? `${row.year}. yıl` : `Year ${row.year}`}</td>
+                <td>{row.days}</td>
+                <td>{formatMoney(row.grossIncome, currency, locale)}</td>
+                <td>{formatMoney(row.customerIncome, currency, locale)}</td>
+                <td>{formatMoney(row.companyIncome, currency, locale)}</td>
+                <td>{formatMoney(row.cumulativeGrossIncome, currency, locale)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
     </div>
   );
 }
