@@ -150,7 +150,7 @@ export default function Notifications() {
       apiBase || (typeof window !== "undefined" ? window.location.origin : "");
 
     const socket = io(socketUrl, {
-      transports: ["websocket"],
+      transports: ["websocket", "polling"],
       auth: { token },
     });
 
@@ -214,15 +214,31 @@ export default function Notifications() {
     socket.on("notification:unread-count", handleUnreadCount);
     socket.on("notification:read", handleRead);
     socket.on("notification:deleted", handleDeleted);
+    socket.on("connect", () => {
+      setError(null);
+      socket.emit("notifications:join", {});
+      loadNotifications();
+    });
 
     return () => {
       socket.off("notification:new", handleNew);
       socket.off("notification:unread-count", handleUnreadCount);
       socket.off("notification:read", handleRead);
       socket.off("notification:deleted", handleDeleted);
+      socket.off("connect");
       socket.disconnect();
       socketRef.current = null;
     };
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    const timer = window.setInterval(() => {
+      loadNotifications();
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
   }, [mounted]);
 
   function computePos() {

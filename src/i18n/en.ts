@@ -40,6 +40,7 @@ meetings: "Meetings",
     nationalityReport: "Nationality Map",
     demographicsReport: "Demographics",
     units: "All Units",
+    unitsDashboard: "Units Dashboard",
     rentProjection: "Rent Projection"
 
       

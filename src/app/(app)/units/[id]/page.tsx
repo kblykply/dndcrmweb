@@ -16,21 +16,36 @@ type ProjectType =
 type UnitDeliveryStatus = "NOT_READY" | "READY_TO_DELIVER" | "DELIVERED";
 type UnitCompanyStatus = "UNKNOWN" | "DND" | "OTHER";
 type PaymentStatus = "UNPAID" | "PAID";
+type CustomerComplaintStatus = "UNDONE" | "DONE";
 type ElectricityProvider = "UNKNOWN" | "TIPTEK" | "DND";
 type WaterAccessStatus = "UNKNOWN" | "ON" | "OFF";
 type RentalPackage = "FULL_FURNISHED" | "NOT_INTERESTED" | "CUSTOM";
 type RentalStatus = "SHORT_TERM" | "LONG_TERM" | "DND_UNITS" | "NOT_INTERESTED";
-type LogSection = "UNIT_INFORMATION" | "CUSTOMER_RECORDS";
+type LogSection =
+  | "UNIT_INFORMATION"
+  | "CUSTOMER_RECORDS"
+  | "ACCOUNTING"
+  | "UTILITY"
+  | "RENTAL"
+  | "ADMIN"
+  | "COMMUNICATION";
 
 type UnitInstallment = {
   id: string;
-  type: "INSTALLMENT" | "DEPOSIT" | "AIDAT";
+  type: "AIDAT";
   title: string;
   amount?: number | null;
   dueDate?: string | null;
   status: PaymentStatus;
   paidAt?: string | null;
   note?: string | null;
+};
+
+type CustomerComplaintRow = {
+  id: string;
+  complaint: string;
+  solution: string;
+  status: CustomerComplaintStatus;
 };
 
 type UnitCustomer = {
@@ -95,6 +110,7 @@ const DELIVERY_STATUSES: UnitDeliveryStatus[] = [
 
 const COMPANY_STATUSES: UnitCompanyStatus[] = ["UNKNOWN", "DND", "OTHER"];
 const PAYMENT_STATUSES: PaymentStatus[] = ["UNPAID", "PAID"];
+const COMPLAINT_STATUSES: CustomerComplaintStatus[] = ["UNDONE", "DONE"];
 const ELECTRICITY_PROVIDERS: ElectricityProvider[] = ["UNKNOWN", "TIPTEK", "DND"];
 const WATER_ACCESS_STATUSES: WaterAccessStatus[] = ["UNKNOWN", "ON", "OFF"];
 const RENTAL_PACKAGES: RentalPackage[] = [
@@ -153,7 +169,7 @@ function paymentLabel(status: string | undefined, locale: string) {
 }
 
 function electricityLabel(status: string | undefined, locale: string) {
-  if (status === "TIPTEK") return "Tiptek";
+  if (status === "TIPTEK") return "Kiptek";
   if (status === "DND") return "DND";
   return locale === "tr" ? "Seçilmedi" : "Not selected";
 }
@@ -177,10 +193,10 @@ function rentalStatusLabel(status: string | undefined, locale: string) {
   return locale === "tr" ? "İlgilenmiyor" : "Not interested";
 }
 
-function installmentTypeLabel(type: string | undefined, locale: string) {
-  if (type === "DEPOSIT") return locale === "tr" ? "Depozito" : "Deposit";
-  if (type === "AIDAT") return "Aidat";
-  return locale === "tr" ? "Taksit" : "Installment";
+function complaintStatusLabel(status: string | undefined, locale: string) {
+  return status === "DONE"
+    ? locale === "tr" ? "Tamamlandı" : "Done"
+    : locale === "tr" ? "Tamamlanmadı" : "Undone";
 }
 
 function paymentTone(status: string | undefined) {
@@ -232,6 +248,19 @@ function displayValue(field: string, value: string | null | undefined, locale: s
   if (field === "waterAccessStatus") return waterLabel(value, locale);
   if (field === "rentalPackage") return rentalPackageLabel(value, locale);
   if (field === "rentalStatus") return rentalStatusLabel(value, locale);
+  if (field === "customerComplaint") {
+    const rows = normalizeCustomerComplaints(value);
+    if (rows.length === 0) return locale === "tr" ? "Boş" : "Empty";
+
+    return rows
+      .map(
+        (row, index) =>
+          `${index + 1}. ${row.complaint || "-"} / ${locale === "tr" ? "Çözüm" : "Solution"}: ${
+            row.solution || "-"
+          } / ${complaintStatusLabel(row.status, locale)}`,
+      )
+      .join("\n");
+  }
   if (field === "installments") {
     try {
       const parsed = JSON.parse(value);
@@ -256,6 +285,58 @@ function formatDate(value: string | undefined, locale: string) {
 
 function cleanText(value?: string | null) {
   return (value || "").trim();
+}
+
+function newCustomerComplaint(index: number): CustomerComplaintRow {
+  return {
+    id: `complaint-${Date.now()}-${index}`,
+    complaint: "",
+    solution: "",
+    status: "UNDONE",
+  };
+}
+
+function normalizeCustomerComplaints(value?: string | null): CustomerComplaintRow[] {
+  const raw = cleanText(value);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((row, index) => ({
+        id: cleanText(String(row?.id || "")) || `complaint-${index}`,
+        complaint: cleanText(String(row?.complaint || "")),
+        solution: cleanText(String(row?.solution || "")),
+        status: row?.status === "DONE" ? ("DONE" as const) : ("UNDONE" as const),
+      }))
+      .filter((row) => row.complaint || row.solution);
+  } catch {
+    return [
+      {
+        id: "complaint-legacy-0",
+        complaint: raw,
+        solution: "",
+        status: "UNDONE",
+      },
+    ];
+  }
+}
+
+function serializeCustomerComplaints(rows: CustomerComplaintRow[]) {
+  const cleaned = rows
+    .map((row, index) => ({
+      id: cleanText(row.id) || `complaint-${index}`,
+      complaint: cleanText(row.complaint),
+      solution: cleanText(row.solution),
+      status: row.status === "DONE" ? "DONE" : "UNDONE",
+    }))
+    .filter((row) => row.complaint || row.solution);
+
+  return cleaned.length ? JSON.stringify(cleaned) : "";
 }
 
 function FieldArea({
@@ -287,17 +368,23 @@ function FieldSelect({
   onChange,
   options,
   labelFor,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: string[];
   labelFor: (value: string) => string;
+  disabled?: boolean;
 }) {
   return (
     <label className="unit-detail-field">
       <span>{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      >
         {options.map((option) => (
           <option key={option} value={option}>
             {labelFor(option)}
@@ -308,11 +395,11 @@ function FieldSelect({
   );
 }
 
-function newInstallment(index: number): UnitInstallment {
+function newAidatRow(index: number): UnitInstallment {
   return {
-    id: `installment-${Date.now()}-${index}`,
-    type: "INSTALLMENT",
-    title: `Installment ${index + 1}`,
+    id: `aidat-${Date.now()}-${index}`,
+    type: "AIDAT",
+    title: `Aidat ${index + 1}`,
     amount: null,
     dueDate: "",
     status: "UNPAID",
@@ -323,6 +410,16 @@ function newInstallment(index: number): UnitInstallment {
 
 function serializeInstallments(rows?: UnitInstallment[] | null) {
   return JSON.stringify(rows || []);
+}
+
+function normalizeAidatRows(rows?: UnitInstallment[] | null) {
+  return (Array.isArray(rows) ? rows : []).map((row, index) => ({
+    ...row,
+    id: row.id || `aidat-${Date.now()}-${index}`,
+    type: "AIDAT" as const,
+    title: row.title || `Aidat ${index + 1}`,
+    status: row.status === "PAID" ? ("PAID" as const) : ("UNPAID" as const),
+  }));
 }
 
 function normalizeWhatsAppPhone(value?: string | null) {
@@ -369,6 +466,7 @@ function LogList({
                 <span>{formatDate(log.createdAt, locale)}</span>
               </div>
               <div className="unit-detail-log-actor">
+                {locale === "tr" ? "Değiştiren" : "Changed by"}:{" "}
                 {log.createdBy?.name || (locale === "tr" ? "Sistem" : "System")}
               </div>
               <div className="unit-detail-diff">
@@ -387,6 +485,67 @@ function LogList({
       ) : (
         <div className="unit-detail-empty">
           {locale === "tr" ? "Henüz değişiklik kaydı yok." : "No change history yet."}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function communicationTypeLabel(field: string, locale: string) {
+  if (field === "EMAIL") return locale === "tr" ? "E-posta" : "Email";
+  if (field === "WHATSAPP") return "WhatsApp";
+  return fieldLabel(field, locale);
+}
+
+function CommunicationLogList({
+  logs,
+  locale,
+}: {
+  logs: UnitLog[];
+  locale: string;
+}) {
+  return (
+    <div className="unit-detail-communication-history">
+      <div className="unit-detail-subhead">
+        <span>{locale === "tr" ? "İletişim geçmişi" : "Communication history"}</span>
+        <span className="unit-detail-muted">
+          {logs.length} {locale === "tr" ? "mesaj" : "messages"}
+        </span>
+      </div>
+
+      {logs.length > 0 ? (
+        <div className="unit-detail-communication-list">
+          {logs.map((log) => (
+            <div key={log.id} className="unit-detail-communication-row">
+              <div className="unit-detail-communication-top">
+                <span
+                  className={`unit-detail-message-type ${
+                    log.field === "EMAIL" ? "email" : "whatsapp"
+                  }`}
+                >
+                  {communicationTypeLabel(log.field, locale)}
+                </span>
+                <span className="unit-detail-muted">
+                  {formatDate(log.createdAt, locale)}
+                </span>
+              </div>
+
+              <div className="unit-detail-communication-meta">
+                {locale === "tr" ? "Gönderen" : "Sent by"}:{" "}
+                <strong>{log.createdBy?.name || (locale === "tr" ? "Sistem" : "System")}</strong>
+              </div>
+
+              <p className="unit-detail-communication-message">
+                {displayValue(log.field, log.newValue, locale)}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="unit-detail-empty">
+          {locale === "tr"
+            ? "Henüz e-posta veya WhatsApp mesaj kaydı yok."
+            : "No email or WhatsApp message history yet."}
         </div>
       )}
     </div>
@@ -412,7 +571,7 @@ export default function UnitDetailPage() {
   const [generalInfo, setGeneralInfo] = useState("");
   const [unitInfo, setUnitInfo] = useState("");
   const [customerRequest, setCustomerRequest] = useState("");
-  const [customerComplaint, setCustomerComplaint] = useState("");
+  const [customerComplaints, setCustomerComplaints] = useState<CustomerComplaintRow[]>([]);
   const [unitComplaint, setUnitComplaint] = useState("");
   const [isCanceled, setIsCanceled] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -429,6 +588,8 @@ export default function UnitDetailPage() {
   const [rentalStatus, setRentalStatus] =
     useState<RentalStatus>("NOT_INTERESTED");
   const [communicationMessage, setCommunicationMessage] = useState("");
+  const [communicationAttachment, setCommunicationAttachment] = useState<File | null>(null);
+  const [communicationAttachmentKey, setCommunicationAttachmentKey] = useState(0);
   const [communicationSending, setCommunicationSending] = useState<"" | "EMAIL" | "WHATSAPP">("");
   const [communicationNotice, setCommunicationNotice] = useState("");
 
@@ -441,6 +602,20 @@ export default function UnitDetailPage() {
   );
   const customerRecordLogs = useMemo(
     () => logs.filter((log) => log.section === "CUSTOMER_RECORDS"),
+    [logs],
+  );
+  const customFurnitureLogs = useMemo(
+    () => logs.filter((log) => log.field === "customFurniture"),
+    [logs],
+  );
+  const communicationLogs = useMemo(
+    () =>
+      logs.filter(
+        (log) =>
+          log.section === "COMMUNICATION" ||
+          log.field === "EMAIL" ||
+          log.field === "WHATSAPP",
+      ),
     [logs],
   );
   const installmentSummary = useMemo(() => {
@@ -460,6 +635,15 @@ export default function UnitDetailPage() {
       { total: 0, paid: 0, unpaid: 0, paidCount: 0, unpaidCount: 0 },
     );
   }, [installments]);
+  const persistedPaidAidatIds = useMemo(
+    () =>
+      new Set(
+        normalizeAidatRows(unit?.installments)
+          .filter((row) => row.status === "PAID")
+          .map((row) => row.id),
+      ),
+    [unit?.installments],
+  );
 
   const isDirty = useMemo(() => {
     if (!unit) return false;
@@ -470,13 +654,15 @@ export default function UnitDetailPage() {
       cleanText(generalInfo) !== cleanText(unit.generalInfo) ||
       cleanText(unitInfo) !== cleanText(unit.unitInfo) ||
       cleanText(customerRequest) !== cleanText(unit.customerRequest) ||
-      cleanText(customerComplaint) !== cleanText(unit.customerComplaint) ||
+      serializeCustomerComplaints(customerComplaints) !==
+        serializeCustomerComplaints(normalizeCustomerComplaints(unit.customerComplaint)) ||
       cleanText(unitComplaint) !== cleanText(unit.unitComplaint) ||
       (isAdmin && isCanceled !== Boolean(unit.isCanceled)) ||
       (isAdmin && cleanText(cancelReason) !== cleanText(unit.cancelReason)) ||
       kdvStatus !== (unit.kdvStatus || "UNPAID") ||
       trafoStatus !== (unit.trafoStatus || "UNPAID") ||
-      serializeInstallments(installments) !== serializeInstallments(unit.installments) ||
+      serializeInstallments(installments) !==
+        serializeInstallments(normalizeAidatRows(unit.installments)) ||
       electricityProvider !== (unit.electricityProvider || "UNKNOWN") ||
       waterAccessStatus !== (unit.waterAccessStatus || "UNKNOWN") ||
       rentalPackage !== (unit.rentalPackage || "NOT_INTERESTED") ||
@@ -487,7 +673,7 @@ export default function UnitDetailPage() {
     cancelReason,
     companyStatus,
     customFurniture,
-    customerComplaint,
+    customerComplaints,
     customerRequest,
     deliveryStatus,
     electricityProvider,
@@ -511,13 +697,13 @@ export default function UnitDetailPage() {
     setGeneralInfo(next.generalInfo || "");
     setUnitInfo(next.unitInfo || "");
     setCustomerRequest(next.customerRequest || "");
-    setCustomerComplaint(next.customerComplaint || "");
+    setCustomerComplaints(normalizeCustomerComplaints(next.customerComplaint));
     setUnitComplaint(next.unitComplaint || "");
     setIsCanceled(Boolean(next.isCanceled));
     setCancelReason(next.cancelReason || "");
     setKdvStatus((next.kdvStatus as PaymentStatus) || "UNPAID");
     setTrafoStatus((next.trafoStatus as PaymentStatus) || "UNPAID");
-    setInstallments(Array.isArray(next.installments) ? next.installments : []);
+    setInstallments(normalizeAidatRows(next.installments));
     setElectricityProvider((next.electricityProvider as ElectricityProvider) || "UNKNOWN");
     setWaterAccessStatus((next.waterAccessStatus as WaterAccessStatus) || "UNKNOWN");
     setRentalPackage((next.rentalPackage as RentalPackage) || "NOT_INTERESTED");
@@ -556,11 +742,11 @@ export default function UnitDetailPage() {
         generalInfo,
         unitInfo,
         customerRequest,
-        customerComplaint,
+        customerComplaint: serializeCustomerComplaints(customerComplaints),
         unitComplaint,
         kdvStatus,
         trafoStatus,
-        installments,
+        installments: normalizeAidatRows(installments),
         electricityProvider,
         waterAccessStatus,
         rentalPackage,
@@ -589,12 +775,44 @@ export default function UnitDetailPage() {
 
   function updateInstallment(id: string, patch: Partial<UnitInstallment>) {
     setInstallments((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        if (item.status === "PAID" && patch.status === undefined) return item;
+
+        const nextStatus = patch.status || item.status;
+
+        return {
+          ...item,
+          ...patch,
+          type: "AIDAT",
+          paidAt:
+            nextStatus === "PAID"
+              ? item.paidAt || new Date().toISOString()
+              : null,
+        };
+      }),
     );
   }
 
   function removeInstallment(id: string) {
-    setInstallments((prev) => prev.filter((item) => item.id !== id));
+    setInstallments((prev) =>
+      prev.filter((item) => item.id !== id || item.status === "PAID"),
+    );
+  }
+
+  function updateCustomerComplaint(id: string, patch: Partial<CustomerComplaintRow>) {
+    setCustomerComplaints((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    );
+  }
+
+  function removeCustomerComplaint(id: string) {
+    setCustomerComplaints((prev) => prev.filter((item) => item.id !== id));
+  }
+
+  function clearCommunicationAttachment() {
+    setCommunicationAttachment(null);
+    setCommunicationAttachmentKey((key) => key + 1);
   }
 
   async function contactCustomer(type: "EMAIL" | "WHATSAPP") {
@@ -618,17 +836,23 @@ export default function UnitDetailPage() {
       }
 
       try {
+        const body = new FormData();
+        body.set("subject", `${unit.unitNumber} - ${projectLabel(unit.project)}`);
+        body.set("message", message);
+
+        if (communicationAttachment) {
+          body.set("file", communicationAttachment);
+        }
+
         const updated = (await authedFetch(`/units/${unit.id}/send-email`, {
           method: "POST",
-          body: JSON.stringify({
-            subject: `${unit.unitNumber} - ${projectLabel(unit.project)}`,
-            message,
-          }),
+          body,
         })) as UnitDetail;
 
         setUnit(updated);
         applyForm(updated);
         setCommunicationMessage("");
+        clearCommunicationAttachment();
         setCommunicationNotice(locale === "tr" ? "E-posta gönderildi." : "Email sent.");
       } catch (e: any) {
         setErr(String(e?.message || e));
@@ -1036,9 +1260,46 @@ export default function UnitDetailPage() {
           min-width: 0;
         }
 
+        .unit-detail-complaints {
+          display: grid;
+          gap: 10px;
+          min-width: 0;
+        }
+
+        .unit-detail-complaint-list {
+          display: grid;
+          gap: 10px;
+        }
+
+        .unit-detail-complaint-row {
+          display: grid;
+          gap: 10px;
+          padding: 10px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface-2);
+        }
+
+        .unit-detail-complaint-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 10px;
+        }
+
+        .unit-detail-complaint-actions {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) 40px;
+          gap: 8px;
+          align-items: end;
+        }
+
+        .unit-detail-complaint-row textarea {
+          min-height: 72px;
+        }
+
         .unit-detail-installment-row {
           display: grid;
-          grid-template-columns: minmax(96px, 0.85fr) minmax(128px, 1.25fr) minmax(78px, 0.7fr) minmax(112px, 0.95fr) minmax(96px, 0.8fr) 40px;
+          grid-template-columns: minmax(170px, 1.35fr) minmax(90px, 0.7fr) minmax(130px, 0.9fr) minmax(110px, 0.8fr) 40px;
           gap: 8px;
           align-items: end;
           min-width: 0;
@@ -1046,6 +1307,11 @@ export default function UnitDetailPage() {
           border: 1px solid var(--stroke);
           border-radius: 8px;
           background: var(--surface-2);
+        }
+
+        .unit-detail-installment-row.locked {
+          background: color-mix(in srgb, var(--success) 6%, var(--surface-2));
+          border-color: color-mix(in srgb, var(--success) 24%, var(--stroke));
         }
 
         .unit-detail-installment-row .unit-detail-field {
@@ -1079,10 +1345,55 @@ export default function UnitDetailPage() {
           border-color: color-mix(in srgb, var(--danger) 22%, var(--stroke));
         }
 
+        .unit-detail-icon-button:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+
         .unit-detail-contact-actions {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 8px;
+        }
+
+        .unit-detail-attachment-field {
+          display: grid;
+          gap: 7px;
+          padding: 10px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface-2);
+        }
+
+        .unit-detail-attachment-field > span {
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .unit-detail-attachment-field input {
+          width: 100%;
+          min-width: 0;
+        }
+
+        .unit-detail-attachment-meta {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          flex-wrap: wrap;
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .unit-detail-attachment-meta button {
+          min-height: 30px;
+          padding: 0 10px;
+          border-radius: 8px;
+          background: var(--surface);
+          color: var(--text-primary);
+          font-weight: 900;
         }
 
         .unit-detail-contact-actions button,
@@ -1106,35 +1417,207 @@ export default function UnitDetailPage() {
           font-weight: 800;
         }
 
-        .unit-detail-cancel-strip {
+        .unit-detail-communication-history {
+          display: grid;
           gap: 10px;
-          padding: 12px;
+          border-top: 1px solid var(--stroke);
+          padding-top: 12px;
+        }
+
+        .unit-detail-communication-list {
+          display: grid;
+          gap: 8px;
+          max-height: 360px;
+          overflow: auto;
+          padding-right: 2px;
+        }
+
+        .unit-detail-communication-row {
+          display: grid;
+          gap: 8px;
+          padding: 10px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface-2);
+        }
+
+        .unit-detail-communication-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .unit-detail-message-type {
+          display: inline-flex;
+          align-items: center;
+          min-height: 26px;
+          padding: 0 10px;
+          border: 1px solid var(--stroke);
+          border-radius: 999px;
+          color: var(--text-primary);
+          background: var(--surface);
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .unit-detail-message-type.email {
+          border-color: color-mix(in srgb, var(--info) 26%, var(--stroke));
+          background: color-mix(in srgb, var(--info) 8%, var(--surface));
+        }
+
+        .unit-detail-message-type.whatsapp {
+          border-color: color-mix(in srgb, var(--success) 26%, var(--stroke));
+          background: color-mix(in srgb, var(--success) 8%, var(--surface));
+        }
+
+        .unit-detail-communication-meta {
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .unit-detail-communication-meta strong {
+          color: var(--text-primary);
+          font-weight: 900;
+        }
+
+        .unit-detail-communication-message {
+          margin: 0;
+          padding: 10px;
+          border-radius: 8px;
+          background: var(--surface);
+          color: var(--text-primary);
+          font-size: 13px;
+          line-height: 1.45;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+        }
+
+        .unit-detail-cancel-strip {
+          gap: 12px;
+          padding: 14px;
+          border-color: color-mix(in srgb, var(--danger) 22%, var(--stroke));
+          border-left: 3px solid color-mix(in srgb, var(--danger) 64%, var(--stroke));
+          background: color-mix(in srgb, var(--danger) 3%, var(--surface));
+        }
+
+        .unit-detail-cancel-strip.active {
+          background: color-mix(in srgb, var(--danger) 7%, var(--surface));
           border-color: color-mix(in srgb, var(--danger) 34%, var(--stroke));
-          background: color-mix(in srgb, var(--danger) 5%, var(--surface));
         }
 
         .unit-detail-cancel-strip h2 {
           font-size: 15px;
         }
 
+        .unit-detail-cancel-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .unit-detail-cancel-badge {
+          display: inline-flex;
+          align-items: center;
+          min-height: 28px;
+          padding: 0 10px;
+          border: 1px solid var(--stroke);
+          border-radius: 999px;
+          background: var(--surface);
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 900;
+          white-space: nowrap;
+        }
+
+        .unit-detail-cancel-badge.danger {
+          border-color: color-mix(in srgb, var(--danger) 28%, var(--stroke));
+          background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+          color: var(--danger);
+        }
+
         .unit-detail-cancel-body {
           display: grid;
-          grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1fr);
+          grid-template-columns: minmax(250px, 340px) minmax(0, 1fr);
           gap: 10px;
-          align-items: start;
+          align-items: stretch;
         }
 
         .unit-detail-danger-toggle {
+          position: relative;
           display: inline-flex;
           align-items: center;
-          gap: 8px;
-          min-height: 42px;
-          padding: 0 12px;
+          gap: 10px;
+          min-height: 58px;
+          padding: 10px 12px;
           border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--stroke));
           border-radius: 8px;
           background: var(--surface);
           color: var(--text-primary);
           font-weight: 900;
+          cursor: pointer;
+        }
+
+        .unit-detail-danger-toggle input {
+          position: absolute;
+          opacity: 0;
+          pointer-events: none;
+        }
+
+        .unit-detail-toggle-switch {
+          position: relative;
+          width: 42px;
+          height: 24px;
+          flex: 0 0 auto;
+          border-radius: 999px;
+          background: var(--surface-3);
+          border: 1px solid var(--stroke);
+          transition: background 0.18s ease, border-color 0.18s ease;
+        }
+
+        .unit-detail-toggle-switch::after {
+          content: "";
+          position: absolute;
+          top: 3px;
+          left: 3px;
+          width: 16px;
+          height: 16px;
+          border-radius: 999px;
+          background: var(--surface);
+          box-shadow: var(--shadow-sm);
+          transition: transform 0.18s ease;
+        }
+
+        .unit-detail-danger-toggle input:checked + .unit-detail-toggle-switch {
+          background: var(--danger);
+          border-color: var(--danger);
+        }
+
+        .unit-detail-danger-toggle input:checked + .unit-detail-toggle-switch::after {
+          transform: translateX(18px);
+        }
+
+        .unit-detail-toggle-copy {
+          display: grid;
+          gap: 2px;
+          min-width: 0;
+        }
+
+        .unit-detail-toggle-copy strong {
+          color: var(--text-primary);
+          font-size: 14px;
+          line-height: 1.2;
+        }
+
+        .unit-detail-toggle-copy small {
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 700;
+          line-height: 1.35;
         }
 
         .unit-detail-cancel-strip textarea {
@@ -1235,6 +1718,8 @@ export default function UnitDetailPage() {
           .unit-detail-summary-grid,
           .unit-detail-contact-actions,
           .unit-detail-cancel-body,
+          .unit-detail-complaint-grid,
+          .unit-detail-complaint-actions,
           .unit-detail-installment-row,
           .unit-detail-diff {
             grid-template-columns: 1fr;
@@ -1379,7 +1864,7 @@ export default function UnitDetailPage() {
                   <div className="unit-detail-panel-title">
                     <h2>{locale === "tr" ? "Muhasebe" : "Accounting"}</h2>
                     <span className="unit-detail-muted">
-                      {installments.length} {locale === "tr" ? "ödeme satırı" : "payment rows"}
+                      {installments.length} {locale === "tr" ? "aidat satırı" : "aidat rows"}
                     </span>
                   </div>
                   <div className="unit-detail-badge-strip">
@@ -1428,11 +1913,11 @@ export default function UnitDetailPage() {
 
                 <div className="unit-detail-installments">
                   <div className="unit-detail-subhead">
-                    <span>{locale === "tr" ? "Taksit / Depozito / Aidat" : "Installments / Deposit / Aidat"}</span>
+                    <span>{locale === "tr" ? "Aidat kayıtları" : "Aidat records"}</span>
                     <button
                       type="button"
                       className="unit-detail-add-row"
-                      onClick={() => setInstallments((prev) => [...prev, newInstallment(prev.length)])}
+                      onClick={() => setInstallments((prev) => [...prev, newAidatRow(prev.length)])}
                     >
                       {locale === "tr" ? "Satır ekle" : "Add row"}
                     </button>
@@ -1440,76 +1925,81 @@ export default function UnitDetailPage() {
 
                   {installments.length > 0 ? (
                     <div className="unit-detail-installment-list">
-                      {installments.map((item) => (
-                        <div key={item.id} className="unit-detail-installment-row">
-                          <FieldSelect
-                            label={locale === "tr" ? "Tip" : "Type"}
-                            value={item.type}
-                            onChange={(value) =>
-                              updateInstallment(item.id, {
-                                type: value as UnitInstallment["type"],
-                              })
-                            }
-                            options={["INSTALLMENT", "DEPOSIT", "AIDAT"]}
-                            labelFor={(value) => installmentTypeLabel(value, locale)}
-                          />
-                          <label className="unit-detail-field">
-                            <span>{locale === "tr" ? "Başlık" : "Title"}</span>
-                            <input
-                              value={item.title}
-                              onChange={(e) =>
-                                updateInstallment(item.id, { title: e.target.value })
-                              }
-                            />
-                          </label>
-                          <label className="unit-detail-field">
-                            <span>{locale === "tr" ? "Tutar" : "Amount"}</span>
-                            <input
-                              inputMode="decimal"
-                              value={item.amount ?? ""}
-                              onChange={(e) =>
-                                updateInstallment(item.id, {
-                                  amount: e.target.value ? Number(e.target.value) : null,
-                                })
-                              }
-                            />
-                          </label>
-                          <label className="unit-detail-field">
-                            <span>{locale === "tr" ? "Vade" : "Due date"}</span>
-                            <input
-                              type="date"
-                              value={item.dueDate || ""}
-                              onChange={(e) =>
-                                updateInstallment(item.id, { dueDate: e.target.value })
-                              }
-                            />
-                          </label>
-                          <FieldSelect
-                            label={locale === "tr" ? "Durum" : "Status"}
-                            value={item.status}
-                            onChange={(value) =>
-                              updateInstallment(item.id, { status: value as PaymentStatus })
-                            }
-                            options={PAYMENT_STATUSES}
-                            labelFor={(value) => paymentLabel(value, locale)}
-                          />
-                          <button
-                            type="button"
-                            className="unit-detail-icon-button"
-                            aria-label={locale === "tr" ? "Satırı sil" : "Delete row"}
-                            title={locale === "tr" ? "Satırı sil" : "Delete row"}
-                            onClick={() => removeInstallment(item.id)}
+                      {installments.map((item) => {
+                        const isPaid = item.status === "PAID";
+                        const isPersistedPaid = persistedPaidAidatIds.has(item.id);
+
+                        return (
+                          <div
+                            key={item.id}
+                            className={`unit-detail-installment-row ${isPaid ? "locked" : ""}`}
                           >
-                            ×
-                          </button>
-                        </div>
-                      ))}
+                            <label className="unit-detail-field">
+                              <span>{locale === "tr" ? "Başlık" : "Title"}</span>
+                              <input
+                                value={item.title}
+                                disabled={isPaid}
+                                onChange={(e) =>
+                                  updateInstallment(item.id, { title: e.target.value })
+                                }
+                              />
+                            </label>
+                            <label className="unit-detail-field">
+                              <span>{locale === "tr" ? "Tutar" : "Amount"}</span>
+                              <input
+                                inputMode="decimal"
+                                value={item.amount ?? ""}
+                                disabled={isPaid}
+                                onChange={(e) =>
+                                  updateInstallment(item.id, {
+                                    amount: e.target.value ? Number(e.target.value) : null,
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className="unit-detail-field">
+                              <span>{locale === "tr" ? "Vade" : "Due date"}</span>
+                              <input
+                                type="date"
+                                value={item.dueDate || ""}
+                                disabled={isPaid}
+                                onChange={(e) =>
+                                  updateInstallment(item.id, { dueDate: e.target.value })
+                                }
+                              />
+                            </label>
+                            <FieldSelect
+                              label={locale === "tr" ? "Durum" : "Status"}
+                              value={item.status}
+                              onChange={(value) =>
+                                updateInstallment(item.id, { status: value as PaymentStatus })
+                              }
+                              options={PAYMENT_STATUSES}
+                              labelFor={(value) => paymentLabel(value, locale)}
+                            />
+                            <button
+                              type="button"
+                              className="unit-detail-icon-button"
+                              aria-label={locale === "tr" ? "Satırı sil" : "Delete row"}
+                              title={
+                                isPersistedPaid
+                                  ? locale === "tr" ? "Önce ödenmedi olarak kaydedin" : "Save as unpaid first"
+                                  : locale === "tr" ? "Satırı sil" : "Delete row"
+                              }
+                              disabled={isPersistedPaid}
+                              onClick={() => removeInstallment(item.id)}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : null}
 
                   {installments.length === 0 ? (
                     <div className="unit-detail-empty">
-                      {locale === "tr" ? "Henüz ödeme satırı yok." : "No payment rows yet."}
+                      {locale === "tr" ? "Henüz aidat satırı yok." : "No aidat rows yet."}
                     </div>
                   ) : null}
                 </div>
@@ -1567,19 +2057,32 @@ export default function UnitDetailPage() {
                     minRows={3}
                   />
                 ) : null}
+
+                {isAdmin && (rentalPackage === "CUSTOM" || customFurnitureLogs.length > 0) ? (
+                  <LogList
+                    title={locale === "tr" ? "Eklenen mobilya geçmişi" : "Added furniture history"}
+                    logs={customFurnitureLogs}
+                    locale={locale}
+                  />
+                ) : null}
               </section>
 
               {isAdmin ? (
-                <section className="unit-detail-panel unit-detail-cancel-strip">
-                  <div className="unit-detail-panel-head">
+                <section className={`unit-detail-panel unit-detail-cancel-strip ${isCanceled ? "active" : ""}`}>
+                  <div className="unit-detail-cancel-header">
                     <div className="unit-detail-panel-title">
                       <h2>{locale === "tr" ? "Admin iptal" : "Admin cancellation"}</h2>
                       <span className="unit-detail-muted">
-                        {isCanceled
-                          ? locale === "tr" ? "Unit iptal olarak işaretli" : "Unit is marked canceled"
-                          : locale === "tr" ? "Sadece admin düzenler" : "Admin only"}
+                        {locale === "tr"
+                          ? "Bu alan sadece admin tarafından düzenlenir."
+                          : "Only admin can update this status."}
                       </span>
                     </div>
+                    <span className={`unit-detail-cancel-badge ${isCanceled ? "danger" : ""}`}>
+                      {isCanceled
+                        ? locale === "tr" ? "İptal edildi" : "Canceled"
+                        : locale === "tr" ? "Aktif unit" : "Active unit"}
+                    </span>
                   </div>
 
                   <div className="unit-detail-cancel-body">
@@ -1589,23 +2092,25 @@ export default function UnitDetailPage() {
                         checked={isCanceled}
                         onChange={(e) => setIsCanceled(e.target.checked)}
                       />
-                      {locale === "tr" ? "Unit iptal" : "Canceled unit"}
+                      <span className="unit-detail-toggle-switch" aria-hidden="true" />
+                      <span className="unit-detail-toggle-copy">
+                        <strong>{locale === "tr" ? "Unit iptal" : "Cancel unit"}</strong>
+                        <small>
+                          {locale === "tr"
+                            ? "İptal edilen unit listede pasif görünür."
+                            : "Canceled units stay visible as inactive records."}
+                        </small>
+                      </span>
                     </label>
 
-                    {(isCanceled || cancelReason.trim()) ? (
+                    {isCanceled ? (
                       <FieldArea
                         label={locale === "tr" ? "İptal nedeni" : "Cancel reason"}
                         value={cancelReason}
                         onChange={setCancelReason}
                         minRows={2}
                       />
-                    ) : (
-                      <div className="unit-detail-muted">
-                        {locale === "tr"
-                          ? "İptal seçilirse neden alanı açılır."
-                          : "The reason field appears when cancellation is selected."}
-                      </div>
-                    )}
+                    ) : null}
                   </div>
                 </section>
               ) : null}
@@ -1677,11 +2182,76 @@ export default function UnitDetailPage() {
                     value={customerRequest}
                     onChange={setCustomerRequest}
                   />
-                  <FieldArea
-                    label={locale === "tr" ? "Müşteri şikayeti" : "Customer complaint"}
-                    value={customerComplaint}
-                    onChange={setCustomerComplaint}
-                  />
+                  <div className="unit-detail-complaints">
+                    <div className="unit-detail-subhead">
+                      <span>{locale === "tr" ? "Müşteri şikayetleri" : "Customer complaints"}</span>
+                      <button
+                        type="button"
+                        className="unit-detail-add-row"
+                        onClick={() =>
+                          setCustomerComplaints((prev) => [
+                            ...prev,
+                            newCustomerComplaint(prev.length),
+                          ])
+                        }
+                      >
+                        {locale === "tr" ? "Şikayet ekle" : "Add complaint"}
+                      </button>
+                    </div>
+
+                    {customerComplaints.length > 0 ? (
+                      <div className="unit-detail-complaint-list">
+                        {customerComplaints.map((item) => (
+                          <div key={item.id} className="unit-detail-complaint-row">
+                            <div className="unit-detail-complaint-grid">
+                              <FieldArea
+                                label={locale === "tr" ? "Şikayet" : "Complaint"}
+                                value={item.complaint}
+                                onChange={(value) =>
+                                  updateCustomerComplaint(item.id, { complaint: value })
+                                }
+                                minRows={3}
+                              />
+                              <FieldArea
+                                label={locale === "tr" ? "Çözüm" : "Solution"}
+                                value={item.solution}
+                                onChange={(value) =>
+                                  updateCustomerComplaint(item.id, { solution: value })
+                                }
+                                minRows={3}
+                              />
+                            </div>
+                            <div className="unit-detail-complaint-actions">
+                              <FieldSelect
+                                label={locale === "tr" ? "Durum" : "Status"}
+                                value={item.status}
+                                onChange={(value) =>
+                                  updateCustomerComplaint(item.id, {
+                                    status: value as CustomerComplaintStatus,
+                                  })
+                                }
+                                options={COMPLAINT_STATUSES}
+                                labelFor={(value) => complaintStatusLabel(value, locale)}
+                              />
+                              <button
+                                type="button"
+                                className="unit-detail-icon-button"
+                                aria-label={locale === "tr" ? "Şikayeti sil" : "Delete complaint"}
+                                title={locale === "tr" ? "Şikayeti sil" : "Delete complaint"}
+                                onClick={() => removeCustomerComplaint(item.id)}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="unit-detail-empty">
+                        {locale === "tr" ? "Henüz şikayet yok." : "No complaints yet."}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {isAdmin ? (
@@ -1709,6 +2279,50 @@ export default function UnitDetailPage() {
                   onChange={setCommunicationMessage}
                   minRows={4}
                 />
+
+                <label className="unit-detail-attachment-field">
+                  <span>
+                    {locale === "tr" ? "E-posta eki" : "Email attachment"}{" "}
+                    <span className="unit-detail-muted">
+                      ({locale === "tr" ? "isteğe bağlı" : "optional"})
+                    </span>
+                  </span>
+                  <input
+                    key={communicationAttachmentKey}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.jpg,.jpeg,.png,.webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+
+                      if (file && file.size > 10 * 1024 * 1024) {
+                        setErr(
+                          locale === "tr"
+                            ? "Ek dosya 10MB veya daha küçük olmalı."
+                            : "Attachment must be 10MB or smaller.",
+                        );
+                        clearCommunicationAttachment();
+                        return;
+                      }
+
+                      setErr(null);
+                      setCommunicationAttachment(file);
+                    }}
+                  />
+                  <div className="unit-detail-attachment-meta">
+                    <span>
+                      {communicationAttachment
+                        ? communicationAttachment.name
+                        : locale === "tr"
+                          ? "PDF, Word, Excel, resim veya metin dosyası"
+                          : "PDF, Word, Excel, image or text document"}
+                    </span>
+                    {communicationAttachment ? (
+                      <button type="button" onClick={clearCommunicationAttachment}>
+                        {locale === "tr" ? "Kaldır" : "Remove"}
+                      </button>
+                    ) : null}
+                  </div>
+                </label>
 
                 {communicationNotice ? (
                   <div className="unit-detail-notice">{communicationNotice}</div>
@@ -1740,6 +2354,8 @@ export default function UnitDetailPage() {
                     {communicationSending === "WHATSAPP" ? "..." : "WhatsApp"}
                   </button>
                 </div>
+
+                <CommunicationLogList logs={communicationLogs} locale={locale} />
               </section>
             </div>
           </div>

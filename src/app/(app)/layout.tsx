@@ -489,9 +489,15 @@ const isMeetingsActive = useMemo(
       pathname.startsWith("/customers/demographics-report/"),
     [pathname],
   );
-  const isUnitsActive = useMemo(
-    () => pathname === "/units" || pathname.startsWith("/units/"),
+  const isUnitsDashboardActive = useMemo(
+    () => pathname === "/units/dashboard" || pathname.startsWith("/units/dashboard/"),
     [pathname],
+  );
+  const isUnitsActive = useMemo(
+    () =>
+      pathname === "/units" ||
+      (pathname.startsWith("/units/") && !isUnitsDashboardActive),
+    [pathname, isUnitsDashboardActive],
   );
   const isRentProjectionActive = useMemo(
     () => pathname === "/rent-projection" || pathname.startsWith("/rent-projection/"),
@@ -623,6 +629,15 @@ const isMeetingsActive = useMemo(
                   <UnitsIcon />
                 </NavIconWrap>
                 {safeTranslate(t, "nav.units", "All Units")}
+              </Link>
+            ) : null}
+
+            {isAdmin ? (
+              <Link href="/units/dashboard" style={navItemStyle(isUnitsDashboardActive)}>
+                <NavIconWrap>
+                  <UnitsIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.unitsDashboard", "Units Dashboard")}
               </Link>
             ) : null}
 
@@ -785,7 +800,7 @@ const isMeetingsActive = useMemo(
             }}
           >
             <LanguageSwitcher />
-            {isAftersales ? null : <Notifications />}
+            <Notifications />
             <TopbarUser />
           </div>
         </header>

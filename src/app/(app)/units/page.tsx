@@ -17,6 +17,17 @@ type UnitDeliveryStatus = "NOT_READY" | "READY_TO_DELIVER" | "DELIVERED";
 type UnitCompanyStatus = "UNKNOWN" | "DND" | "OTHER";
 type PaymentStatus = "UNPAID" | "PAID";
 type RentalStatus = "SHORT_TERM" | "LONG_TERM" | "DND_UNITS" | "NOT_INTERESTED";
+type UnitIssueFilter = "" | "OVERDUE_AIDAT" | "UNDONE_COMPLAINT";
+
+type UnitAidatRow = {
+  id?: string;
+  type?: string | null;
+  title?: string | null;
+  amount?: number | string | null;
+  dueDate?: string | null;
+  status?: PaymentStatus | string | null;
+  paidAt?: string | null;
+};
 
 type UnitCustomer = {
   id: string;
@@ -48,6 +59,7 @@ type UnitRow = {
   isCanceled?: boolean;
   kdvStatus?: PaymentStatus | string;
   trafoStatus?: PaymentStatus | string;
+  installments?: UnitAidatRow[] | null;
   rentalStatus?: RentalStatus | string;
   createdAt?: string;
   updatedAt?: string;
@@ -63,15 +75,24 @@ type UnitStats = {
 
 type UnitDayReport = {
   date: string;
+  dateFrom?: string;
+  dateTo?: string;
   total: number;
   byUser: Array<{ user?: { name?: string | null; role?: string | null } | null; count: number }>;
   items: Array<{
     id: string;
     section: string;
     field: string;
+    oldValue?: string | null;
+    newValue?: string | null;
     createdAt?: string;
     createdBy?: { name?: string | null; role?: string | null } | null;
-    unit: { id: string; unitNumber: string; customer?: { fullName?: string | null } | null };
+    unit: {
+      id: string;
+      project?: ProjectType | string;
+      unitNumber: string;
+      customer?: { fullName?: string | null } | null;
+    };
   }>;
 };
 
@@ -144,6 +165,158 @@ function paymentLabel(status: string | undefined, locale: string) {
     : locale === "tr" ? "Ödenmedi" : "Unpaid";
 }
 
+function reportBooleanLabel(value: string, locale: string) {
+  if (value === "true") return locale === "tr" ? "Evet" : "Yes";
+  if (value === "false") return locale === "tr" ? "Hayır" : "No";
+  return value;
+}
+
+function reportUtilityLabel(field: string, value: string, locale: string) {
+  if (field === "electricityProvider") {
+    if (value === "TIPTEK") return "Kiptek";
+    if (value === "DND") return "DND";
+    return locale === "tr" ? "Seçilmedi" : "Not selected";
+  }
+
+  if (field === "waterAccessStatus") {
+    if (value === "ON") return locale === "tr" ? "Açık" : "On";
+    if (value === "OFF") return locale === "tr" ? "Kapalı" : "Off";
+    return locale === "tr" ? "Seçilmedi" : "Not selected";
+  }
+
+  if (field === "rentalPackage") {
+    if (value === "FULL_FURNISHED") return "Full furnished";
+    if (value === "CUSTOM") return locale === "tr" ? "Özel mobilya" : "Custom furniture";
+    return locale === "tr" ? "İlgilenmiyor" : "Not interested";
+  }
+
+  return value;
+}
+
+function formatReportAmount(value: number, locale: string) {
+  return new Intl.NumberFormat(locale === "tr" ? "tr-TR" : "en-US", {
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function summarizeAidatRows(value: string, locale: string) {
+  try {
+    const rows = JSON.parse(value);
+    if (!Array.isArray(rows)) return value;
+
+    const summary = rows.reduce(
+      (acc, row) => {
+        const amount = Number(row?.amount || 0);
+        if (String(row?.status || "UNPAID").toUpperCase() === "PAID") {
+          acc.paidCount += 1;
+          acc.paidAmount += amount;
+        } else {
+          acc.unpaidCount += 1;
+          acc.unpaidAmount += amount;
+        }
+        return acc;
+      },
+      { paidCount: 0, paidAmount: 0, unpaidCount: 0, unpaidAmount: 0 },
+    );
+
+    return locale === "tr"
+      ? `${rows.length} aidat · Ödendi ${summary.paidCount} (${formatReportAmount(summary.paidAmount, locale)}) · Ödenmedi ${summary.unpaidCount} (${formatReportAmount(summary.unpaidAmount, locale)})`
+      : `${rows.length} aidat · Paid ${summary.paidCount} (${formatReportAmount(summary.paidAmount, locale)}) · Unpaid ${summary.unpaidCount} (${formatReportAmount(summary.unpaidAmount, locale)})`;
+  } catch {
+    return value;
+  }
+}
+
+function clampReportText(value: string, max = 220) {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}...`;
+}
+
+function parseCustomerComplaints(value?: string | null) {
+  const raw = (value || "").trim();
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((row) => ({
+        complaint: String(row?.complaint || "").trim(),
+        solution: String(row?.solution || "").trim(),
+        status: row?.status === "DONE" ? "DONE" : "UNDONE",
+      }))
+      .filter((row) => row.complaint || row.solution);
+  } catch {
+    return [{ complaint: raw, solution: "", status: "UNDONE" }];
+  }
+}
+
+function customerComplaintSummary(value: string | null | undefined, locale: string) {
+  const rows = parseCustomerComplaints(value);
+  if (rows.length === 0) return locale === "tr" ? "Boş" : "Empty";
+
+  const done = rows.filter((row) => row.status === "DONE").length;
+  const undone = rows.length - done;
+  return locale === "tr"
+    ? `${rows.length} şikayet · ${done} tamamlandı · ${undone} açık`
+    : `${rows.length} complaints · ${done} done · ${undone} open`;
+}
+
+function hasUndoneComplaint(item: UnitRow) {
+  return parseCustomerComplaints(item.customerComplaint).some(
+    (row) => row.status !== "DONE",
+  );
+}
+
+function issueFilterLabel(value: UnitIssueFilter, locale: string) {
+  if (value === "OVERDUE_AIDAT") {
+    return locale === "tr" ? "Geciken aidat" : "Overdue aidat";
+  }
+
+  if (value === "UNDONE_COMPLAINT") {
+    return locale === "tr" ? "Tamamlanmamış şikayet" : "Undone complaint";
+  }
+
+  return locale === "tr" ? "Tüm dikkatler" : "All attention";
+}
+
+function dateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dueDateKey(value?: string | null) {
+  const raw = (value || "").trim();
+  if (!raw) return null;
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+
+  const localMatch = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (localMatch) {
+    return `${localMatch[3]}-${localMatch[2].padStart(2, "0")}-${localMatch[1].padStart(2, "0")}`;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return dateKey(parsed);
+}
+
+function hasOverdueAidat(item: UnitRow) {
+  const today = dateKey(new Date());
+
+  return (Array.isArray(item.installments) ? item.installments : []).some((row) => {
+    const status = String(row?.status || "UNPAID").toUpperCase();
+    const due = dueDateKey(row?.dueDate);
+
+    return status !== "PAID" && Boolean(due) && due! < today;
+  });
+}
+
 function rentalStatusLabel(status: string | undefined, locale: string) {
   if (status === "SHORT_TERM") return locale === "tr" ? "Kısa dönem" : "Short term";
   if (status === "LONG_TERM") return locale === "tr" ? "Uzun dönem" : "Long term";
@@ -177,6 +350,93 @@ function fieldLabelForReport(field: string, locale: string) {
   return labels[field]?.[locale === "tr" ? "tr" : "en"] || field;
 }
 
+function sectionLabelForReport(section: string, locale: string) {
+  const labels: Record<string, { en: string; tr: string }> = {
+    UNIT_INFORMATION: { en: "Unit information", tr: "Unit bilgileri" },
+    CUSTOMER_RECORDS: { en: "Customer records", tr: "Müşteri kayıtları" },
+    ACCOUNTING: { en: "Accounting", tr: "Muhasebe" },
+    UTILITY: { en: "Utilities", tr: "Bağlantılar" },
+    RENTAL: { en: "Rental", tr: "Kiralama" },
+    ADMIN: { en: "Admin", tr: "Admin" },
+    COMMUNICATION: { en: "Communication", tr: "İletişim" },
+  };
+
+  return labels[section]?.[locale === "tr" ? "tr" : "en"] || section;
+}
+
+function displayReportValue(field: string, value: string | null | undefined, locale: string) {
+  const raw = (value || "").trim();
+  if (!raw) return locale === "tr" ? "Boş" : "Empty";
+
+  if (field === "deliveryStatus") {
+    return deliveryLabel(raw as UnitDeliveryStatus, locale);
+  }
+
+  if (field === "companyStatus") {
+    return companyLabel(raw as UnitCompanyStatus, locale);
+  }
+
+  if (field === "kdvStatus" || field === "trafoStatus") {
+    return paymentLabel(raw, locale);
+  }
+
+  if (field === "isCanceled") {
+    return reportBooleanLabel(raw, locale);
+  }
+
+  if (
+    field === "electricityProvider" ||
+    field === "waterAccessStatus" ||
+    field === "rentalPackage"
+  ) {
+    return reportUtilityLabel(field, raw, locale);
+  }
+
+  if (field === "rentalStatus") {
+    return rentalStatusLabel(raw, locale);
+  }
+
+  if (field === "installments") {
+    return summarizeAidatRows(raw, locale);
+  }
+
+  if (field === "customerComplaint") {
+    const rows = parseCustomerComplaints(raw);
+    if (rows.length === 0) return locale === "tr" ? "Boş" : "Empty";
+
+    return rows
+      .map(
+        (row, index) =>
+          `${index + 1}. ${row.complaint || "-"} / ${locale === "tr" ? "Çözüm" : "Solution"}: ${
+            row.solution || "-"
+          } / ${
+            row.status === "DONE"
+              ? locale === "tr" ? "Tamamlandı" : "Done"
+              : locale === "tr" ? "Tamamlanmadı" : "Undone"
+          }`,
+      )
+      .join("\n");
+  }
+
+  return raw;
+}
+
+function reportChangeText(
+  item: UnitDayReport["items"][number],
+  locale: string,
+  max = 260,
+) {
+  const field = fieldLabelForReport(item.field, locale);
+  const next = displayReportValue(item.field, item.newValue, locale);
+
+  if (item.field === "EMAIL" || item.field === "WHATSAPP") {
+    return `${field}: ${clampReportText(next, max)}`;
+  }
+
+  const previous = displayReportValue(item.field, item.oldValue, locale);
+  return `${field}: ${clampReportText(previous, Math.floor(max / 2))} -> ${clampReportText(next, Math.floor(max / 2))}`;
+}
+
 function hasText(value?: string | null) {
   return Boolean(value?.trim());
 }
@@ -186,7 +446,7 @@ function hasRequest(item: UnitRow) {
 }
 
 function hasComplaint(item: UnitRow) {
-  return hasText(item.customerComplaint) || hasText(item.unitComplaint);
+  return parseCustomerComplaints(item.customerComplaint).length > 0 || hasText(item.unitComplaint);
 }
 
 function hasInfo(item: UnitRow) {
@@ -219,6 +479,13 @@ function formatLongDate(value: string | undefined, locale: string) {
     month: "long",
     day: "numeric",
   });
+}
+
+function formatReportPeriod(from: string | undefined, to: string | undefined, locale: string) {
+  if (!from && !to) return "-";
+  if (!to || from === to) return formatLongDate(from, locale);
+
+  return `${formatLongDate(from, locale)} - ${formatLongDate(to, locale)}`;
 }
 
 function StatBox({
@@ -255,14 +522,19 @@ export default function UnitsPage() {
   const [projectFilter, setProjectFilter] = useState<"" | ProjectType>(DEFAULT_PROJECT);
   const [deliveryFilter, setDeliveryFilter] = useState<"" | UnitDeliveryStatus>("");
   const [companyFilter, setCompanyFilter] = useState<"" | UnitCompanyStatus>("");
+  const [issueFilter, setIssueFilter] = useState<UnitIssueFilter>("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [me, setMe] = useState<any>(null);
   const [dayReport, setDayReport] = useState<UnitDayReport | null>(null);
+  const [reportDateFrom, setReportDateFrom] = useState(() => dateKey(new Date()));
+  const [reportDateTo, setReportDateTo] = useState(() => dateKey(new Date()));
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const canSeeDayReport =
     me?.role === "ADMIN" || me?.role === "MANAGER" || me?.role === "AFTERSALES";
+  const canDeleteUnits = me?.role === "ADMIN";
 
   const statusCounts = useMemo(() => {
     const next: Record<UnitDeliveryStatus, number> = {
@@ -325,10 +597,23 @@ export default function UnitsPage() {
     [items],
   );
 
+  const displayedItems = useMemo(() => {
+    if (issueFilter === "OVERDUE_AIDAT") {
+      return items.filter((item) => hasOverdueAidat(item));
+    }
+
+    if (issueFilter === "UNDONE_COMPLAINT") {
+      return items.filter((item) => hasUndoneComplaint(item));
+    }
+
+    return items;
+  }, [issueFilter, items]);
+
   const activeFilterCount = [
     projectFilter,
     deliveryFilter,
     companyFilter,
+    issueFilter,
     q.trim(),
   ].filter(Boolean).length;
 
@@ -336,6 +621,7 @@ export default function UnitsPage() {
     projectFilter ? projectLabel(projectFilter) : null,
     deliveryFilter ? deliveryLabel(deliveryFilter, locale) : null,
     companyFilter ? companyLabel(companyFilter, locale) : null,
+    issueFilter ? issueFilterLabel(issueFilter, locale) : null,
     q.trim() ? `"${q.trim()}"` : null,
   ].filter((item): item is string => Boolean(item));
 
@@ -386,10 +672,33 @@ export default function UnitsPage() {
   async function loadDayReport() {
     if (!canSeeDayReport) return;
 
+    if (!reportDateFrom || !reportDateTo) {
+      setErr(locale === "tr" ? "Rapor tarih aralığı gerekli." : "Report date range is required.");
+      return;
+    }
+
+    if (reportDateFrom > reportDateTo) {
+      setErr(
+        locale === "tr"
+          ? "Başlangıç tarihi bitiş tarihinden sonra olamaz."
+          : "Start date cannot be after end date.",
+      );
+      return;
+    }
+
+    setErr(null);
+
     try {
-      const data = (await authedFetch("/units/reports/end-of-day")) as UnitDayReport;
+      const params = new URLSearchParams();
+      if (reportDateFrom) params.set("dateFrom", reportDateFrom);
+      if (reportDateTo) params.set("dateTo", reportDateTo);
+
+      const data = (await authedFetch(
+        `/units/reports/end-of-day?${params.toString()}`,
+      )) as UnitDayReport;
       setDayReport(data);
-    } catch {
+    } catch (e: any) {
+      setErr(String(e?.message || e));
       setDayReport(null);
     }
   }
@@ -398,10 +707,34 @@ export default function UnitsPage() {
     window.print();
   }
 
+  async function deleteUnit(item: UnitRow) {
+    const confirmed = window.confirm(
+      locale === "tr"
+        ? `${item.unitNumber} unit kaydı silinsin mi? Bu işlem geri alınamaz.`
+        : `Delete unit record ${item.unitNumber}? This cannot be undone.`,
+    );
+
+    if (!confirmed) return;
+
+    setErr(null);
+    setDeletingId(item.id);
+
+    try {
+      await authedFetch(`/units/${item.id}`, { method: "DELETE" });
+      await load();
+      await loadDayReport();
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   function clearFilters() {
     setProjectFilter(DEFAULT_PROJECT);
     setDeliveryFilter("");
     setCompanyFilter("");
+    setIssueFilter("");
     setQ("");
     load({ projectFilter: DEFAULT_PROJECT, deliveryFilter: "", companyFilter: "", q: "" });
   }
@@ -492,7 +825,7 @@ export default function UnitsPage() {
 
         .units-command-main {
           display: grid;
-          grid-template-columns: minmax(280px, 1fr) minmax(170px, 0.32fr) minmax(190px, 0.36fr) minmax(170px, 0.32fr) auto;
+          grid-template-columns: minmax(250px, 1fr) minmax(150px, 0.28fr) minmax(160px, 0.3fr) minmax(150px, 0.28fr) minmax(180px, 0.34fr) auto;
           gap: 10px;
           align-items: end;
         }
@@ -617,6 +950,32 @@ export default function UnitsPage() {
           flex-wrap: wrap;
         }
 
+        .units-report-range {
+          display: flex;
+          align-items: end;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .units-report-date {
+          display: grid;
+          gap: 4px;
+          min-width: 140px;
+        }
+
+        .units-report-date span {
+          color: var(--text-secondary);
+          font-size: 11px;
+          font-weight: 900;
+          text-transform: uppercase;
+        }
+
+        .units-report-date input {
+          height: 34px;
+          padding-inline: 10px;
+        }
+
         .units-report-actions button {
           min-height: 34px;
         }
@@ -628,12 +987,21 @@ export default function UnitsPage() {
 
         .units-report-row {
           display: grid;
-          grid-template-columns: minmax(120px, 0.4fr) minmax(0, 1fr) minmax(140px, 0.5fr);
+          grid-template-columns: minmax(120px, 0.25fr) minmax(140px, 0.28fr) minmax(0, 1fr) minmax(150px, 0.35fr);
           gap: 10px;
           padding: 10px;
           border: 1px solid var(--stroke);
           border-radius: 8px;
           background: var(--surface-2);
+        }
+
+        .units-report-detail-text {
+          color: var(--text-primary);
+          font-size: 12px;
+          font-weight: 800;
+          line-height: 1.45;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
         }
 
         .units-print-report {
@@ -775,7 +1143,7 @@ export default function UnitsPage() {
         }
 
         .units-table-wrap table {
-          min-width: 1180px;
+          min-width: 1240px;
         }
 
         .units-table-wrap th {
@@ -797,8 +1165,18 @@ export default function UnitsPage() {
           background: color-mix(in srgb, var(--danger) 6%, var(--surface));
         }
 
+        .units-row.overdue-aidat td,
+        .units-row.undone-complaint td {
+          background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+        }
+
         .units-row td:first-child {
           box-shadow: inset 0 0 0 transparent;
+        }
+
+        .units-row.overdue-aidat td:first-child,
+        .units-row.undone-complaint td:first-child {
+          box-shadow: inset 3px 0 0 var(--danger);
         }
 
         .units-row.active td {
@@ -911,6 +1289,33 @@ export default function UnitsPage() {
           display: flex;
           gap: 6px;
           flex-wrap: wrap;
+        }
+
+        .units-row-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 6px;
+        }
+
+        .units-row-icon-button {
+          width: 34px;
+          height: 34px;
+          min-height: 34px;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 8px;
+          font-size: 21px;
+          font-weight: 900;
+          line-height: 1;
+        }
+
+        .units-row-icon-button.danger {
+          color: var(--danger);
+          background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+          border-color: color-mix(in srgb, var(--danger) 22%, var(--stroke));
         }
 
         .units-detail {
@@ -1134,7 +1539,7 @@ export default function UnitsPage() {
           .units-print-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 10.5px;
+            font-size: 9.5px;
           }
 
           .units-print-table th,
@@ -1208,6 +1613,15 @@ export default function UnitsPage() {
         </div>
 
         <div className="units-actions">
+          {canDeleteUnits ? (
+            <Link href="/units/dashboard" className="units-link-button">
+              {safeTranslate(
+                t,
+                "units.dashboard",
+                locale === "tr" ? "Dashboard" : "Dashboard",
+              )}
+            </Link>
+          ) : null}
           <Link href="/customers" className="units-link-button">
             {safeTranslate(t, "units.backToCustomers", locale === "tr" ? "Müşteriler" : "Customers")}
           </Link>
@@ -1300,6 +1714,24 @@ export default function UnitsPage() {
             </select>
           </label>
 
+          <label className="units-select-field">
+            <span className="units-select-label">
+              {locale === "tr" ? "Dikkat" : "Attention"}
+            </span>
+            <select
+              value={issueFilter}
+              onChange={(e) => setIssueFilter(e.target.value as UnitIssueFilter)}
+            >
+              <option value="">{issueFilterLabel("", locale)}</option>
+              <option value="OVERDUE_AIDAT">
+                {issueFilterLabel("OVERDUE_AIDAT", locale)}
+              </option>
+              <option value="UNDONE_COMPLAINT">
+                {issueFilterLabel("UNDONE_COMPLAINT", locale)}
+              </option>
+            </select>
+          </label>
+
           <div className="units-filter-actions">
             <button type="button" onClick={() => load()} disabled={loading}>
               {safeTranslate(t, "common.searchRefresh", locale === "tr" ? "Ara / Yenile" : "Search / Refresh")}
@@ -1361,11 +1793,38 @@ export default function UnitsPage() {
               <h2>{locale === "tr" ? "Gün sonu unit raporu" : "End-of-day unit report"}</h2>
               <div className="units-secondary-text">
                 {dayReport
-                  ? `${dayReport.total} ${locale === "tr" ? "aktivite" : "activities"}`
+                  ? `${dayReport.total} ${locale === "tr" ? "aktivite" : "activities"} · ${formatReportPeriod(dayReport.dateFrom || dayReport.date, dayReport.dateTo || dayReport.date, locale)}`
                   : locale === "tr" ? "Bugün kayıt yok" : "No activity today"}
               </div>
             </div>
             <div className="units-report-actions">
+              <div className="units-report-range">
+                <label className="units-report-date">
+                  <span>{locale === "tr" ? "Başlangıç" : "From"}</span>
+                  <input
+                    type="date"
+                    value={reportDateFrom}
+                    onChange={(e) => setReportDateFrom(e.target.value)}
+                  />
+                </label>
+                <label className="units-report-date">
+                  <span>{locale === "tr" ? "Bitiş" : "To"}</span>
+                  <input
+                    type="date"
+                    value={reportDateTo}
+                    onChange={(e) => setReportDateTo(e.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={loadDayReport}
+                  disabled={
+                    !reportDateFrom || !reportDateTo || reportDateFrom > reportDateTo
+                  }
+                >
+                  {locale === "tr" ? "Uygula" : "Apply"}
+                </button>
+              </div>
               <div className="units-note-badges">
                 {(dayReport?.byUser || []).slice(0, 4).map((item, index) => (
                   <span key={`${item.user?.name || "system"}-${index}`} className="badge info">
@@ -1388,12 +1847,24 @@ export default function UnitsPage() {
             <div className="units-report-list">
               {dayReport.items.slice(0, 6).map((item) => (
                 <div key={item.id} className="units-report-row">
-                  <div className="units-primary-text">{item.unit.unitNumber}</div>
-                  <div className="units-secondary-text">
-                    {fieldLabelForReport(item.field, locale)} · {item.unit.customer?.fullName || "-"}
+                  <div>
+                    <div className="units-primary-text">{item.unit.unitNumber}</div>
+                    <div className="units-secondary-text">
+                      {item.unit.project ? projectLabel(item.unit.project as ProjectType) : "-"}
+                    </div>
                   </div>
                   <div className="units-secondary-text">
-                    {item.createdBy?.name || "System"} · {formatShortDate(item.createdAt, locale)}
+                    {sectionLabelForReport(item.section, locale)}
+                    <br />
+                    {fieldLabelForReport(item.field, locale)}
+                  </div>
+                  <div className="units-report-detail-text">
+                    {reportChangeText(item, locale)}
+                  </div>
+                  <div className="units-secondary-text">
+                    {item.unit.customer?.fullName || "-"}
+                    <br />
+                    {item.createdBy?.name || "System"} · {formatDate(item.createdAt, locale)}
                   </div>
                 </div>
               ))}
@@ -1407,8 +1878,12 @@ export default function UnitsPage() {
           <div className="units-print-head">
             <h1>{locale === "tr" ? "Gün Sonu Unit Raporu" : "End-of-Day Unit Report"}</h1>
             <p>
-              {locale === "tr" ? "Rapor tarihi" : "Report date"}:{" "}
-              {formatLongDate(dayReport.date, locale)}
+              {locale === "tr" ? "Rapor dönemi" : "Report period"}:{" "}
+              {formatReportPeriod(
+                dayReport.dateFrom || dayReport.date,
+                dayReport.dateTo || dayReport.date,
+                locale,
+              )}
             </p>
             <p>
               {locale === "tr" ? "Proje" : "Project"}:{" "}
@@ -1463,7 +1938,10 @@ export default function UnitsPage() {
                 <th>{locale === "tr" ? "Saat" : "Time"}</th>
                 <th>{locale === "tr" ? "Unit" : "Unit"}</th>
                 <th>{locale === "tr" ? "Müşteri" : "Customer"}</th>
+                <th>{locale === "tr" ? "Bölüm" : "Section"}</th>
                 <th>{locale === "tr" ? "Alan" : "Field"}</th>
+                <th>{locale === "tr" ? "Eski değer" : "Old value"}</th>
+                <th>{locale === "tr" ? "Yeni değer" : "New value"}</th>
                 <th>{locale === "tr" ? "Kullanıcı" : "User"}</th>
               </tr>
             </thead>
@@ -1472,15 +1950,24 @@ export default function UnitsPage() {
                 dayReport.items.map((item) => (
                   <tr key={item.id}>
                     <td>{formatDate(item.createdAt, locale)}</td>
-                    <td>{item.unit.unitNumber}</td>
+                    <td>
+                      {item.unit.unitNumber}
+                      <br />
+                      <span className="units-print-muted">
+                        {item.unit.project ? projectLabel(item.unit.project as ProjectType) : "-"}
+                      </span>
+                    </td>
                     <td>{item.unit.customer?.fullName || "-"}</td>
+                    <td>{sectionLabelForReport(item.section, locale)}</td>
                     <td>{fieldLabelForReport(item.field, locale)}</td>
+                    <td>{displayReportValue(item.field, item.oldValue, locale)}</td>
+                    <td>{displayReportValue(item.field, item.newValue, locale)}</td>
                     <td>{item.createdBy?.name || "System"}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="units-print-muted">
+                  <td colSpan={8} className="units-print-muted">
                     {locale === "tr" ? "Bugün aktivite yok." : "No activity today."}
                   </td>
                 </tr>
@@ -1496,7 +1983,7 @@ export default function UnitsPage() {
             <div className="units-panel-title">
               <h2>{locale === "tr" ? "Unit Listesi" : "Unit List"}</h2>
               <div className="units-secondary-text">
-                {items.length} {locale === "tr" ? "kayıt" : "records"}
+                {displayedItems.length} {locale === "tr" ? "kayıt" : "records"}
               </div>
             </div>
 
@@ -1527,16 +2014,23 @@ export default function UnitsPage() {
                   <th>{locale === "tr" ? "Muhasebe" : "Accounting"}</th>
                   <th>{locale === "tr" ? "Kayıtlar" : "Records"}</th>
                   <th>{locale === "tr" ? "Güncelleme" : "Updated"}</th>
+                  {canDeleteUnits ? <th aria-label={locale === "tr" ? "İşlemler" : "Actions"} /> : null}
                 </tr>
               </thead>
 
               <tbody>
-                {items.map((item) => (
-                  <tr
-                    key={item.id}
-                    className={`units-row ${item.isCanceled ? "canceled" : ""}`}
-                    onClick={() => router.push(`/units/${item.id}`)}
-                  >
+                {displayedItems.map((item) => {
+                  const aidatOverdue = hasOverdueAidat(item);
+                  const undoneComplaint = hasUndoneComplaint(item);
+
+                  return (
+                    <tr
+                      key={item.id}
+                      className={`units-row ${item.isCanceled ? "canceled" : ""} ${
+                        aidatOverdue ? "overdue-aidat" : ""
+                      } ${undoneComplaint ? "undone-complaint" : ""}`}
+                      onClick={() => router.push(`/units/${item.id}`)}
+                    >
                     <td>
                       <span className="badge info">{projectLabel(item.project)}</span>
                     </td>
@@ -1606,6 +2100,11 @@ export default function UnitsPage() {
                         <span className={`badge ${item.trafoStatus === "PAID" ? "success" : "warning"}`}>
                           Trafo: {paymentLabel(item.trafoStatus, locale)}
                         </span>
+                        {aidatOverdue ? (
+                          <span className="badge danger">
+                            {locale === "tr" ? "Aidat ödenmedi" : "Aidat unpaid"}
+                          </span>
+                        ) : null}
                       </div>
                     </td>
                     <td>
@@ -1618,6 +2117,11 @@ export default function UnitsPage() {
                         {hasComplaint(item) ? (
                           <span className="badge danger">
                             {locale === "tr" ? "Şikayet" : "Complaint"}
+                          </span>
+                        ) : null}
+                        {undoneComplaint ? (
+                          <span className="badge danger">
+                            {locale === "tr" ? "Tamamlanmamış şikayet" : "Undone complaint"}
                           </span>
                         ) : null}
                         {hasInfo(item) ? (
@@ -1638,19 +2142,39 @@ export default function UnitsPage() {
                         </div>
                       </div>
                     </td>
-                  </tr>
-                ))}
+                    {canDeleteUnits ? (
+                      <td>
+                        <div className="units-row-actions">
+                          <button
+                            type="button"
+                            className="units-row-icon-button danger"
+                            aria-label={locale === "tr" ? "Unit sil" : "Delete unit"}
+                            title={locale === "tr" ? "Unit sil" : "Delete unit"}
+                            disabled={deletingId === item.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void deleteUnit(item);
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </td>
+                    ) : null}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
-          {!loading && items.length === 0 ? (
+          {!loading && displayedItems.length === 0 ? (
             <div className="units-empty">
               {locale === "tr" ? "Unit bulunamadı." : "No units found."}
             </div>
           ) : null}
 
-          {loading && items.length === 0 ? (
+          {loading && displayedItems.length === 0 ? (
             <div className="units-empty">
               {safeTranslate(t, "common.loading", locale === "tr" ? "Yükleniyor..." : "Loading...")}
             </div>

@@ -64,12 +64,17 @@ async function parseError(res: Response) {
 
 export async function authedFetch(path: string, init: RequestInit = {}) {
   const makeRequest = (headersOverride?: Record<string, string>) => {
+    const isFormData =
+      typeof FormData !== "undefined" && init.body instanceof FormData;
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
       ...authedHeaders(),
       ...(headersOverride || {}),
       ...(init.headers as Record<string, string> | undefined),
     };
+
+    if (!isFormData && !headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
 
     return fetch(`${API}${path}`, {
       ...init,
