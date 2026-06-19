@@ -457,6 +457,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const canSeeCRM =
     role === "ADMIN" || role === "MANAGER" || role === "SALES" || role === "CALLCENTER";
   const canSeeUnits = canSeeCRM || isAftersales;
+  const canSeeCustomers = canSeeCRM || isAftersales;
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
 
@@ -493,11 +494,17 @@ const isMeetingsActive = useMemo(
     () => pathname === "/units/dashboard" || pathname.startsWith("/units/dashboard/"),
     [pathname],
   );
+  const isUnitsAidatActive = useMemo(
+    () => pathname === "/units/aidat" || pathname.startsWith("/units/aidat/"),
+    [pathname],
+  );
   const isUnitsActive = useMemo(
     () =>
       pathname === "/units" ||
-      (pathname.startsWith("/units/") && !isUnitsDashboardActive),
-    [pathname, isUnitsDashboardActive],
+      (pathname.startsWith("/units/") &&
+        !isUnitsDashboardActive &&
+        !isUnitsAidatActive),
+    [pathname, isUnitsDashboardActive, isUnitsAidatActive],
   );
   const isRentProjectionActive = useMemo(
     () => pathname === "/rent-projection" || pathname.startsWith("/rent-projection/"),
@@ -510,6 +517,10 @@ const isMeetingsActive = useMemo(
       !isDemographicsReportActive,
     [pathname, isNationalityReportActive, isDemographicsReportActive],
   );
+  const isCustomersAreaActive = useMemo(
+    () => pathname === "/customers" || pathname.startsWith("/customers/"),
+    [pathname],
+  );
   const isManagerQueueActive = useMemo(
     () => pathname === "/manager/queue" || pathname.startsWith("/manager/queue/"),
     [pathname],
@@ -521,9 +532,16 @@ const isMeetingsActive = useMemo(
   );
 
   useEffect(() => {
-    if (!isAftersales || isUnitsActive) return;
+    if (
+      !isAftersales ||
+      isUnitsActive ||
+      isUnitsAidatActive ||
+      isCustomersAreaActive
+    ) {
+      return;
+    }
     window.location.replace("/units");
-  }, [isAftersales, isUnitsActive]);
+  }, [isAftersales, isUnitsActive, isUnitsAidatActive, isCustomersAreaActive]);
 
   return (
     <div
@@ -614,7 +632,7 @@ const isMeetingsActive = useMemo(
 ) : null}
 
 
-            {canSeeCRM ? (
+            {canSeeCustomers ? (
               <Link href="/customers" style={navItemStyle(isCustomersActive)}>
                 <NavIconWrap>
                   <CustomersIcon />
@@ -638,6 +656,15 @@ const isMeetingsActive = useMemo(
                   <UnitsIcon />
                 </NavIconWrap>
                 {safeTranslate(t, "nav.unitsDashboard", "Units Dashboard")}
+              </Link>
+            ) : null}
+
+            {canSeeUnits && (isAdmin || isManager || isAftersales) ? (
+              <Link href="/units/aidat" style={navItemStyle(isUnitsAidatActive)}>
+                <NavIconWrap>
+                  <UnitsIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.aidatSettings", "Aidat Settings")}
               </Link>
             ) : null}
 

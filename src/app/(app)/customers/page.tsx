@@ -431,9 +431,13 @@ export default function CustomersPage() {
     if (!mounted) return;
 
     load();
-    loadAgencies();
+    if (canCreate) {
+      loadAgencies();
+    } else {
+      setAgencies([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted]);
+  }, [mounted, canCreate]);
 
   useEffect(() => {
     if (!mounted) return;

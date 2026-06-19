@@ -29,6 +29,18 @@ type UnitAidatRow = {
   paidAt?: string | null;
 };
 
+type UnitAidatPayment = {
+  id?: string;
+  periodKey?: string | null;
+  title?: string | null;
+  amount?: number | string | null;
+  currency?: string | null;
+  status?: PaymentStatus | string | null;
+  dueDate?: string | null;
+  paidAt?: string | null;
+  note?: string | null;
+};
+
 type UnitCustomer = {
   id: string;
   fullName: string;
@@ -60,10 +72,12 @@ type UnitRow = {
   kdvStatus?: PaymentStatus | string;
   trafoStatus?: PaymentStatus | string;
   installments?: UnitAidatRow[] | null;
+  aidatPayments?: UnitAidatPayment[] | null;
   rentalStatus?: RentalStatus | string;
   createdAt?: string;
   updatedAt?: string;
   customer: UnitCustomer;
+  previousCustomer?: UnitCustomer | null;
 };
 
 type UnitStats = {
@@ -306,15 +320,29 @@ function dueDateKey(value?: string | null) {
   return dateKey(parsed);
 }
 
+function getAidatRows(item: UnitRow) {
+  if (Array.isArray(item.aidatPayments) && item.aidatPayments.length > 0) {
+    return item.aidatPayments;
+  }
+
+  return Array.isArray(item.installments) ? item.installments : [];
+}
+
 function hasOverdueAidat(item: UnitRow) {
   const today = dateKey(new Date());
 
-  return (Array.isArray(item.installments) ? item.installments : []).some((row) => {
+  return getAidatRows(item).some((row) => {
     const status = String(row?.status || "UNPAID").toUpperCase();
     const due = dueDateKey(row?.dueDate);
 
     return status !== "PAID" && Boolean(due) && due! < today;
   });
+}
+
+function hasUnpaidAidat(item: UnitRow) {
+  return getAidatRows(item).some(
+    (row) => String(row?.status || "UNPAID").toUpperCase() !== "PAID",
+  );
 }
 
 function rentalStatusLabel(status: string | undefined, locale: string) {
@@ -1622,6 +1650,11 @@ export default function UnitsPage() {
               )}
             </Link>
           ) : null}
+          {canSeeDayReport ? (
+            <Link href="/units/aidat" className="units-link-button">
+              {locale === "tr" ? "Aidat ayarları" : "Aidat settings"}
+            </Link>
+          ) : null}
           <Link href="/customers" className="units-link-button">
             {safeTranslate(t, "units.backToCustomers", locale === "tr" ? "Müşteriler" : "Customers")}
           </Link>
@@ -2021,6 +2054,8 @@ export default function UnitsPage() {
               <tbody>
                 {displayedItems.map((item) => {
                   const aidatOverdue = hasOverdueAidat(item);
+                  const aidatRows = getAidatRows(item);
+                  const aidatPaid = aidatRows.length > 0 && !hasUnpaidAidat(item);
                   const undoneComplaint = hasUndoneComplaint(item);
 
                   return (
@@ -2066,6 +2101,12 @@ export default function UnitsPage() {
                         <div className="units-secondary-text">
                           {item.customer.agency?.name || item.customer.companyName || "-"}
                         </div>
+                        {item.isCanceled && item.previousCustomer ? (
+                          <div className="units-secondary-text">
+                            {locale === "tr" ? "Önceki sahibi" : "Previous owner"}:{" "}
+                            {item.previousCustomer.fullName}
+                          </div>
+                        ) : null}
                       </div>
                     </td>
                     <td>
@@ -2103,6 +2144,11 @@ export default function UnitsPage() {
                         {aidatOverdue ? (
                           <span className="badge danger">
                             {locale === "tr" ? "Aidat ödenmedi" : "Aidat unpaid"}
+                          </span>
+                        ) : null}
+                        {aidatPaid ? (
+                          <span className="badge success">
+                            {locale === "tr" ? "Aidat ödendi" : "Aidat paid"}
                           </span>
                         ) : null}
                       </div>

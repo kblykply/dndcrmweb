@@ -43,6 +43,11 @@ type UnitAidatRow = {
   note?: string | null;
 };
 
+type UnitAidatPayment = UnitAidatRow & {
+  periodKey?: string | null;
+  currency?: string | null;
+};
+
 type UnitCustomer = {
   id: string;
   fullName: string;
@@ -66,6 +71,7 @@ type UnitRow = {
   kdvStatus?: PaymentStatus | string;
   trafoStatus?: PaymentStatus | string;
   installments?: UnitAidatRow[] | null;
+  aidatPayments?: UnitAidatPayment[] | null;
   electricityProvider?: ElectricityProvider | string;
   waterAccessStatus?: WaterAccessStatus | string;
   rentalPackage?: RentalPackage | string;
@@ -242,10 +248,18 @@ function parseCustomerComplaints(value: string | null | undefined): CustomerComp
   }
 }
 
+function getAidatRows(item: UnitRow) {
+  if (Array.isArray(item.aidatPayments) && item.aidatPayments.length > 0) {
+    return item.aidatPayments;
+  }
+
+  return Array.isArray(item.installments) ? item.installments : [];
+}
+
 function hasOverdueAidat(item: UnitRow) {
   const today = dateKey(new Date());
 
-  return (Array.isArray(item.installments) ? item.installments : []).some((row) => {
+  return getAidatRows(item).some((row) => {
     const status = String(row?.status || "UNPAID").toUpperCase();
     const due = dueDateKey(row?.dueDate);
 
@@ -256,7 +270,7 @@ function hasOverdueAidat(item: UnitRow) {
 function overdueAidatRows(item: UnitRow) {
   const today = dateKey(new Date());
 
-  return (Array.isArray(item.installments) ? item.installments : []).filter((row) => {
+  return getAidatRows(item).filter((row) => {
     const status = String(row?.status || "UNPAID").toUpperCase();
     const due = dueDateKey(row?.dueDate);
 
@@ -387,7 +401,7 @@ export default function UnitsDashboardPage() {
     const undoneComplaintUnits = countItems(items, hasUndoneComplaint);
 
     const aidatRows = items.flatMap((item) =>
-      (Array.isArray(item.installments) ? item.installments : []).map((row) => ({
+      getAidatRows(item).map((row) => ({
         item,
         row,
       })),
