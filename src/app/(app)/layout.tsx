@@ -454,10 +454,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isManager = role === "MANAGER" || role === "ADMIN";
   const isAdmin = role === "ADMIN";
   const isAftersales = role === "AFTERSALES";
+  const isAccounting = role === "ACCOUNTING";
   const canSeeCRM =
     role === "ADMIN" || role === "MANAGER" || role === "SALES" || role === "CALLCENTER";
   const canSeeUnits = canSeeCRM || isAftersales;
   const canSeeCustomers = canSeeCRM || isAftersales;
+  const canSeeFinance = isAdmin || isAccounting;
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
 
@@ -504,6 +506,10 @@ const isMeetingsActive = useMemo(
     () => pathname === "/rent-projection" || pathname.startsWith("/rent-projection/"),
     [pathname],
   );
+  const isFinanceActive = useMemo(
+    () => pathname === "/finance" || pathname.startsWith("/finance/"),
+    [pathname],
+  );
   const isCustomersActive = useMemo(
     () =>
       (pathname === "/customers" || pathname.startsWith("/customers/")) &&
@@ -535,6 +541,13 @@ const isMeetingsActive = useMemo(
     }
     window.location.replace("/units");
   }, [isAftersales, isUnitsActive, isCustomersAreaActive]);
+
+  useEffect(() => {
+    if (!isAccounting || isFinanceActive) {
+      return;
+    }
+    window.location.replace("/finance");
+  }, [isAccounting, isFinanceActive]);
 
   return (
     <div
@@ -659,6 +672,55 @@ const isMeetingsActive = useMemo(
                 </NavIconWrap>
                 {safeTranslate(t, "nav.rentProjection", "Rent Projection")}
               </Link>
+            ) : null}
+
+            {canSeeFinance ? (
+              <div
+                style={{
+                  display: "grid",
+                  gap: 6,
+                  marginTop: 8,
+                  paddingTop: 10,
+                  borderTop: "1px solid var(--stroke)",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "0 14px 4px",
+                    color: "var(--text-secondary)",
+                    fontSize: 11,
+                    fontWeight: 900,
+                    textTransform: "uppercase",
+                    letterSpacing: 0,
+                  }}
+                >
+                  {safeTranslate(t, "nav.finance", "Finance")}
+                </div>
+                <Link href="/finance" style={navItemStyle(pathname === "/finance")}>
+                  <NavIconWrap>
+                    <RentProjectionIcon />
+                  </NavIconWrap>
+                  {safeTranslate(t, "nav.financeDashboard", "Finance Dashboard")}
+                </Link>
+                <Link href="/finance/incomes" style={navItemStyle(pathname.startsWith("/finance/incomes"))}>
+                  <NavIconWrap>
+                    <RentProjectionIcon />
+                  </NavIconWrap>
+                  {safeTranslate(t, "nav.financeIncomes", "Incomes")}
+                </Link>
+                <Link href="/finance/expenses" style={navItemStyle(pathname.startsWith("/finance/expenses"))}>
+                  <NavIconWrap>
+                    <RentProjectionIcon />
+                  </NavIconWrap>
+                  {safeTranslate(t, "nav.financeExpenses", "Expenses")}
+                </Link>
+                <Link href="/finance/rates" style={navItemStyle(pathname.startsWith("/finance/rates"))}>
+                  <NavIconWrap>
+                    <RentProjectionIcon />
+                  </NavIconWrap>
+                  {safeTranslate(t, "nav.financeRates", "Rates")}
+                </Link>
+              </div>
             ) : null}
 
             {canSeeCRM ? (

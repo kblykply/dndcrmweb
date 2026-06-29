@@ -273,6 +273,7 @@ export default function AdminPage() {
       MANAGER: "#f59e0b",
       SALES: "#22c55e",
       AFTERSALES: "#14b8a6",
+      ACCOUNTING: "#0f766e",
     };
 
     return (data?.users?.byRole || []).map((r: any) => ({

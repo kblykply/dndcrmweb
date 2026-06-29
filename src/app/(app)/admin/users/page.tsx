@@ -6,7 +6,7 @@ import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
-type Role = "ADMIN" | "CALLCENTER" | "MANAGER" | "SALES" | "AFTERSALES";
+type Role = "ADMIN" | "CALLCENTER" | "MANAGER" | "SALES" | "AFTERSALES" | "ACCOUNTING";
 
 type UserRow = {
   id: string;
@@ -19,7 +19,7 @@ type UserRow = {
   createdAt?: string;
 };
 
-const ROLES: Role[] = ["ADMIN", "CALLCENTER", "MANAGER", "SALES", "AFTERSALES"];
+const ROLES: Role[] = ["ADMIN", "CALLCENTER", "MANAGER", "SALES", "AFTERSALES", "ACCOUNTING"];
 
 function safeTranslate(
   t: (path: string) => string,

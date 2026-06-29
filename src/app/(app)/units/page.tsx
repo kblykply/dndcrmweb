@@ -100,7 +100,7 @@ const DELIVERY_STATUSES: UnitDeliveryStatus[] = [
 ];
 
 const COMPANY_STATUSES: UnitCompanyStatus[] = ["UNKNOWN", "DND", "OTHER"];
-const DEFAULT_PROJECT: ProjectType = "LA_JOYA_PERLA";
+const DEFAULT_PROJECT: ProjectType = "LA_JOYA";
 
 function safeTranslate(
   t: (path: string) => string,

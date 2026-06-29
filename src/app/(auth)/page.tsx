@@ -25,7 +25,12 @@ export default function LoginPage() {
 });
 
 setSession(res.user, res.accessToken, res.refreshToken);
-window.location.href = res.user?.role === "AFTERSALES" ? "/units" : "/leads";
+window.location.href =
+  res.user?.role === "AFTERSALES"
+    ? "/units"
+    : res.user?.role === "ACCOUNTING"
+      ? "/finance"
+      : "/leads";
     } catch (e: any) {
       setErr("E-posta veya şifre hatalı.");
     } finally {
