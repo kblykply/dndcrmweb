@@ -79,6 +79,7 @@ function formatDate(value: string, locale: string) {
 function paymentTypeLabel(value: string, locale: string) {
   const tr: Record<string, string> = {
     SALE_INSTALLMENT: "Satış taksiti",
+    RENTAL_INCOME: "Kira geliri",
     CREDIT_INSTALLMENT: "Kredi taksiti",
     CHECK_PAYMENT: "Çek ödemesi",
     REALTOR_COMMISSION: "Emlakçı komisyonu",
@@ -90,6 +91,7 @@ function paymentTypeLabel(value: string, locale: string) {
   };
   const en: Record<string, string> = {
     SALE_INSTALLMENT: "Sale installment",
+    RENTAL_INCOME: "Rental income",
     CREDIT_INSTALLMENT: "Credit installment",
     CHECK_PAYMENT: "Check payment",
     REALTOR_COMMISSION: "Realtor commission",

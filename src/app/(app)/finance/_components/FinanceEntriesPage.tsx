@@ -10,6 +10,7 @@ type Currency = "GBP" | "USD" | "EUR" | "TRY";
 type Status = "PLANNED" | "PAID" | "OVERDUE" | "CANCELED";
 type PaymentType =
   | "SALE_INSTALLMENT"
+  | "RENTAL_INCOME"
   | "CREDIT_INSTALLMENT"
   | "CHECK_PAYMENT"
   | "REALTOR_COMMISSION"
@@ -47,6 +48,7 @@ type FinanceEntry = {
   originalDueDate: string;
   plannedDueDate: string;
   selectedDeferralDays?: number | null;
+  project?: ProjectType | null;
   customer?: { id: string; fullName: string; email?: string | null; phone?: string | null } | null;
   unitSelection?: {
     id: string;
@@ -55,7 +57,13 @@ type FinanceEntry = {
     customer?: { fullName: string } | null;
   } | null;
   dueOptions: DueOption[];
-  splits: Array<{ method: string; ratio: number; amount?: number | null; note?: string | null }>;
+  splits: Array<{
+    method: string;
+    ratio: number;
+    amount?: number | null;
+    unitSelectionId?: string | null;
+    note?: string | null;
+  }>;
 };
 
 type LookupCustomer = {
@@ -80,7 +88,7 @@ const PROJECTS: ProjectType[] = [
   "LA_JOYA_PERLA_II",
   "LAGOON_VERDE",
 ];
-const INCOME_TYPES: PaymentType[] = ["SALE_INSTALLMENT", "OTHER"];
+const INCOME_TYPES: PaymentType[] = ["SALE_INSTALLMENT", "RENTAL_INCOME", "OTHER"];
 const EXPENSE_TYPES: PaymentType[] = [
   "SUBCONTRACTOR",
   "CHECK_PAYMENT",
@@ -115,9 +123,15 @@ function formatDate(value?: string | null, locale?: string) {
   return new Date(value).toLocaleDateString(locale === "tr" ? "tr-TR" : "en-US");
 }
 
+function inputDate(value?: string | null) {
+  if (!value) return todayInput();
+  return new Date(value).toISOString().slice(0, 10);
+}
+
 function paymentTypeLabel(value: string, locale: string) {
   const tr: Record<string, string> = {
     SALE_INSTALLMENT: "Satış taksiti",
+    RENTAL_INCOME: "Kira geliri",
     CREDIT_INSTALLMENT: "Kredi taksiti",
     CHECK_PAYMENT: "Çek ödemesi",
     REALTOR_COMMISSION: "Emlakçı komisyonu",
@@ -129,6 +143,7 @@ function paymentTypeLabel(value: string, locale: string) {
   };
   const en: Record<string, string> = {
     SALE_INSTALLMENT: "Sale installment",
+    RENTAL_INCOME: "Rental income",
     CREDIT_INSTALLMENT: "Credit installment",
     CHECK_PAYMENT: "Check payment",
     REALTOR_COMMISSION: "Realtor commission",
@@ -186,6 +201,7 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
   const [notice, setNotice] = useState("");
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [editingEntryId, setEditingEntryId] = useState("");
 
   const [title, setTitle] = useState("");
   const [paymentType, setPaymentType] = useState<PaymentType>(
@@ -251,6 +267,7 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
   );
 
   function resetForm() {
+    setEditingEntryId("");
     setTitle("");
     setPaymentType(isIncome ? "SALE_INSTALLMENT" : "SUBCONTRACTOR");
     setStatus("PLANNED");
@@ -272,7 +289,46 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
     setBarterUnitSelectionId("");
   }
 
-  async function createEntry() {
+  function fillForm(item: FinanceEntry) {
+    const selectedOption = item.dueOptions.find((option) => option.isSelected);
+    const cash = item.splits.find((split) => split.method === "CASH");
+    const check = item.splits.find((split) => split.method === "CHECK");
+    const barter = item.splits.find((split) => split.method === "BARTER");
+
+    setEditingEntryId(item.id);
+    setTitle(item.title || "");
+    setPaymentType(item.paymentType);
+    setStatus(item.status || "PLANNED");
+    setAmount(String(item.amount ?? ""));
+    setCurrency(item.currency || "GBP");
+    setExchangeRateToBase(
+      item.exchangeRateToBase === null || item.exchangeRateToBase === undefined
+        ? ""
+        : String(item.exchangeRateToBase),
+    );
+    setOriginalDueDate(inputDate(item.originalDueDate));
+    setSelectedDeferralDays(
+      String(selectedOption?.daysFromOriginal ?? item.selectedDeferralDays ?? 0),
+    );
+    setOptionDays(
+      item.dueOptions.length > 0
+        ? item.dueOptions.map((option) => option.daysFromOriginal).join(",")
+        : "0,30,60,90",
+    );
+    setCustomerId(item.customer?.id || "");
+    setUnitSelectionId(item.unitSelection?.id || "");
+    setProject(item.project || item.unitSelection?.project || "");
+    setVendorName(item.vendorName || "");
+    setContractReference(item.contractReference || "");
+    setDescription(item.description || "");
+    setCashRatio(String(cash?.ratio ?? 60));
+    setCheckRatio(String(check?.ratio ?? 30));
+    setBarterRatio(String(barter?.ratio ?? 10));
+    setBarterUnitSelectionId(barter?.unitSelectionId || "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function saveEntry() {
     setSaving(true);
     setErr("");
     setNotice("");
@@ -295,8 +351,10 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
         : [];
 
     try {
-      await authedFetch("/finance/entries", {
-        method: "POST",
+      await authedFetch(
+        editingEntryId ? `/finance/entries/${editingEntryId}` : "/finance/entries",
+        {
+        method: editingEntryId ? "PATCH" : "POST",
         body: JSON.stringify({
           kind,
           title,
@@ -316,14 +374,39 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
           description: description || null,
           splits,
         }),
-      });
-      setNotice(locale === "tr" ? "Kayıt oluşturuldu." : "Entry created.");
+      },
+      );
+      setNotice(
+        editingEntryId
+          ? locale === "tr" ? "Kayıt güncellendi." : "Entry updated."
+          : locale === "tr" ? "Kayıt oluşturuldu." : "Entry created.",
+      );
       resetForm();
       load();
     } catch (e: any) {
       setErr(String(e?.message || e));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteEntry(item: FinanceEntry) {
+    const ok = window.confirm(
+      locale === "tr"
+        ? `"${item.title}" kaydını silmek istiyor musun?`
+        : `Delete "${item.title}"?`,
+    );
+    if (!ok) return;
+
+    setErr("");
+    setNotice("");
+    try {
+      await authedFetch(`/finance/entries/${item.id}`, { method: "DELETE" });
+      if (editingEntryId === item.id) resetForm();
+      setNotice(locale === "tr" ? "Kayıt silindi." : "Entry deleted.");
+      load();
+    } catch (e: any) {
+      setErr(String(e?.message || e));
     }
   }
 
@@ -361,7 +444,11 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
       <section className="finance-shell">
         <div className="finance-panel form">
           <div className="finance-panel-head">
-            <h2>{locale === "tr" ? "Yeni kayıt" : "New entry"}</h2>
+            <h2>
+              {editingEntryId
+                ? locale === "tr" ? "Kaydı düzenle" : "Edit entry"
+                : locale === "tr" ? "Yeni kayıt" : "New entry"}
+            </h2>
             <button type="button" onClick={resetForm}>
               {locale === "tr" ? "Temizle" : "Reset"}
             </button>
@@ -498,8 +585,12 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
             </div>
           ) : null}
 
-          <button className="finance-primary" type="button" disabled={saving} onClick={createEntry}>
-            {saving ? (locale === "tr" ? "Kaydediliyor..." : "Saving...") : locale === "tr" ? "Kaydet" : "Save"}
+          <button className="finance-primary" type="button" disabled={saving} onClick={saveEntry}>
+            {saving
+              ? locale === "tr" ? "Kaydediliyor..." : "Saving..."
+              : editingEntryId
+                ? locale === "tr" ? "Güncelle" : "Update"
+                : locale === "tr" ? "Kaydet" : "Save"}
           </button>
         </div>
 
@@ -529,7 +620,17 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
                     <strong>{item.title}</strong>
                     <span>{paymentTypeLabel(item.paymentType, locale)} / {statusLabel(item.status, locale)}</span>
                   </div>
-                  <strong>{formatMoney(item.amount, item.currency, locale)}</strong>
+                  <div className="finance-entry-side">
+                    <strong>{formatMoney(item.amount, item.currency, locale)}</strong>
+                    <div className="finance-entry-actions">
+                      <button type="button" onClick={() => fillForm(item)}>
+                        {locale === "tr" ? "Düzenle" : "Edit"}
+                      </button>
+                      <button type="button" className="danger" onClick={() => deleteEntry(item)}>
+                        {locale === "tr" ? "Sil" : "Delete"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div className="finance-entry-meta">
                   <span>{locale === "tr" ? "Sözleşme" : "Contract"}: {formatDate(item.originalDueDate, locale)}</span>
@@ -765,6 +866,31 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
         .finance-entry-main > div {
           display: grid;
           gap: 4px;
+        }
+
+        .finance-entry-side {
+          display: grid;
+          gap: 8px;
+          justify-items: end;
+        }
+
+        .finance-entry-actions {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .finance-entry-actions button {
+          min-height: 34px;
+          padding: 0 10px;
+          font-size: 12px;
+        }
+
+        .finance-entry-actions button.danger {
+          color: var(--danger);
+          background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+          border-color: color-mix(in srgb, var(--danger) 26%, var(--stroke));
         }
 
         .finance-entry-meta {
