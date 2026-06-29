@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -306,14 +306,10 @@ export default function FinanceDashboardPage() {
   const entries = data?.entries || [];
   const scenarioShift = totals.expense - scenario.expense;
 
-  const pieRows = useMemo(
-    () =>
-      paymentRows.map((row) => ({
-        name: paymentTypeLabel(row.paymentType, locale),
-        value: Math.abs(row.income) + Math.abs(row.expense),
-      })),
-    [locale, paymentRows],
-  );
+  const pieRows = paymentRows.map((row) => ({
+    name: paymentTypeLabel(row.paymentType, locale),
+    value: Math.abs(row.income) + Math.abs(row.expense),
+  }));
 
   return (
     <main className="finance-dashboard">
