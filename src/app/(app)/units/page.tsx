@@ -17,29 +17,7 @@ type UnitDeliveryStatus = "NOT_READY" | "READY_TO_DELIVER" | "DELIVERED";
 type UnitCompanyStatus = "UNKNOWN" | "DND" | "OTHER";
 type PaymentStatus = "UNPAID" | "PAID";
 type RentalStatus = "SHORT_TERM" | "LONG_TERM" | "DND_UNITS" | "NOT_INTERESTED";
-type UnitIssueFilter = "" | "OVERDUE_AIDAT" | "UNDONE_COMPLAINT";
-
-type UnitAidatRow = {
-  id?: string;
-  type?: string | null;
-  title?: string | null;
-  amount?: number | string | null;
-  dueDate?: string | null;
-  status?: PaymentStatus | string | null;
-  paidAt?: string | null;
-};
-
-type UnitAidatPayment = {
-  id?: string;
-  periodKey?: string | null;
-  title?: string | null;
-  amount?: number | string | null;
-  currency?: string | null;
-  status?: PaymentStatus | string | null;
-  dueDate?: string | null;
-  paidAt?: string | null;
-  note?: string | null;
-};
+type UnitIssueFilter = "" | "UNDONE_COMPLAINT";
 
 type UnitCustomer = {
   id: string;
@@ -71,8 +49,6 @@ type UnitRow = {
   isCanceled?: boolean;
   kdvStatus?: PaymentStatus | string;
   trafoStatus?: PaymentStatus | string;
-  installments?: UnitAidatRow[] | null;
-  aidatPayments?: UnitAidatPayment[] | null;
   rentalStatus?: RentalStatus | string;
   createdAt?: string;
   updatedAt?: string;
@@ -207,40 +183,6 @@ function reportUtilityLabel(field: string, value: string, locale: string) {
   return value;
 }
 
-function formatReportAmount(value: number, locale: string) {
-  return new Intl.NumberFormat(locale === "tr" ? "tr-TR" : "en-US", {
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function summarizeAidatRows(value: string, locale: string) {
-  try {
-    const rows = JSON.parse(value);
-    if (!Array.isArray(rows)) return value;
-
-    const summary = rows.reduce(
-      (acc, row) => {
-        const amount = Number(row?.amount || 0);
-        if (String(row?.status || "UNPAID").toUpperCase() === "PAID") {
-          acc.paidCount += 1;
-          acc.paidAmount += amount;
-        } else {
-          acc.unpaidCount += 1;
-          acc.unpaidAmount += amount;
-        }
-        return acc;
-      },
-      { paidCount: 0, paidAmount: 0, unpaidCount: 0, unpaidAmount: 0 },
-    );
-
-    return locale === "tr"
-      ? `${rows.length} aidat · Ödendi ${summary.paidCount} (${formatReportAmount(summary.paidAmount, locale)}) · Ödenmedi ${summary.unpaidCount} (${formatReportAmount(summary.unpaidAmount, locale)})`
-      : `${rows.length} aidat · Paid ${summary.paidCount} (${formatReportAmount(summary.paidAmount, locale)}) · Unpaid ${summary.unpaidCount} (${formatReportAmount(summary.unpaidAmount, locale)})`;
-  } catch {
-    return value;
-  }
-}
-
 function clampReportText(value: string, max = 220) {
   if (value.length <= max) return value;
   return `${value.slice(0, max - 1)}...`;
@@ -284,10 +226,6 @@ function hasUndoneComplaint(item: UnitRow) {
 }
 
 function issueFilterLabel(value: UnitIssueFilter, locale: string) {
-  if (value === "OVERDUE_AIDAT") {
-    return locale === "tr" ? "Geciken aidat" : "Overdue aidat";
-  }
-
   if (value === "UNDONE_COMPLAINT") {
     return locale === "tr" ? "Tamamlanmamış şikayet" : "Undone complaint";
   }
@@ -300,49 +238,6 @@ function dateKey(value: Date) {
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function dueDateKey(value?: string | null) {
-  const raw = (value || "").trim();
-  if (!raw) return null;
-
-  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
-
-  const localMatch = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
-  if (localMatch) {
-    return `${localMatch[3]}-${localMatch[2].padStart(2, "0")}-${localMatch[1].padStart(2, "0")}`;
-  }
-
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return null;
-
-  return dateKey(parsed);
-}
-
-function getAidatRows(item: UnitRow) {
-  if (Array.isArray(item.aidatPayments) && item.aidatPayments.length > 0) {
-    return item.aidatPayments;
-  }
-
-  return Array.isArray(item.installments) ? item.installments : [];
-}
-
-function hasOverdueAidat(item: UnitRow) {
-  const today = dateKey(new Date());
-
-  return getAidatRows(item).some((row) => {
-    const status = String(row?.status || "UNPAID").toUpperCase();
-    const due = dueDateKey(row?.dueDate);
-
-    return status !== "PAID" && Boolean(due) && due! < today;
-  });
-}
-
-function hasUnpaidAidat(item: UnitRow) {
-  return getAidatRows(item).some(
-    (row) => String(row?.status || "UNPAID").toUpperCase() !== "PAID",
-  );
 }
 
 function rentalStatusLabel(status: string | undefined, locale: string) {
@@ -365,7 +260,6 @@ function fieldLabelForReport(field: string, locale: string) {
     cancelReason: { en: "Cancel reason", tr: "İptal nedeni" },
     kdvStatus: { en: "KDV status", tr: "KDV durumu" },
     trafoStatus: { en: "Trafo status", tr: "Trafo durumu" },
-    installments: { en: "Installments", tr: "Taksitler" },
     electricityProvider: { en: "Electricity", tr: "Elektrik" },
     waterAccessStatus: { en: "Water access", tr: "Su erişimi" },
     rentalPackage: { en: "Rental package", tr: "Kiralama paketi" },
@@ -422,10 +316,6 @@ function displayReportValue(field: string, value: string | null | undefined, loc
 
   if (field === "rentalStatus") {
     return rentalStatusLabel(raw, locale);
-  }
-
-  if (field === "installments") {
-    return summarizeAidatRows(raw, locale);
   }
 
   if (field === "customerComplaint") {
@@ -626,10 +516,6 @@ export default function UnitsPage() {
   );
 
   const displayedItems = useMemo(() => {
-    if (issueFilter === "OVERDUE_AIDAT") {
-      return items.filter((item) => hasOverdueAidat(item));
-    }
-
     if (issueFilter === "UNDONE_COMPLAINT") {
       return items.filter((item) => hasUndoneComplaint(item));
     }
@@ -1193,7 +1079,6 @@ export default function UnitsPage() {
           background: color-mix(in srgb, var(--danger) 6%, var(--surface));
         }
 
-        .units-row.overdue-aidat td,
         .units-row.undone-complaint td {
           background: color-mix(in srgb, var(--danger) 8%, var(--surface));
         }
@@ -1202,7 +1087,6 @@ export default function UnitsPage() {
           box-shadow: inset 0 0 0 transparent;
         }
 
-        .units-row.overdue-aidat td:first-child,
         .units-row.undone-complaint td:first-child {
           box-shadow: inset 3px 0 0 var(--danger);
         }
@@ -1650,11 +1534,6 @@ export default function UnitsPage() {
               )}
             </Link>
           ) : null}
-          {canSeeDayReport ? (
-            <Link href="/units/aidat" className="units-link-button">
-              {locale === "tr" ? "Aidat ayarları" : "Aidat settings"}
-            </Link>
-          ) : null}
           <Link href="/customers" className="units-link-button">
             {safeTranslate(t, "units.backToCustomers", locale === "tr" ? "Müşteriler" : "Customers")}
           </Link>
@@ -1756,9 +1635,6 @@ export default function UnitsPage() {
               onChange={(e) => setIssueFilter(e.target.value as UnitIssueFilter)}
             >
               <option value="">{issueFilterLabel("", locale)}</option>
-              <option value="OVERDUE_AIDAT">
-                {issueFilterLabel("OVERDUE_AIDAT", locale)}
-              </option>
               <option value="UNDONE_COMPLAINT">
                 {issueFilterLabel("UNDONE_COMPLAINT", locale)}
               </option>
@@ -2053,17 +1929,14 @@ export default function UnitsPage() {
 
               <tbody>
                 {displayedItems.map((item) => {
-                  const aidatOverdue = hasOverdueAidat(item);
-                  const aidatRows = getAidatRows(item);
-                  const aidatPaid = aidatRows.length > 0 && !hasUnpaidAidat(item);
                   const undoneComplaint = hasUndoneComplaint(item);
 
                   return (
                     <tr
                       key={item.id}
                       className={`units-row ${item.isCanceled ? "canceled" : ""} ${
-                        aidatOverdue ? "overdue-aidat" : ""
-                      } ${undoneComplaint ? "undone-complaint" : ""}`}
+                        undoneComplaint ? "undone-complaint" : ""
+                      }`}
                       onClick={() => router.push(`/units/${item.id}`)}
                     >
                     <td>
@@ -2141,16 +2014,6 @@ export default function UnitsPage() {
                         <span className={`badge ${item.trafoStatus === "PAID" ? "success" : "warning"}`}>
                           Trafo: {paymentLabel(item.trafoStatus, locale)}
                         </span>
-                        {aidatOverdue ? (
-                          <span className="badge danger">
-                            {locale === "tr" ? "Aidat ödenmedi" : "Aidat unpaid"}
-                          </span>
-                        ) : null}
-                        {aidatPaid ? (
-                          <span className="badge success">
-                            {locale === "tr" ? "Aidat ödendi" : "Aidat paid"}
-                          </span>
-                        ) : null}
                       </div>
                     </td>
                     <td>

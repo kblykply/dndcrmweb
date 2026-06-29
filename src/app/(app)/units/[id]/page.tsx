@@ -30,34 +30,6 @@ type LogSection =
   | "ADMIN"
   | "COMMUNICATION";
 
-type UnitInstallment = {
-  id: string;
-  type: "AIDAT";
-  title: string;
-  amount?: number | null;
-  dueDate?: string | null;
-  status: PaymentStatus;
-  paidAt?: string | null;
-  note?: string | null;
-};
-
-type UnitAidatPayment = {
-  id: string;
-  year: number;
-  month: number;
-  periodKey: string;
-  title: string;
-  amount: number | string;
-  originalAmount?: number | string | null;
-  currency: string;
-  status: PaymentStatus | string;
-  billingType?: "MONTHLY" | "ANNUAL" | string;
-  discountPercent?: number | string | null;
-  dueDate?: string | null;
-  paidAt?: string | null;
-  note?: string | null;
-};
-
 type CustomerComplaintRow = {
   id: string;
   complaint: string;
@@ -107,8 +79,6 @@ type UnitDetail = {
   canceledAt?: string | null;
   kdvStatus?: PaymentStatus | string;
   trafoStatus?: PaymentStatus | string;
-  installments?: UnitInstallment[] | null;
-  aidatPayments?: UnitAidatPayment[] | null;
   electricityProvider?: ElectricityProvider | string;
   waterAccessStatus?: WaterAccessStatus | string;
   rentalPackage?: RentalPackage | string;
@@ -222,14 +192,6 @@ function paymentTone(status: string | undefined) {
   return status === "PAID" ? "success" : "warning";
 }
 
-function formatAmount(value: number | null | undefined, locale: string) {
-  if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
-
-  return new Intl.NumberFormat(locale === "tr" ? "tr-TR" : "en-US", {
-    maximumFractionDigits: 2,
-  }).format(Number(value));
-}
-
 function fieldLabel(field: string, locale: string) {
   const labels: Record<string, { en: string; tr: string }> = {
     deliveryStatus: { en: "Delivery status", tr: "Teslim durumu" },
@@ -243,7 +205,6 @@ function fieldLabel(field: string, locale: string) {
     cancelReason: { en: "Cancel reason", tr: "İptal nedeni" },
     kdvStatus: { en: "KDV status", tr: "KDV durumu" },
     trafoStatus: { en: "Trafo status", tr: "Trafo durumu" },
-    installments: { en: "Installments", tr: "Taksitler" },
     electricityProvider: { en: "Electricity", tr: "Elektrik" },
     waterAccessStatus: { en: "Water access", tr: "Su erişimi" },
     rentalPackage: { en: "Rental package", tr: "Kiralama paketi" },
@@ -279,16 +240,6 @@ function displayValue(field: string, value: string | null | undefined, locale: s
           } / ${complaintStatusLabel(row.status, locale)}`,
       )
       .join("\n");
-  }
-  if (field === "installments") {
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed)
-        ? `${parsed.length} ${locale === "tr" ? "kayıt" : "records"}`
-        : value;
-    } catch {
-      return value;
-    }
   }
   return value;
 }
@@ -412,104 +363,6 @@ function FieldSelect({
       </select>
     </label>
   );
-}
-
-function newAidatRow(index: number): UnitInstallment {
-  return {
-    id: `aidat-${Date.now()}-${index}`,
-    type: "AIDAT",
-    title: `Aidat ${index + 1}`,
-    amount: null,
-    dueDate: "",
-    status: "UNPAID",
-    paidAt: "",
-    note: "",
-  };
-}
-
-function serializeInstallments(rows?: UnitInstallment[] | null) {
-  return JSON.stringify(rows || []);
-}
-
-function normalizeAidatRows(rows?: UnitInstallment[] | null) {
-  return (Array.isArray(rows) ? rows : []).map((row, index) => ({
-    ...row,
-    id: row.id || `aidat-${Date.now()}-${index}`,
-    type: "AIDAT" as const,
-    title: row.title || `Aidat ${index + 1}`,
-    status: row.status === "PAID" ? ("PAID" as const) : ("UNPAID" as const),
-  }));
-}
-
-function legacyAidatPayment(row: UnitInstallment, index: number): UnitAidatPayment {
-  const dueDate = row.dueDate || "";
-  const periodMatch = dueDate.match(/^(\d{4})-(\d{2})/);
-  const now = new Date();
-  const year = periodMatch ? Number(periodMatch[1]) : now.getFullYear();
-  const month = periodMatch ? Number(periodMatch[2]) : index + 1;
-
-  return {
-    id: row.id || `legacy-aidat-${index}`,
-    year,
-    month,
-    periodKey: `${year}-${String(month).padStart(2, "0")}`,
-    title: row.title || `Aidat ${index + 1}`,
-    amount: row.amount ?? 0,
-    originalAmount: null,
-    currency: "",
-    status: row.status === "PAID" ? "PAID" : "UNPAID",
-    billingType: "MONTHLY",
-    discountPercent: null,
-    dueDate,
-    paidAt: row.paidAt || null,
-    note: row.note || "",
-  };
-}
-
-function normalizeAidatPayments(
-  rows?: UnitAidatPayment[] | null,
-  legacyRows?: UnitInstallment[] | null,
-) {
-  const source = Array.isArray(rows) ? rows : [];
-
-  if (source.length === 0 && Array.isArray(legacyRows) && legacyRows.length > 0) {
-    return normalizeAidatRows(legacyRows).map(legacyAidatPayment);
-  }
-
-  return source.map((row, index) => ({
-    ...row,
-    id: row.id || `aidat-payment-${index}`,
-    year: Number(row.year || new Date().getFullYear()),
-    month: Number(row.month || index + 1),
-    periodKey:
-      row.periodKey ||
-      `${Number(row.year || new Date().getFullYear())}-${String(
-        Number(row.month || index + 1),
-      ).padStart(2, "0")}`,
-    title: row.title || `Aidat ${index + 1}`,
-    amount: Number(row.amount || 0),
-    originalAmount:
-      row.originalAmount === null || row.originalAmount === undefined
-        ? null
-        : Number(row.originalAmount),
-    currency: row.currency || "",
-    status: row.status === "PAID" ? ("PAID" as const) : ("UNPAID" as const),
-    billingType: row.billingType || "MONTHLY",
-    discountPercent:
-      row.discountPercent === null || row.discountPercent === undefined
-        ? null
-        : Number(row.discountPercent),
-    note: row.note || "",
-  }));
-}
-
-function formatMoneyWithCurrency(
-  amount: number | string | null | undefined,
-  currency: string | null | undefined,
-  locale: string,
-) {
-  const formatted = formatAmount(Number(amount || 0), locale);
-  return currency ? `${formatted} ${currency}` : formatted;
 }
 
 function normalizeWhatsAppPhone(value?: string | null) {
@@ -667,13 +520,6 @@ export default function UnitDetailPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [kdvStatus, setKdvStatus] = useState<PaymentStatus>("UNPAID");
   const [trafoStatus, setTrafoStatus] = useState<PaymentStatus>("UNPAID");
-  const [installments, setInstallments] = useState<UnitInstallment[]>([]);
-  const [aidatPayments, setAidatPayments] = useState<UnitAidatPayment[]>([]);
-  const [aidatSavingId, setAidatSavingId] = useState("");
-  const [annualAidatYear, setAnnualAidatYear] = useState(
-    String(new Date().getFullYear()),
-  );
-  const [annualAidatNote, setAnnualAidatNote] = useState("");
   const [electricityProvider, setElectricityProvider] =
     useState<ElectricityProvider>("UNKNOWN");
   const [waterAccessStatus, setWaterAccessStatus] =
@@ -690,8 +536,6 @@ export default function UnitDetailPage() {
   const [communicationNotice, setCommunicationNotice] = useState("");
 
   const isAdmin = me?.role === "ADMIN";
-  const canManageAidat =
-    me?.role === "ADMIN" || me?.role === "MANAGER" || me?.role === "AFTERSALES";
 
   const logs = useMemo(() => unit?.logs || [], [unit?.logs]);
   const unitInformationLogs = useMemo(
@@ -716,37 +560,6 @@ export default function UnitDetailPage() {
       ),
     [logs],
   );
-  const installmentSummary = useMemo(() => {
-    return aidatPayments.reduce(
-      (acc, item) => {
-        const amount = Number(item.amount || 0);
-        acc.total += amount;
-        if (item.status === "PAID") {
-          acc.paid += amount;
-          acc.paidCount += 1;
-        } else {
-          acc.unpaid += amount;
-          acc.unpaidCount += 1;
-        }
-        return acc;
-      },
-      { total: 0, paid: 0, unpaid: 0, paidCount: 0, unpaidCount: 0 },
-    );
-  }, [aidatPayments]);
-  const aidatCurrency = useMemo(
-    () => aidatPayments.find((item) => item.currency)?.currency || "",
-    [aidatPayments],
-  );
-  const persistedPaidAidatIds = useMemo(
-    () =>
-      new Set(
-        normalizeAidatRows(unit?.installments)
-          .filter((row) => row.status === "PAID")
-          .map((row) => row.id),
-      ),
-    [unit?.installments],
-  );
-
   const isDirty = useMemo(() => {
     if (!unit) return false;
 
@@ -763,8 +576,6 @@ export default function UnitDetailPage() {
       (isAdmin && cleanText(cancelReason) !== cleanText(unit.cancelReason)) ||
       kdvStatus !== (unit.kdvStatus || "UNPAID") ||
       trafoStatus !== (unit.trafoStatus || "UNPAID") ||
-      serializeInstallments(installments) !==
-        serializeInstallments(normalizeAidatRows(unit.installments)) ||
       electricityProvider !== (unit.electricityProvider || "UNKNOWN") ||
       waterAccessStatus !== (unit.waterAccessStatus || "UNKNOWN") ||
       rentalPackage !== (unit.rentalPackage || "NOT_INTERESTED") ||
@@ -780,7 +591,6 @@ export default function UnitDetailPage() {
     deliveryStatus,
     electricityProvider,
     generalInfo,
-    installments,
     isAdmin,
     isCanceled,
     kdvStatus,
@@ -805,8 +615,6 @@ export default function UnitDetailPage() {
     setCancelReason(next.cancelReason || "");
     setKdvStatus((next.kdvStatus as PaymentStatus) || "UNPAID");
     setTrafoStatus((next.trafoStatus as PaymentStatus) || "UNPAID");
-    setInstallments(normalizeAidatRows(next.installments));
-    setAidatPayments(normalizeAidatPayments(next.aidatPayments, next.installments));
     setElectricityProvider((next.electricityProvider as ElectricityProvider) || "UNKNOWN");
     setWaterAccessStatus((next.waterAccessStatus as WaterAccessStatus) || "UNKNOWN");
     setRentalPackage((next.rentalPackage as RentalPackage) || "NOT_INTERESTED");
@@ -849,7 +657,6 @@ export default function UnitDetailPage() {
         unitComplaint,
         kdvStatus,
         trafoStatus,
-        installments: normalizeAidatRows(installments),
         electricityProvider,
         waterAccessStatus,
         rentalPackage,
@@ -876,110 +683,8 @@ export default function UnitDetailPage() {
     }
   }
 
-  function updateInstallment(id: string, patch: Partial<UnitInstallment>) {
-    setInstallments((prev) =>
-      prev.map((item) => {
-        if (item.id !== id) return item;
-        if (item.status === "PAID" && patch.status === undefined) return item;
-
-        const nextStatus = patch.status || item.status;
-
-        return {
-          ...item,
-          ...patch,
-          type: "AIDAT",
-          paidAt:
-            nextStatus === "PAID"
-              ? item.paidAt || new Date().toISOString()
-              : null,
-        };
-      }),
-    );
-  }
-
-  function removeInstallment(id: string) {
-    setInstallments((prev) =>
-      prev.filter((item) => item.id !== id || item.status === "PAID"),
-    );
-  }
-
-  function updateAidatPaymentLocal(id: string, patch: Partial<UnitAidatPayment>) {
-    setAidatPayments((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-    );
-  }
-
   function updateCanceled(nextCanceled: boolean) {
     setIsCanceled(nextCanceled);
-  }
-
-  async function saveAidatPayment(
-    payment: UnitAidatPayment,
-    patch: { status?: PaymentStatus; note?: string | null },
-  ) {
-    if (!unit) return;
-
-    if (!canManageAidat) {
-      setErr(locale === "tr" ? "Aidat güncelleme yetkiniz yok." : "No access to update aidat.");
-      return;
-    }
-
-    if (payment.id.startsWith("legacy-") || payment.id.startsWith("aidat-")) {
-      setErr(
-        locale === "tr"
-          ? "Bu eski aidat satırı yeni sisteme taşınmadan güncellenemez."
-          : "This legacy aidat row cannot be updated before migration.",
-      );
-      return;
-    }
-
-    setAidatSavingId(payment.id);
-    setErr(null);
-
-    try {
-      const updated = (await authedFetch(`/units/${unit.id}/aidat/${payment.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(patch),
-      })) as UnitDetail;
-
-      setUnit(updated);
-      applyForm(updated);
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-      load();
-    } finally {
-      setAidatSavingId("");
-    }
-  }
-
-  async function payAnnualAidat() {
-    if (!unit) return;
-
-    if (!canManageAidat) {
-      setErr(locale === "tr" ? "Aidat güncelleme yetkiniz yok." : "No access to update aidat.");
-      return;
-    }
-
-    setAidatSavingId("annual");
-    setErr(null);
-
-    try {
-      const updated = (await authedFetch(`/units/${unit.id}/aidat/pay-annual`, {
-        method: "POST",
-        body: JSON.stringify({
-          year: annualAidatYear,
-          note: annualAidatNote,
-        }),
-      })) as UnitDetail;
-
-      setUnit(updated);
-      applyForm(updated);
-      setAnnualAidatNote("");
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setAidatSavingId("");
-    }
   }
 
   function updateCustomerComplaint(id: string, patch: Partial<CustomerComplaintRow>) {
@@ -1430,104 +1135,6 @@ export default function UnitDetailPage() {
           gap: 10px;
         }
 
-        .unit-detail-installments {
-          display: grid;
-          gap: 12px;
-          min-width: 0;
-        }
-
-        .unit-detail-installment-list {
-          display: grid;
-          gap: 10px;
-          min-width: 0;
-        }
-
-        .unit-detail-link.small {
-          min-height: 34px;
-          padding: 0 12px;
-          font-size: 12px;
-        }
-
-        .unit-detail-annual-aidat {
-          display: grid;
-          grid-template-columns: minmax(220px, 1fr) 110px minmax(160px, 0.7fr) auto;
-          gap: 10px;
-          align-items: end;
-          padding: 12px;
-          border: 1px solid var(--stroke);
-          border-radius: 8px;
-          background: color-mix(in srgb, var(--info) 7%, var(--surface));
-        }
-
-        .unit-detail-annual-aidat > div {
-          display: grid;
-          gap: 4px;
-        }
-
-        .unit-detail-annual-aidat strong {
-          font-size: 14px;
-        }
-
-        .unit-detail-annual-aidat span {
-          color: var(--text-secondary);
-          font-size: 12px;
-          font-weight: 800;
-          line-height: 1.35;
-        }
-
-        .unit-detail-annual-aidat input {
-          width: 100%;
-          min-width: 0;
-        }
-
-        .unit-detail-aidat-table {
-          display: grid;
-          gap: 8px;
-          min-width: 0;
-        }
-
-        .unit-detail-aidat-row {
-          display: grid;
-          grid-template-columns: minmax(130px, 0.9fr) minmax(130px, 0.9fr) minmax(100px, 0.7fr) minmax(125px, 0.8fr) minmax(160px, 1fr);
-          gap: 8px;
-          align-items: end;
-          min-width: 0;
-          padding: 10px;
-          border: 1px solid var(--stroke);
-          border-radius: 8px;
-          background: var(--surface-2);
-        }
-
-        .unit-detail-aidat-row.locked {
-          background: color-mix(in srgb, var(--success) 7%, var(--surface-2));
-          border-color: color-mix(in srgb, var(--success) 24%, var(--stroke));
-        }
-
-        .unit-detail-aidat-period,
-        .unit-detail-aidat-money,
-        .unit-detail-aidat-date {
-          display: grid;
-          gap: 4px;
-          min-width: 0;
-        }
-
-        .unit-detail-aidat-period strong,
-        .unit-detail-aidat-money strong,
-        .unit-detail-aidat-date strong {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .unit-detail-aidat-period span,
-        .unit-detail-aidat-money span,
-        .unit-detail-aidat-date span {
-          color: var(--text-secondary);
-          font-size: 11px;
-          font-weight: 900;
-          line-height: 1.25;
-        }
-
         .unit-detail-complaints {
           display: grid;
           gap: 10px;
@@ -1563,37 +1170,6 @@ export default function UnitDetailPage() {
 
         .unit-detail-complaint-row textarea {
           min-height: 72px;
-        }
-
-        .unit-detail-installment-row {
-          display: grid;
-          grid-template-columns: minmax(170px, 1.35fr) minmax(90px, 0.7fr) minmax(130px, 0.9fr) minmax(110px, 0.8fr) 40px;
-          gap: 8px;
-          align-items: end;
-          min-width: 0;
-          padding: 10px;
-          border: 1px solid var(--stroke);
-          border-radius: 8px;
-          background: var(--surface-2);
-        }
-
-        .unit-detail-installment-row.locked {
-          background: color-mix(in srgb, var(--success) 6%, var(--surface-2));
-          border-color: color-mix(in srgb, var(--success) 24%, var(--stroke));
-        }
-
-        .unit-detail-installment-row .unit-detail-field {
-          gap: 5px;
-        }
-
-        .unit-detail-installment-row .unit-detail-field span {
-          font-size: 11px;
-        }
-
-        .unit-detail-installment-row input,
-        .unit-detail-installment-row select {
-          min-height: 38px;
-          padding-inline: 10px;
         }
 
         .unit-detail-icon-button {
@@ -2004,9 +1580,6 @@ export default function UnitDetailPage() {
           .unit-detail-cancel-body,
           .unit-detail-complaint-grid,
           .unit-detail-complaint-actions,
-          .unit-detail-installment-row,
-          .unit-detail-annual-aidat,
-          .unit-detail-aidat-row,
           .unit-detail-diff {
             grid-template-columns: 1fr;
             width: 100%;
@@ -2150,7 +1723,9 @@ export default function UnitDetailPage() {
                   <div className="unit-detail-panel-title">
                     <h2>{locale === "tr" ? "Muhasebe" : "Accounting"}</h2>
                     <span className="unit-detail-muted">
-                      {aidatPayments.length} {locale === "tr" ? "aylık aidat kaydı" : "monthly aidat records"}
+                      {locale === "tr"
+                        ? "KDV ve trafo ödeme durumları"
+                        : "KDV and trafo payment status"}
                     </span>
                   </div>
                   <div className="unit-detail-badge-strip">
@@ -2160,23 +1735,6 @@ export default function UnitDetailPage() {
                     <span className={`unit-detail-pill ${paymentTone(trafoStatus)}`}>
                       Trafo {paymentLabel(trafoStatus, locale)}
                     </span>
-                  </div>
-                </div>
-
-                <div className="unit-detail-summary-grid">
-                  <div className="unit-detail-summary-card">
-                    <span>{locale === "tr" ? "Toplam" : "Total"}</span>
-                    <strong>{formatMoneyWithCurrency(installmentSummary.total, aidatCurrency, locale)}</strong>
-                  </div>
-                  <div className="unit-detail-summary-card">
-                    <span>{locale === "tr" ? "Ödendi" : "Paid"}</span>
-                    <strong>{formatMoneyWithCurrency(installmentSummary.paid, aidatCurrency, locale)}</strong>
-                    <span>{installmentSummary.paidCount} {locale === "tr" ? "satır" : "rows"}</span>
-                  </div>
-                  <div className="unit-detail-summary-card">
-                    <span>{locale === "tr" ? "Ödenmedi" : "Unpaid"}</span>
-                    <strong>{formatMoneyWithCurrency(installmentSummary.unpaid, aidatCurrency, locale)}</strong>
-                    <span>{installmentSummary.unpaidCount} {locale === "tr" ? "satır" : "rows"}</span>
                   </div>
                 </div>
 
@@ -2195,130 +1753,6 @@ export default function UnitDetailPage() {
                     options={PAYMENT_STATUSES}
                     labelFor={(value) => paymentLabel(value, locale)}
                   />
-                </div>
-
-                <div className="unit-detail-installments">
-                  <div className="unit-detail-subhead">
-                    <span>{locale === "tr" ? "Aylık aidat kayıtları" : "Monthly aidat records"}</span>
-                    {canManageAidat ? (
-                      <Link href="/units/aidat" className="unit-detail-link small">
-                        {locale === "tr" ? "Aidat ayarları" : "Aidat settings"}
-                      </Link>
-                    ) : null}
-                  </div>
-
-                  <div className="unit-detail-annual-aidat">
-                    <div>
-                      <strong>{locale === "tr" ? "Yıllık ödeme" : "Annual payment"}</strong>
-                      <span>
-                        {locale === "tr"
-                          ? "Seçilen yılın 12 ayı yıllık indirimle ödendi yapılır."
-                          : "Marks the selected year as paid with the annual discount."}
-                      </span>
-                    </div>
-                    <input
-                      inputMode="numeric"
-                      value={annualAidatYear}
-                      disabled={!canManageAidat || aidatSavingId === "annual"}
-                      onChange={(e) => setAnnualAidatYear(e.target.value)}
-                      aria-label={locale === "tr" ? "Aidat yılı" : "Aidat year"}
-                    />
-                    <input
-                      value={annualAidatNote}
-                      disabled={!canManageAidat || aidatSavingId === "annual"}
-                      onChange={(e) => setAnnualAidatNote(e.target.value)}
-                      placeholder={locale === "tr" ? "Not" : "Note"}
-                    />
-                    <button
-                      type="button"
-                      className="unit-detail-add-row"
-                      disabled={!canManageAidat || aidatSavingId === "annual"}
-                      onClick={payAnnualAidat}
-                    >
-                      {aidatSavingId === "annual"
-                        ? locale === "tr" ? "İşleniyor..." : "Processing..."
-                        : locale === "tr" ? "Yıllık öde" : "Pay annual"}
-                    </button>
-                  </div>
-
-                  {aidatPayments.length > 0 ? (
-                    <div className="unit-detail-aidat-table">
-                      {aidatPayments.map((item) => {
-                        const isPaid = item.status === "PAID";
-                        const isSaving = aidatSavingId === item.id;
-                        const isLegacy =
-                          item.id.startsWith("legacy-") || item.id.startsWith("aidat-");
-
-                        return (
-                          <div
-                            key={item.id}
-                            className={`unit-detail-aidat-row ${isPaid ? "locked" : ""}`}
-                          >
-                            <div className="unit-detail-aidat-period">
-                              <strong>{item.periodKey}</strong>
-                              <span>{item.title}</span>
-                            </div>
-                            <div className="unit-detail-aidat-money">
-                              <strong>{formatMoneyWithCurrency(item.amount, item.currency, locale)}</strong>
-                              {item.billingType === "ANNUAL" && item.discountPercent ? (
-                                <span>
-                                  {locale === "tr"
-                                    ? `%${formatAmount(Number(item.discountPercent), locale)} yıllık indirim`
-                                    : `${formatAmount(Number(item.discountPercent), locale)}% annual discount`}
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="unit-detail-aidat-date">
-                              <span>{locale === "tr" ? "Vade" : "Due"}</span>
-                              <strong>{item.dueDate ? item.dueDate.slice(0, 10) : "-"}</strong>
-                            </div>
-                            <FieldSelect
-                              label={locale === "tr" ? "Durum" : "Status"}
-                              value={String(item.status)}
-                              disabled={!canManageAidat || isSaving || isLegacy}
-                              onChange={(value) => {
-                                const status = value as PaymentStatus;
-                                updateAidatPaymentLocal(item.id, {
-                                  status,
-                                  paidAt: status === "PAID" ? item.paidAt || new Date().toISOString() : null,
-                                });
-                                saveAidatPayment(item, {
-                                  status,
-                                  note: item.note || null,
-                                });
-                              }}
-                              options={PAYMENT_STATUSES}
-                              labelFor={(value) => paymentLabel(value, locale)}
-                            />
-                            <label className="unit-detail-field">
-                              <span>{locale === "tr" ? "Not" : "Note"}</span>
-                              <input
-                                value={item.note || ""}
-                                disabled={!canManageAidat || isSaving || isLegacy}
-                                onChange={(e) =>
-                                  updateAidatPaymentLocal(item.id, { note: e.target.value })
-                                }
-                                onBlur={() =>
-                                  saveAidatPayment(item, {
-                                    status: item.status === "PAID" ? "PAID" : "UNPAID",
-                                    note: item.note || null,
-                                  })
-                                }
-                              />
-                            </label>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-
-                  {aidatPayments.length === 0 ? (
-                    <div className="unit-detail-empty">
-                      {locale === "tr"
-                        ? "Henüz aidat kaydı yok. Aidat ayarlarında aylık tutarı belirleyip dönem oluşturun."
-                        : "No aidat records yet. Set the monthly amount in aidat settings and generate a period."}
-                    </div>
-                  ) : null}
                 </div>
               </section>
 

@@ -494,17 +494,11 @@ const isMeetingsActive = useMemo(
     () => pathname === "/units/dashboard" || pathname.startsWith("/units/dashboard/"),
     [pathname],
   );
-  const isUnitsAidatActive = useMemo(
-    () => pathname === "/units/aidat" || pathname.startsWith("/units/aidat/"),
-    [pathname],
-  );
   const isUnitsActive = useMemo(
     () =>
       pathname === "/units" ||
-      (pathname.startsWith("/units/") &&
-        !isUnitsDashboardActive &&
-        !isUnitsAidatActive),
-    [pathname, isUnitsDashboardActive, isUnitsAidatActive],
+      (pathname.startsWith("/units/") && !isUnitsDashboardActive),
+    [pathname, isUnitsDashboardActive],
   );
   const isRentProjectionActive = useMemo(
     () => pathname === "/rent-projection" || pathname.startsWith("/rent-projection/"),
@@ -535,13 +529,12 @@ const isMeetingsActive = useMemo(
     if (
       !isAftersales ||
       isUnitsActive ||
-      isUnitsAidatActive ||
       isCustomersAreaActive
     ) {
       return;
     }
     window.location.replace("/units");
-  }, [isAftersales, isUnitsActive, isUnitsAidatActive, isCustomersAreaActive]);
+  }, [isAftersales, isUnitsActive, isCustomersAreaActive]);
 
   return (
     <div
@@ -656,15 +649,6 @@ const isMeetingsActive = useMemo(
                   <UnitsIcon />
                 </NavIconWrap>
                 {safeTranslate(t, "nav.unitsDashboard", "Units Dashboard")}
-              </Link>
-            ) : null}
-
-            {canSeeUnits && (isAdmin || isManager || isAftersales) ? (
-              <Link href="/units/aidat" style={navItemStyle(isUnitsAidatActive)}>
-                <NavIconWrap>
-                  <UnitsIcon />
-                </NavIconWrap>
-                {safeTranslate(t, "nav.aidatSettings", "Aidat Settings")}
               </Link>
             ) : null}
 

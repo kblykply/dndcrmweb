@@ -33,21 +33,6 @@ type WaterAccessStatus = "UNKNOWN" | "ON" | "OFF";
 type RentalPackage = "FULL_FURNISHED" | "NOT_INTERESTED" | "CUSTOM";
 type RentalStatus = "SHORT_TERM" | "LONG_TERM" | "DND_UNITS" | "NOT_INTERESTED";
 
-type UnitAidatRow = {
-  id?: string;
-  title?: string | null;
-  amount?: number | string | null;
-  dueDate?: string | null;
-  status?: PaymentStatus | string | null;
-  paidAt?: string | null;
-  note?: string | null;
-};
-
-type UnitAidatPayment = UnitAidatRow & {
-  periodKey?: string | null;
-  currency?: string | null;
-};
-
 type UnitCustomer = {
   id: string;
   fullName: string;
@@ -70,8 +55,6 @@ type UnitRow = {
   isCanceled?: boolean;
   kdvStatus?: PaymentStatus | string;
   trafoStatus?: PaymentStatus | string;
-  installments?: UnitAidatRow[] | null;
-  aidatPayments?: UnitAidatPayment[] | null;
   electricityProvider?: ElectricityProvider | string;
   waterAccessStatus?: WaterAccessStatus | string;
   rentalPackage?: RentalPackage | string;
@@ -203,31 +186,6 @@ function paymentLabel(status: string | undefined, locale: string) {
     : locale === "tr" ? "Ödenmedi" : "Unpaid";
 }
 
-function dateKey(value: Date) {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function dueDateKey(value?: string | null) {
-  const raw = (value || "").trim();
-  if (!raw) return null;
-
-  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
-
-  const localMatch = raw.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
-  if (localMatch) {
-    return `${localMatch[3]}-${localMatch[2].padStart(2, "0")}-${localMatch[1].padStart(2, "0")}`;
-  }
-
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) return null;
-
-  return dateKey(parsed);
-}
-
 function parseCustomerComplaints(value: string | null | undefined): CustomerComplaintRow[] {
   const raw = (value || "").trim();
   if (!raw) return [];
@@ -248,36 +206,6 @@ function parseCustomerComplaints(value: string | null | undefined): CustomerComp
   }
 }
 
-function getAidatRows(item: UnitRow) {
-  if (Array.isArray(item.aidatPayments) && item.aidatPayments.length > 0) {
-    return item.aidatPayments;
-  }
-
-  return Array.isArray(item.installments) ? item.installments : [];
-}
-
-function hasOverdueAidat(item: UnitRow) {
-  const today = dateKey(new Date());
-
-  return getAidatRows(item).some((row) => {
-    const status = String(row?.status || "UNPAID").toUpperCase();
-    const due = dueDateKey(row?.dueDate);
-
-    return status !== "PAID" && Boolean(due) && due! < today;
-  });
-}
-
-function overdueAidatRows(item: UnitRow) {
-  const today = dateKey(new Date());
-
-  return getAidatRows(item).filter((row) => {
-    const status = String(row?.status || "UNPAID").toUpperCase();
-    const due = dueDateKey(row?.dueDate);
-
-    return status !== "PAID" && Boolean(due) && due! < today;
-  });
-}
-
 function hasUndoneComplaint(item: UnitRow) {
   return parseCustomerComplaints(item.customerComplaint).some(
     (row) => row.status !== "DONE",
@@ -287,12 +215,6 @@ function hasUndoneComplaint(item: UnitRow) {
 function formatNumber(value: number, locale: string) {
   return new Intl.NumberFormat(locale === "tr" ? "tr-TR" : "en-US", {
     maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function formatAmount(value: number, locale: string) {
-  return new Intl.NumberFormat(locale === "tr" ? "tr-TR" : "en-US", {
-    maximumFractionDigits: 2,
   }).format(value);
 }
 
@@ -397,28 +319,7 @@ export default function UnitsDashboardPage() {
       items,
       (item) => item.rentalPackage === "CUSTOM" && Boolean(item.customFurniture?.trim()),
     );
-    const overdueAidatUnits = countItems(items, hasOverdueAidat);
     const undoneComplaintUnits = countItems(items, hasUndoneComplaint);
-
-    const aidatRows = items.flatMap((item) =>
-      getAidatRows(item).map((row) => ({
-        item,
-        row,
-      })),
-    );
-    const paidAidatRows = aidatRows.filter(
-      ({ row }) => String(row.status || "UNPAID").toUpperCase() === "PAID",
-    );
-    const unpaidAidatRows = aidatRows.length - paidAidatRows.length;
-    const overdueAidatAmount = items.reduce(
-      (sum, item) =>
-        sum +
-        overdueAidatRows(item).reduce(
-          (rowSum, row) => rowSum + (Number(row.amount) || 0),
-          0,
-        ),
-      0,
-    );
 
     const complaintRows = items.flatMap((item) =>
       parseCustomerComplaints(item.customerComplaint).map((row) => ({ item, row })),
@@ -525,7 +426,6 @@ export default function UnitsDashboardPage() {
           (item) => item.rentalPackage === "FULL_FURNISHED",
         ),
         customFurniture: countItems(projectItems, (item) => item.rentalPackage === "CUSTOM"),
-        overdueAidat: countItems(projectItems, hasOverdueAidat),
         undoneComplaints: countItems(projectItems, hasUndoneComplaint),
       };
     }).filter((row) => row.total > 0);
@@ -538,12 +438,6 @@ export default function UnitsDashboardPage() {
     }));
 
     const attentionData: ChartDatum[] = [
-      {
-        key: "overdue-aidat",
-        name: locale === "tr" ? "Geciken aidat" : "Overdue aidat",
-        value: overdueAidatUnits,
-        color: "#dc2626",
-      },
       {
         key: "undone-complaints",
         name: locale === "tr" ? "Açık şikayet" : "Undone complaints",
@@ -561,11 +455,6 @@ export default function UnitsDashboardPage() {
     const attentionRows = items
       .map((item) => {
         const issues = [
-          hasOverdueAidat(item)
-            ? locale === "tr"
-              ? "Aidat ödenmedi"
-              : "Aidat unpaid"
-            : null,
           hasUndoneComplaint(item)
             ? locale === "tr"
               ? "Açık şikayet"
@@ -592,12 +481,7 @@ export default function UnitsDashboardPage() {
       fullFurnished,
       customFurniture,
       customFurnitureNotes,
-      overdueAidatUnits,
-      overdueAidatAmount,
       undoneComplaintUnits,
-      totalAidatRows: aidatRows.length,
-      paidAidatRows: paidAidatRows.length,
-      unpaidAidatRows,
       totalComplaintRows: complaintRows.length,
       undoneComplaintRows: undoneComplaintRows.length,
       deliveryData,
@@ -1091,12 +975,6 @@ export default function UnitsDashboardPage() {
           tone="good"
         />
         <DashboardCard
-          title={locale === "tr" ? "Geciken aidat" : "Overdue aidat"}
-          value={formatNumber(metrics.overdueAidatUnits, locale)}
-          sub={`${formatAmount(metrics.overdueAidatAmount, locale)} ${locale === "tr" ? "toplam açık tutar" : "open amount"}`}
-          tone={metrics.overdueAidatUnits > 0 ? "danger" : "good"}
-        />
-        <DashboardCard
           title={locale === "tr" ? "Açık şikayet" : "Undone complaints"}
           value={formatNumber(metrics.undoneComplaintUnits, locale)}
           sub={`${formatNumber(metrics.undoneComplaintRows, locale)} / ${formatNumber(metrics.totalComplaintRows, locale)} ${locale === "tr" ? "şikayet satırı" : "complaint rows"}`}
@@ -1265,8 +1143,8 @@ export default function UnitsDashboardPage() {
           title={locale === "tr" ? "Muhasebe" : "Accounting"}
           subtitle={
             locale === "tr"
-              ? `${metrics.paidAidatRows} ödenen aidat · ${metrics.unpaidAidatRows} açık aidat`
-              : `${metrics.paidAidatRows} paid aidat · ${metrics.unpaidAidatRows} unpaid aidat`
+              ? "KDV ve trafo ödeme durumları"
+              : "KDV and trafo payment status"
           }
         >
           {hasChartValues(metrics.accountingData) ? (
@@ -1345,8 +1223,8 @@ export default function UnitsDashboardPage() {
           title={locale === "tr" ? "Dikkat gerekenler" : "Needs attention"}
           subtitle={
             locale === "tr"
-              ? "Geciken aidat, açık şikayet ve iptal kayıtları"
-              : "Overdue aidat, undone complaints and canceled records"
+              ? "Açık şikayet ve iptal kayıtları"
+              : "Undone complaints and canceled records"
           }
         >
           {hasChartValues(metrics.attentionData) ? (
@@ -1423,10 +1301,6 @@ export default function UnitsDashboardPage() {
                     </td>
                     <td>
                       <div className="units-dashboard-badges">
-                        <span className="units-dashboard-badge danger">
-                          {formatNumber(row.overdueAidat, locale)}{" "}
-                          {locale === "tr" ? "aidat" : "aidat"}
-                        </span>
                         <span className="units-dashboard-badge warning">
                           {formatNumber(row.undoneComplaints, locale)}{" "}
                           {locale === "tr" ? "şikayet" : "complaints"}
@@ -1496,7 +1370,6 @@ export default function UnitsDashboardPage() {
                           <span
                             key={`${item.id}-${issue}`}
                             className={`units-dashboard-badge ${
-                              issue.toLowerCase().includes("aidat") ||
                               issue.toLowerCase().includes("complaint") ||
                               issue.toLowerCase().includes("şikayet")
                                 ? "danger"
