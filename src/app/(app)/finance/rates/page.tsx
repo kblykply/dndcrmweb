@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
@@ -27,6 +28,12 @@ function formatDate(value: string, locale: string) {
   return new Date(value).toLocaleDateString(locale === "tr" ? "tr-TR" : "en-US");
 }
 
+function formatRate(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 6,
+  }).format(Number(value || 0));
+}
+
 export default function FinanceRatesPage() {
   const { locale } = useLanguage();
   const [checked, setChecked] = useState(false);
@@ -39,6 +46,7 @@ export default function FinanceRatesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     const user = getUser();
@@ -69,6 +77,7 @@ export default function FinanceRatesPage() {
   async function save() {
     setSaving(true);
     setErr("");
+    setNotice("");
     try {
       await authedFetch("/finance/exchange-rates", {
         method: "POST",
@@ -82,6 +91,7 @@ export default function FinanceRatesPage() {
       });
       setRateToBase("");
       setNote("");
+      setNotice(locale === "tr" ? "Kur kaydedildi." : "Rate saved.");
       load();
     } catch (e: any) {
       setErr(String(e?.message || e));
@@ -92,20 +102,52 @@ export default function FinanceRatesPage() {
 
   if (!checked) return null;
 
+  const latestRows = CURRENCIES.filter((item) => item !== baseCurrency).map((item) => ({
+    currency: item,
+    rate: items.find((row) => row.currency === item && row.baseCurrency === baseCurrency),
+  }));
+
   return (
     <main className="rates-page">
       <div className="rates-head">
         <div>
-          <p>{locale === "tr" ? "Finans" : "Finance"}</p>
+          <p>{locale === "tr" ? "Finans merkezi" : "Finance center"}</p>
           <h1>{locale === "tr" ? "Manuel kurlar" : "Manual exchange rates"}</h1>
         </div>
       </div>
 
+      <nav className="rates-tabs" aria-label="Finance sections">
+        <Link href="/finance">{locale === "tr" ? "Dashboard" : "Dashboard"}</Link>
+        <Link href="/finance/incomes">{locale === "tr" ? "Gelirler" : "Incomes"}</Link>
+        <Link href="/finance/expenses">{locale === "tr" ? "Giderler" : "Expenses"}</Link>
+        <Link className="active" href="/finance/rates">{locale === "tr" ? "Kurlar" : "Rates"}</Link>
+      </nav>
+
       {err ? <div className="rates-alert">{err}</div> : null}
+      {notice ? <div className="rates-alert success">{notice}</div> : null}
+
+      <section className="rates-strip">
+        {latestRows.map((row) => (
+          <div key={row.currency} className="rates-card">
+            <span>{row.currency} / {baseCurrency}</span>
+            <strong>{row.rate ? formatRate(row.rate.rateToBase) : "-"}</strong>
+            <small>
+              {row.rate
+                ? `${formatDate(row.rate.effectiveDate, locale)}${row.rate.createdBy?.name ? ` / ${row.rate.createdBy.name}` : ""}`
+                : locale === "tr" ? "Kur yok" : "No rate"}
+            </small>
+          </div>
+        ))}
+      </section>
 
       <section className="rates-grid">
         <div className="rates-panel">
-          <h2>{locale === "tr" ? "Kur ekle" : "Add rate"}</h2>
+          <div className="rates-panel-head">
+            <div>
+              <h2>{locale === "tr" ? "Kur ekle" : "Add rate"}</h2>
+              <span>{locale === "tr" ? "Seçilen baz para dashboard hesaplamalarında kullanılır" : "Selected base currency is used in dashboard calculations"}</span>
+            </div>
+          </div>
           <div className="rates-form">
             <label>
               <span>{locale === "tr" ? "Para birimi" : "Currency"}</span>
@@ -142,7 +184,12 @@ export default function FinanceRatesPage() {
         </div>
 
         <div className="rates-panel">
-          <h2>{locale === "tr" ? "Kur geçmişi" : "Rate history"}</h2>
+          <div className="rates-panel-head">
+            <div>
+              <h2>{locale === "tr" ? "Kur geçmişi" : "Rate history"}</h2>
+              <span>{items.length} {locale === "tr" ? "kayıt" : "records"}</span>
+            </div>
+          </div>
           {loading ? <div className="rates-empty">{locale === "tr" ? "Yükleniyor..." : "Loading..."}</div> : null}
           {!loading && items.length === 0 ? <div className="rates-empty">{locale === "tr" ? "Kayıt yok" : "No rates"}</div> : null}
           <div className="rates-list">
@@ -152,7 +199,7 @@ export default function FinanceRatesPage() {
                   <strong>{item.currency} / {item.baseCurrency}</strong>
                   <span>{formatDate(item.effectiveDate, locale)} {item.createdBy?.name ? `- ${item.createdBy.name}` : ""}</span>
                 </div>
-                <strong>{item.rateToBase}</strong>
+                <strong>{formatRate(item.rateToBase)}</strong>
                 {item.note ? <span>{item.note}</span> : null}
               </article>
             ))}
@@ -164,17 +211,90 @@ export default function FinanceRatesPage() {
         .rates-page {
           display: grid;
           gap: 18px;
+          color: var(--text-primary);
         }
 
         .rates-head p {
           margin: 0 0 6px;
-          color: var(--text-secondary);
+          color: var(--info);
           font-weight: 800;
+          font-size: 12px;
+          text-transform: uppercase;
         }
 
         .rates-head h1 {
           margin: 0;
           font-size: 34px;
+        }
+
+        .rates-tabs {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          width: fit-content;
+          padding: 4px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface);
+          box-shadow: var(--shadow-sm);
+        }
+
+        .rates-tabs a {
+          display: inline-flex;
+          align-items: center;
+          min-height: 36px;
+          padding: 0 12px;
+          border: 1px solid transparent;
+          border-radius: 8px;
+          color: var(--text-primary);
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .rates-tabs a.active,
+        .rates-tabs a:hover {
+          border-color: var(--stroke);
+          background: var(--surface-2);
+        }
+
+        .rates-strip {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .rates-card {
+          display: grid;
+          gap: 6px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface);
+          box-shadow: var(--shadow-sm);
+          padding: 14px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .rates-card::before,
+        .rates-row::before {
+          content: "";
+          position: absolute;
+          inset: 0 auto 0 0;
+          width: 4px;
+          background: var(--info);
+        }
+
+        .rates-card strong {
+          font-size: 24px;
+          line-height: 1.05;
+        }
+
+        .rates-card span,
+        .rates-card small {
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 800;
         }
 
         .rates-grid {
@@ -196,6 +316,19 @@ export default function FinanceRatesPage() {
           display: grid;
           gap: 14px;
           padding: 16px;
+          align-content: start;
+        }
+
+        .rates-panel-head {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: center;
+        }
+
+        .rates-panel-head > div {
+          display: grid;
+          gap: 4px;
         }
 
         .rates-panel h2 {
@@ -218,6 +351,7 @@ export default function FinanceRatesPage() {
         }
 
         label span,
+        .rates-panel-head span,
         .rates-row span {
           color: var(--text-secondary);
           font-size: 12px;
@@ -237,9 +371,27 @@ export default function FinanceRatesPage() {
           font-weight: 800;
         }
 
+        input:focus,
+        select:focus,
+        button:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--info) 36%, transparent);
+          outline-offset: 1px;
+        }
+
+        button {
+          cursor: pointer;
+          transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+        }
+
+        button:hover:not(:disabled) {
+          transform: translateY(-1px);
+        }
+
         .rates-primary {
           background: var(--text-primary);
           color: var(--surface);
+          min-height: 46px;
+          font-weight: 900;
         }
 
         .rates-alert {
@@ -249,6 +401,12 @@ export default function FinanceRatesPage() {
           color: var(--danger);
           background: color-mix(in srgb, var(--danger) 8%, var(--surface));
           font-weight: 800;
+        }
+
+        .rates-alert.success {
+          border-color: color-mix(in srgb, var(--success) 30%, var(--stroke));
+          color: var(--success);
+          background: color-mix(in srgb, var(--success) 8%, var(--surface));
         }
 
         .rates-list {
@@ -262,6 +420,11 @@ export default function FinanceRatesPage() {
           gap: 8px;
           padding: 12px;
           align-items: center;
+          position: relative;
+          overflow: hidden;
+          background:
+            linear-gradient(90deg, color-mix(in srgb, var(--surface-2) 62%, transparent), transparent 48%),
+            var(--surface);
         }
 
         .rates-row > div {
@@ -278,8 +441,19 @@ export default function FinanceRatesPage() {
 
         @media (max-width: 900px) {
           .rates-grid,
-          .rates-form {
+          .rates-form,
+          .rates-strip {
             grid-template-columns: 1fr;
+          }
+
+          .rates-tabs,
+          .rates-tabs a {
+            width: 100%;
+          }
+
+          .rates-tabs a {
+            justify-content: center;
+            flex: 1 1 auto;
           }
         }
       `}</style>

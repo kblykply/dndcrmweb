@@ -193,7 +193,10 @@ function StatCard({
 }) {
   return (
     <div className={`finance-stat ${tone || ""}`}>
-      <span>{label}</span>
+      <div className="finance-stat-top">
+        <span>{label}</span>
+        <i aria-hidden="true" />
+      </div>
       <strong>{value}</strong>
       <small>{detail}</small>
     </div>
@@ -315,40 +318,50 @@ export default function FinanceDashboardPage() {
     <main className="finance-dashboard">
       <div className="finance-hero">
         <div>
-          <p>{locale === "tr" ? "Finans" : "Finance"}</p>
+          <p>{locale === "tr" ? "Finans merkezi" : "Finance center"}</p>
           <h1>
             {locale === "tr"
               ? "Nakit akışı, vade kontrolü ve kar projeksiyonu"
               : "Cash flow, due-date control and profit projection"}
           </h1>
         </div>
-        <div className="finance-actions">
+        <nav className="finance-tabs" aria-label="Finance sections">
+          <Link className="active" href="/finance">{locale === "tr" ? "Dashboard" : "Dashboard"}</Link>
           <Link href="/finance/incomes">{locale === "tr" ? "Gelirler" : "Incomes"}</Link>
           <Link href="/finance/expenses">{locale === "tr" ? "Giderler" : "Expenses"}</Link>
           <Link href="/finance/rates">{locale === "tr" ? "Kurlar" : "Rates"}</Link>
-        </div>
+        </nav>
       </div>
 
       <section className="finance-filter-band">
-        <label>
-          <span>{locale === "tr" ? "Başlangıç" : "From"}</span>
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        </label>
-        <label>
-          <span>{locale === "tr" ? "Bitiş" : "To"}</span>
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </label>
-        <label>
-          <span>{locale === "tr" ? "Baz para" : "Base"}</span>
-          <select value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value as Currency)}>
-            {CURRENCIES.map((item) => (
-              <option key={item} value={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-        <button type="button" onClick={load} disabled={loading}>
-          {loading ? (locale === "tr" ? "Yükleniyor..." : "Loading...") : locale === "tr" ? "Hesapla" : "Calculate"}
-        </button>
+        <div className="finance-filter-copy">
+          <strong>{formatDate(dateFrom, locale)} - {formatDate(dateTo, locale)}</strong>
+          <span>
+            {entries.length} {locale === "tr" ? "kayıt" : "entries"} / {baseCurrency}{" "}
+            {locale === "tr" ? "bazında görünüm" : "base view"}
+          </span>
+        </div>
+        <div className="finance-filter-controls">
+          <label>
+            <span>{locale === "tr" ? "Başlangıç" : "From"}</span>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </label>
+          <label>
+            <span>{locale === "tr" ? "Bitiş" : "To"}</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </label>
+          <label>
+            <span>{locale === "tr" ? "Baz para" : "Base"}</span>
+            <select value={baseCurrency} onChange={(e) => setBaseCurrency(e.target.value as Currency)}>
+              {CURRENCIES.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={load} disabled={loading}>
+            {loading ? (locale === "tr" ? "Yükleniyor..." : "Loading...") : locale === "tr" ? "Hesapla" : "Calculate"}
+          </button>
+        </div>
       </section>
 
       {err ? <div className="finance-alert danger">{err}</div> : null}
@@ -390,7 +403,10 @@ export default function FinanceDashboardPage() {
         ].map(([key, label]) => {
           const row = data?.dueBuckets?.[key as keyof DashboardData["dueBuckets"]];
           return (
-            <div key={key} className="finance-bucket">
+            <div
+              key={key}
+              className={`finance-bucket ${key === "overdue" ? "danger" : key === "next7" ? "warning" : ""}`}
+            >
               <span>{label}</span>
               <strong>{formatMoney((row?.income || 0) - (row?.expense || 0), baseCurrency, locale)}</strong>
               <small>
@@ -523,6 +539,9 @@ export default function FinanceDashboardPage() {
               <div className="finance-entry-title">
                 <strong>{entry.title}</strong>
                 <span>
+                  <i className={`finance-kind-pill ${entry.kind.toLowerCase()}`}>
+                    {entry.kind === "INCOME" ? (locale === "tr" ? "Gelir" : "Income") : locale === "tr" ? "Gider" : "Expense"}
+                  </i>
                   {paymentTypeLabel(entry.paymentType, locale)} / {entryOwner(entry)} / {entryUnit(entry)}
                 </span>
               </div>
@@ -544,6 +563,7 @@ export default function FinanceDashboardPage() {
               </label>
 
               <select
+                className={`finance-status-select ${entry.status.toLowerCase()}`}
                 value={entry.status}
                 disabled={savingId === entry.id}
                 onChange={(event) =>
@@ -591,6 +611,7 @@ export default function FinanceDashboardPage() {
         .finance-dashboard {
           display: grid;
           gap: 18px;
+          color: var(--text-primary);
         }
 
         .finance-hero {
@@ -602,8 +623,10 @@ export default function FinanceDashboardPage() {
 
         .finance-hero p {
           margin: 0 0 6px;
-          color: var(--text-secondary);
+          color: var(--info);
           font-weight: 800;
+          font-size: 12px;
+          text-transform: uppercase;
         }
 
         .finance-hero h1 {
@@ -613,13 +636,17 @@ export default function FinanceDashboardPage() {
           line-height: 1.05;
         }
 
-        .finance-actions {
+        .finance-tabs {
           display: flex;
           gap: 8px;
           flex-wrap: wrap;
+          padding: 4px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface);
+          box-shadow: var(--shadow-sm);
         }
 
-        .finance-actions a,
         .finance-filter-band,
         .finance-stat,
         .finance-bucket,
@@ -631,22 +658,57 @@ export default function FinanceDashboardPage() {
           box-shadow: var(--shadow-sm);
         }
 
-        .finance-actions a {
+        .finance-tabs a {
           display: inline-flex;
           align-items: center;
-          min-height: 42px;
-          padding: 0 14px;
+          min-height: 36px;
+          padding: 0 12px;
+          border: 1px solid transparent;
+          border-radius: 8px;
           color: var(--text-primary);
           text-decoration: none;
           font-weight: 800;
+          font-size: 13px;
+        }
+
+        .finance-tabs a.active,
+        .finance-tabs a:hover {
+          border-color: var(--stroke);
+          background: var(--surface-2);
         }
 
         .finance-filter-band {
           display: grid;
-          grid-template-columns: 160px 160px 130px auto;
+          grid-template-columns: minmax(220px, 0.75fr) minmax(520px, 1.25fr);
+          gap: 14px;
+          align-items: center;
+          padding: 12px;
+          background:
+            linear-gradient(135deg, color-mix(in srgb, var(--info) 7%, transparent), transparent 46%),
+            var(--surface);
+        }
+
+        .finance-filter-copy {
+          display: grid;
+          gap: 4px;
+          min-width: 0;
+        }
+
+        .finance-filter-copy strong {
+          font-size: 18px;
+        }
+
+        .finance-filter-copy span {
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .finance-filter-controls {
+          display: grid;
+          grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(110px, 0.7fr) auto;
           gap: 10px;
           align-items: end;
-          padding: 14px;
         }
 
         label {
@@ -681,10 +743,22 @@ export default function FinanceDashboardPage() {
           font-weight: 800;
         }
 
+        input:focus,
+        select:focus,
+        button:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--info) 36%, transparent);
+          outline-offset: 1px;
+        }
+
         button {
           cursor: pointer;
           background: var(--text-primary);
           color: var(--surface);
+          transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+        }
+
+        button:hover:not(:disabled) {
+          transform: translateY(-1px);
         }
 
         button:disabled,
@@ -724,10 +798,36 @@ export default function FinanceDashboardPage() {
           display: grid;
           gap: 8px;
           padding: 16px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .finance-stat::before,
+        .finance-bucket::before {
+          content: "";
+          position: absolute;
+          inset: 0 auto 0 0;
+          width: 4px;
+          background: var(--stroke-2);
+        }
+
+        .finance-stat-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+
+        .finance-stat-top i {
+          width: 9px;
+          height: 9px;
+          border-radius: 999px;
+          background: var(--stroke-2);
         }
 
         .finance-stat strong {
           font-size: 26px;
+          line-height: 1.05;
         }
 
         .finance-bucket strong {
@@ -738,16 +838,41 @@ export default function FinanceDashboardPage() {
           border-color: color-mix(in srgb, var(--success) 26%, var(--stroke));
         }
 
+        .finance-stat.good::before,
+        .finance-stat.good .finance-stat-top i {
+          background: var(--success);
+        }
+
         .finance-stat.bad {
           border-color: color-mix(in srgb, var(--danger) 26%, var(--stroke));
+        }
+
+        .finance-stat.bad::before,
+        .finance-stat.bad .finance-stat-top i {
+          background: var(--danger);
         }
 
         .finance-stat.info {
           border-color: color-mix(in srgb, var(--info) 28%, var(--stroke));
         }
 
+        .finance-stat.info::before,
+        .finance-stat.info .finance-stat-top i {
+          background: var(--info);
+        }
+
         .finance-stat.warning {
           border-color: color-mix(in srgb, var(--warning) 30%, var(--stroke));
+        }
+
+        .finance-stat.warning::before,
+        .finance-stat.warning .finance-stat-top i,
+        .finance-bucket.warning::before {
+          background: var(--warning);
+        }
+
+        .finance-bucket.danger::before {
+          background: var(--danger);
         }
 
         .finance-grid {
@@ -765,6 +890,7 @@ export default function FinanceDashboardPage() {
           gap: 14px;
           padding: 16px;
           min-width: 0;
+          align-content: start;
         }
 
         .finance-panel-head {
@@ -810,6 +936,7 @@ export default function FinanceDashboardPage() {
           align-items: center;
           min-height: 42px;
           border-bottom: 1px solid var(--stroke);
+          padding: 2px 0;
         }
 
         .finance-rowline span {
@@ -827,6 +954,7 @@ export default function FinanceDashboardPage() {
         .finance-control-table {
           display: grid;
           gap: 10px;
+          overflow: hidden;
         }
 
         .finance-control-head,
@@ -846,14 +974,21 @@ export default function FinanceDashboardPage() {
 
         .finance-control-row {
           padding: 12px;
+          transition: border-color 0.12s ease, background 0.12s ease;
         }
 
         .finance-control-row.income {
           border-color: color-mix(in srgb, var(--success) 18%, var(--stroke));
+          background:
+            linear-gradient(90deg, color-mix(in srgb, var(--success) 5%, transparent), transparent 45%),
+            var(--surface);
         }
 
         .finance-control-row.expense {
           border-color: color-mix(in srgb, var(--danger) 18%, var(--stroke));
+          background:
+            linear-gradient(90deg, color-mix(in srgb, var(--danger) 5%, transparent), transparent 45%),
+            var(--surface);
         }
 
         .finance-entry-title,
@@ -868,6 +1003,54 @@ export default function FinanceDashboardPage() {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+
+        .finance-entry-title span {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .finance-kind-pill {
+          display: inline-flex;
+          align-items: center;
+          min-height: 22px;
+          padding: 0 8px;
+          border-radius: 999px;
+          font-style: normal;
+          font-size: 11px;
+          font-weight: 900;
+          flex: 0 0 auto;
+        }
+
+        .finance-kind-pill.income {
+          color: var(--success);
+          background: color-mix(in srgb, var(--success) 10%, var(--surface));
+        }
+
+        .finance-kind-pill.expense {
+          color: var(--danger);
+          background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+        }
+
+        .finance-status-select.planned {
+          border-color: color-mix(in srgb, var(--info) 26%, var(--stroke));
+        }
+
+        .finance-status-select.paid {
+          border-color: color-mix(in srgb, var(--success) 28%, var(--stroke));
+        }
+
+        .finance-status-select.overdue {
+          border-color: color-mix(in srgb, var(--danger) 30%, var(--stroke));
+        }
+
+        .finance-status-select.canceled {
+          border-color: color-mix(in srgb, var(--text-muted) 34%, var(--stroke));
         }
 
         .finance-due-control > div {
@@ -900,7 +1083,8 @@ export default function FinanceDashboardPage() {
         @media (max-width: 1200px) {
           .finance-grid,
           .finance-grid.wide-left,
-          .finance-filter-band {
+          .finance-filter-band,
+          .finance-filter-controls {
             grid-template-columns: 1fr;
           }
 
@@ -915,6 +1099,15 @@ export default function FinanceDashboardPage() {
           .finance-panel-head {
             align-items: stretch;
             flex-direction: column;
+          }
+
+          .finance-tabs {
+            width: 100%;
+          }
+
+          .finance-tabs a {
+            flex: 1 1 auto;
+            justify-content: center;
           }
 
           .finance-stats,

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
@@ -265,6 +266,17 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
     () => items.reduce((sum, item) => sum + Number(item.amount || 0), 0),
     [items],
   );
+  const statusSummary = useMemo(
+    () =>
+      STATUSES.map((item) => ({
+        status: item,
+        count: items.filter((entry) => entry.status === item).length,
+        total: items
+          .filter((entry) => entry.status === item)
+          .reduce((sum, entry) => sum + Number(entry.amount || 0), 0),
+      })),
+    [items],
+  );
 
   function resetForm() {
     setEditingEntryId("");
@@ -429,14 +441,37 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
     <main className="finance-page">
       <div className="finance-head">
         <div>
-          <p>{locale === "tr" ? "Finans" : "Finance"}</p>
+          <p>{locale === "tr" ? "Finans merkezi" : "Finance center"}</p>
           <h1>{isIncome ? (locale === "tr" ? "Gelirler" : "Incomes") : locale === "tr" ? "Giderler" : "Expenses"}</h1>
         </div>
-        <div className="finance-total">
-          <span>{locale === "tr" ? "Listelenen toplam" : "Listed total"}</span>
-          <strong>{formatMoney(total, currency, locale)}</strong>
+        <div className="finance-head-metrics">
+          <div className={`finance-total ${isIncome ? "income" : "expense"}`}>
+            <span>{locale === "tr" ? "Listelenen toplam" : "Listed total"}</span>
+            <strong>{formatMoney(total, currency, locale)}</strong>
+          </div>
+          <div className="finance-total">
+            <span>{locale === "tr" ? "Kayıt sayısı" : "Entry count"}</span>
+            <strong>{items.length}</strong>
+          </div>
         </div>
       </div>
+
+      <nav className="finance-tabs" aria-label="Finance sections">
+        <Link href="/finance">{locale === "tr" ? "Dashboard" : "Dashboard"}</Link>
+        <Link className={isIncome ? "active" : ""} href="/finance/incomes">{locale === "tr" ? "Gelirler" : "Incomes"}</Link>
+        <Link className={!isIncome ? "active" : ""} href="/finance/expenses">{locale === "tr" ? "Giderler" : "Expenses"}</Link>
+        <Link href="/finance/rates">{locale === "tr" ? "Kurlar" : "Rates"}</Link>
+      </nav>
+
+      <section className="finance-status-strip">
+        {statusSummary.map((item) => (
+          <div key={item.status} className={`finance-status-card ${item.status.toLowerCase()}`}>
+            <span>{statusLabel(item.status, locale)}</span>
+            <strong>{formatMoney(item.total, currency, locale)}</strong>
+            <small>{item.count} {locale === "tr" ? "kayıt" : "entries"}</small>
+          </div>
+        ))}
+      </section>
 
       {err ? <div className="finance-alert danger">{err}</div> : null}
       {notice ? <div className="finance-alert success">{notice}</div> : null}
@@ -444,11 +479,18 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
       <section className="finance-shell">
         <div className="finance-panel form">
           <div className="finance-panel-head">
-            <h2>
-              {editingEntryId
-                ? locale === "tr" ? "Kaydı düzenle" : "Edit entry"
-                : locale === "tr" ? "Yeni kayıt" : "New entry"}
-            </h2>
+            <div>
+              <h2>
+                {editingEntryId
+                  ? locale === "tr" ? "Kaydı düzenle" : "Edit entry"
+                  : locale === "tr" ? "Yeni kayıt" : "New entry"}
+              </h2>
+              <span>
+                {isIncome
+                  ? locale === "tr" ? "Gelir, müşteri ve vade detayları" : "Income, customer and due details"
+                  : locale === "tr" ? "Gider, firma ve vade detayları" : "Expense, vendor and due details"}
+              </span>
+            </div>
             <button type="button" onClick={resetForm}>
               {locale === "tr" ? "Temizle" : "Reset"}
             </button>
@@ -596,7 +638,14 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
 
         <div className="finance-panel list">
           <div className="finance-panel-head">
-            <h2>{locale === "tr" ? "Kayıtlar" : "Entries"}</h2>
+            <div>
+              <h2>{locale === "tr" ? "Kayıtlar" : "Entries"}</h2>
+              <span>
+                {locale === "tr"
+                  ? "Filtrele, düzenle veya vade opsiyonunu değiştir"
+                  : "Filter, edit or change due options"}
+              </span>
+            </div>
             <div className="finance-filters">
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={locale === "tr" ? "Ara" : "Search"} />
               <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -614,14 +663,19 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
 
           <div className="finance-entry-list">
             {items.map((item) => (
-              <article key={item.id} className="finance-entry">
+              <article key={item.id} className={`finance-entry ${item.status.toLowerCase()}`}>
                 <div className="finance-entry-main">
                   <div>
                     <strong>{item.title}</strong>
-                    <span>{paymentTypeLabel(item.paymentType, locale)} / {statusLabel(item.status, locale)}</span>
+                    <span>
+                      {paymentTypeLabel(item.paymentType, locale)}
+                      <i className={`finance-status-badge ${item.status.toLowerCase()}`}>
+                        {statusLabel(item.status, locale)}
+                      </i>
+                    </span>
                   </div>
                   <div className="finance-entry-side">
-                    <strong>{formatMoney(item.amount, item.currency, locale)}</strong>
+                    <strong className={isIncome ? "income" : "expense"}>{formatMoney(item.amount, item.currency, locale)}</strong>
                     <div className="finance-entry-actions">
                       <button type="button" onClick={() => fillForm(item)}>
                         {locale === "tr" ? "Düzenle" : "Edit"}
@@ -684,8 +738,10 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
 
         .finance-head p {
           margin: 0 0 6px;
-          color: var(--text-secondary);
+          color: var(--info);
           font-weight: 800;
+          font-size: 12px;
+          text-transform: uppercase;
         }
 
         .finance-head h1 {
@@ -694,7 +750,46 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
           line-height: 1.05;
         }
 
+        .finance-head-metrics {
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
+
+        .finance-tabs {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          width: fit-content;
+          padding: 4px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface);
+          box-shadow: var(--shadow-sm);
+        }
+
+        .finance-tabs a {
+          display: inline-flex;
+          align-items: center;
+          min-height: 36px;
+          padding: 0 12px;
+          border: 1px solid transparent;
+          border-radius: 8px;
+          color: var(--text-primary);
+          text-decoration: none;
+          font-size: 13px;
+          font-weight: 800;
+        }
+
+        .finance-tabs a.active,
+        .finance-tabs a:hover {
+          border-color: var(--stroke);
+          background: var(--surface-2);
+        }
+
         .finance-total,
+        .finance-status-card,
         .finance-panel,
         .finance-entry {
           border: 1px solid var(--stroke);
@@ -706,11 +801,32 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
         .finance-total {
           display: grid;
           gap: 4px;
-          min-width: 220px;
+          min-width: 168px;
           padding: 14px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .finance-total::before,
+        .finance-status-card::before,
+        .finance-entry::before {
+          content: "";
+          position: absolute;
+          inset: 0 auto 0 0;
+          width: 4px;
+          background: var(--stroke-2);
+        }
+
+        .finance-total.income::before {
+          background: var(--success);
+        }
+
+        .finance-total.expense::before {
+          background: var(--danger);
         }
 
         .finance-total span,
+        .finance-panel-head span,
         .finance-entry span,
         .finance-split-box span,
         label span {
@@ -721,6 +837,48 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
 
         .finance-total strong {
           font-size: 24px;
+        }
+
+        .finance-status-strip {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .finance-status-card {
+          display: grid;
+          gap: 6px;
+          padding: 14px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .finance-status-card strong {
+          font-size: 20px;
+          line-height: 1.1;
+        }
+
+        .finance-status-card span,
+        .finance-status-card small {
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 800;
+        }
+
+        .finance-status-card.planned::before {
+          background: var(--info);
+        }
+
+        .finance-status-card.paid::before {
+          background: var(--success);
+        }
+
+        .finance-status-card.overdue::before {
+          background: var(--danger);
+        }
+
+        .finance-status-card.canceled::before {
+          background: var(--text-muted);
         }
 
         .finance-alert {
@@ -743,7 +901,7 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
 
         .finance-shell {
           display: grid;
-          grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.25fr);
+          grid-template-columns: minmax(340px, 0.92fr) minmax(460px, 1.25fr);
           gap: 16px;
           align-items: start;
         }
@@ -759,6 +917,11 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
           gap: 12px;
           align-items: center;
           margin-bottom: 14px;
+        }
+
+        .finance-panel-head > div {
+          display: grid;
+          gap: 4px;
         }
 
         .finance-panel h2 {
@@ -796,6 +959,14 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
           font-weight: 700;
         }
 
+        input:focus,
+        select:focus,
+        textarea:focus,
+        button:focus-visible {
+          outline: 2px solid color-mix(in srgb, var(--info) 36%, transparent);
+          outline-offset: 1px;
+        }
+
         textarea {
           min-height: 82px;
           padding: 10px 12px;
@@ -804,6 +975,11 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
 
         button {
           cursor: pointer;
+          transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+        }
+
+        button:hover:not(:disabled) {
+          transform: translateY(-1px);
         }
 
         button:disabled {
@@ -816,6 +992,8 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
           margin-top: 14px;
           background: var(--text-primary);
           color: var(--surface);
+          min-height: 46px;
+          font-weight: 900;
         }
 
         .finance-split-box {
@@ -828,6 +1006,7 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
           border: 1px solid var(--stroke);
           border-radius: 8px;
           background: var(--surface-2);
+          border-left: 4px solid var(--warning);
         }
 
         .finance-split-box > div {
@@ -850,6 +1029,27 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
           display: grid;
           gap: 10px;
           padding: 12px;
+          position: relative;
+          overflow: hidden;
+          background:
+            linear-gradient(90deg, color-mix(in srgb, var(--surface-2) 62%, transparent), transparent 46%),
+            var(--surface);
+        }
+
+        .finance-entry.planned::before {
+          background: var(--info);
+        }
+
+        .finance-entry.paid::before {
+          background: var(--success);
+        }
+
+        .finance-entry.overdue::before {
+          background: var(--danger);
+        }
+
+        .finance-entry.canceled::before {
+          background: var(--text-muted);
         }
 
         .finance-entry-main,
@@ -866,12 +1066,39 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
         .finance-entry-main > div {
           display: grid;
           gap: 4px;
+          min-width: 0;
+        }
+
+        .finance-entry-main strong {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .finance-entry-main span {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          flex-wrap: wrap;
         }
 
         .finance-entry-side {
           display: grid;
           gap: 8px;
           justify-items: end;
+        }
+
+        .finance-entry-side > strong {
+          font-size: 20px;
+          line-height: 1;
+        }
+
+        .finance-entry-side > strong.income {
+          color: var(--success);
+        }
+
+        .finance-entry-side > strong.expense {
+          color: var(--danger);
         }
 
         .finance-entry-actions {
@@ -904,6 +1131,37 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
           background: var(--surface-2);
         }
 
+        .finance-status-badge {
+          display: inline-flex;
+          align-items: center;
+          min-height: 22px;
+          padding: 0 8px;
+          border-radius: 999px;
+          font-style: normal;
+          font-size: 11px;
+          font-weight: 900;
+        }
+
+        .finance-status-badge.planned {
+          color: var(--info);
+          background: color-mix(in srgb, var(--info) 10%, var(--surface));
+        }
+
+        .finance-status-badge.paid {
+          color: var(--success);
+          background: color-mix(in srgb, var(--success) 10%, var(--surface));
+        }
+
+        .finance-status-badge.overdue {
+          color: var(--danger);
+          background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+        }
+
+        .finance-status-badge.canceled {
+          color: var(--text-secondary);
+          background: var(--surface-2);
+        }
+
         .finance-due-options {
           justify-content: flex-start;
         }
@@ -919,6 +1177,7 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
         .finance-due-options button.active {
           border-color: var(--info);
           background: color-mix(in srgb, var(--info) 10%, var(--surface));
+          color: var(--info);
         }
 
         .finance-empty {
@@ -930,7 +1189,8 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
 
         @media (max-width: 1100px) {
           .finance-shell,
-          .finance-split-box {
+          .finance-split-box,
+          .finance-status-strip {
             grid-template-columns: 1fr;
           }
         }
@@ -945,6 +1205,23 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
           .finance-form-grid,
           .finance-filters {
             grid-template-columns: 1fr;
+          }
+
+          .finance-head-metrics,
+          .finance-tabs,
+          .finance-tabs a {
+            width: 100%;
+          }
+
+          .finance-tabs a {
+            justify-content: center;
+            flex: 1 1 auto;
+          }
+
+          .finance-entry-main,
+          .finance-entry-side {
+            align-items: stretch;
+            justify-items: stretch;
           }
         }
       `}</style>

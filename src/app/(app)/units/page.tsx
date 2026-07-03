@@ -18,6 +18,7 @@ type UnitCompanyStatus = "UNKNOWN" | "DND" | "OTHER";
 type PaymentStatus = "UNPAID" | "PAID";
 type RentalStatus = "SHORT_TERM" | "LONG_TERM" | "DND_UNITS" | "NOT_INTERESTED";
 type UnitIssueFilter = "" | "UNDONE_COMPLAINT";
+type UnitListMode = "ACTIVE" | "CANCELED";
 
 type UnitCustomer = {
   id: string;
@@ -233,6 +234,11 @@ function issueFilterLabel(value: UnitIssueFilter, locale: string) {
   return locale === "tr" ? "Tüm dikkatler" : "All attention";
 }
 
+function unitListModeLabel(value: UnitListMode, locale: string) {
+  if (value === "CANCELED") return locale === "tr" ? "İptal edilen unitler" : "Canceled units";
+  return locale === "tr" ? "Aktif unitler" : "Active units";
+}
+
 function dateKey(value: Date) {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -441,6 +447,7 @@ export default function UnitsPage() {
   const [deliveryFilter, setDeliveryFilter] = useState<"" | UnitDeliveryStatus>("");
   const [companyFilter, setCompanyFilter] = useState<"" | UnitCompanyStatus>("");
   const [issueFilter, setIssueFilter] = useState<UnitIssueFilter>("");
+  const [listMode, setListMode] = useState<UnitListMode>("ACTIVE");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -528,10 +535,12 @@ export default function UnitsPage() {
     deliveryFilter,
     companyFilter,
     issueFilter,
+    listMode === "CANCELED" ? listMode : "",
     q.trim(),
   ].filter(Boolean).length;
 
   const activeFilterSummary = [
+    listMode === "CANCELED" ? unitListModeLabel(listMode, locale) : null,
     projectFilter ? projectLabel(projectFilter) : null,
     deliveryFilter ? deliveryLabel(deliveryFilter, locale) : null,
     companyFilter ? companyLabel(companyFilter, locale) : null,
@@ -544,6 +553,7 @@ export default function UnitsPage() {
       projectFilter: "" | ProjectType;
       deliveryFilter: "" | UnitDeliveryStatus;
       companyFilter: "" | UnitCompanyStatus;
+      listMode: UnitListMode;
       q: string;
     }>,
   ) {
@@ -555,8 +565,10 @@ export default function UnitsPage() {
       const nextProjectFilter = overrides?.projectFilter ?? projectFilter;
       const nextDeliveryFilter = overrides?.deliveryFilter ?? deliveryFilter;
       const nextCompanyFilter = overrides?.companyFilter ?? companyFilter;
+      const nextListMode = overrides?.listMode ?? listMode;
       const nextQ = overrides?.q ?? q;
 
+      params.set("unitState", nextListMode);
       if (nextProjectFilter) params.set("project", nextProjectFilter);
       if (nextDeliveryFilter) params.set("deliveryStatus", nextDeliveryFilter);
       if (nextCompanyFilter) params.set("companyStatus", nextCompanyFilter);
@@ -649,14 +661,21 @@ export default function UnitsPage() {
     setDeliveryFilter("");
     setCompanyFilter("");
     setIssueFilter("");
+    setListMode("ACTIVE");
     setQ("");
-    load({ projectFilter: DEFAULT_PROJECT, deliveryFilter: "", companyFilter: "", q: "" });
+    load({
+      projectFilter: DEFAULT_PROJECT,
+      deliveryFilter: "",
+      companyFilter: "",
+      listMode: "ACTIVE",
+      q: "",
+    });
   }
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectFilter, deliveryFilter, companyFilter]);
+  }, [projectFilter, deliveryFilter, companyFilter, listMode]);
 
   useEffect(() => {
     setMe(getUser());
@@ -784,6 +803,35 @@ export default function UnitsPage() {
 
         .units-filter-actions button {
           min-width: 96px;
+        }
+
+        .units-view-toggle {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          width: fit-content;
+          padding: 4px;
+          border: 1px solid var(--stroke);
+          border-radius: 8px;
+          background: var(--surface-2);
+        }
+
+        .units-view-toggle button {
+          min-height: 38px;
+          border: 1px solid transparent;
+          border-radius: 8px;
+          background: transparent;
+          color: var(--text-secondary);
+          padding: 0 12px;
+          font-weight: 900;
+          cursor: pointer;
+        }
+
+        .units-view-toggle button[aria-pressed="true"] {
+          border-color: var(--stroke);
+          background: var(--surface);
+          color: var(--text-primary);
+          box-shadow: var(--shadow-sm);
         }
 
         .units-project-strip {
@@ -1485,6 +1533,7 @@ export default function UnitsPage() {
           }
 
           .units-command-main,
+          .units-view-toggle,
           .units-project-strip,
           .units-kpis,
           .units-report-row,
@@ -1497,6 +1546,8 @@ export default function UnitsPage() {
           .units-actions > *,
           .units-filter-actions,
           .units-filter-actions > *,
+          .units-view-toggle,
+          .units-view-toggle button,
           .units-command-main > * {
             width: 100%;
           }
@@ -1650,6 +1701,19 @@ export default function UnitsPage() {
               {safeTranslate(t, "common.reset", locale === "tr" ? "Sıfırla" : "Reset")}
             </button>
           </div>
+        </div>
+
+        <div className="units-view-toggle" aria-label={locale === "tr" ? "Unit görünümü" : "Unit view"}>
+          {(["ACTIVE", "CANCELED"] as UnitListMode[]).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={listMode === mode}
+              onClick={() => setListMode(mode)}
+            >
+              {unitListModeLabel(mode, locale)}
+            </button>
+          ))}
         </div>
 
         <div className="units-project-strip">
@@ -1890,9 +1954,24 @@ export default function UnitsPage() {
         <div className="units-table-panel">
           <div className="units-panel-head">
             <div className="units-panel-title">
-              <h2>{locale === "tr" ? "Unit Listesi" : "Unit List"}</h2>
+              <h2>
+                {listMode === "CANCELED"
+                  ? locale === "tr"
+                    ? "İptal edilen unitler"
+                    : "Canceled units"
+                  : locale === "tr"
+                    ? "Aktif unit listesi"
+                    : "Active unit list"}
+              </h2>
               <div className="units-secondary-text">
-                {displayedItems.length} {locale === "tr" ? "kayıt" : "records"}
+                {displayedItems.length}{" "}
+                {listMode === "CANCELED"
+                  ? locale === "tr"
+                    ? "iptal kaydı"
+                    : "canceled records"
+                  : locale === "tr"
+                    ? "aktif kayıt"
+                    : "active records"}
               </div>
             </div>
 
@@ -2079,7 +2158,13 @@ export default function UnitsPage() {
 
           {!loading && displayedItems.length === 0 ? (
             <div className="units-empty">
-              {locale === "tr" ? "Unit bulunamadı." : "No units found."}
+              {listMode === "CANCELED"
+                ? locale === "tr"
+                  ? "İptal edilen unit bulunamadı."
+                  : "No canceled units found."
+                : locale === "tr"
+                  ? "Aktif unit bulunamadı."
+                  : "No active units found."}
             </div>
           ) : null}
 
