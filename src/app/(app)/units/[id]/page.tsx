@@ -535,7 +535,7 @@ export default function UnitDetailPage() {
   const [communicationSending, setCommunicationSending] = useState<"" | "EMAIL" | "WHATSAPP">("");
   const [communicationNotice, setCommunicationNotice] = useState("");
 
-  const isAdmin = me?.role === "ADMIN";
+  const isAdmin = me?.role === "ADMIN" || me?.role === "PREVIEW";
 
   const logs = useMemo(() => unit?.logs || [], [unit?.logs]);
   const unitInformationLogs = useMemo(

@@ -458,8 +458,11 @@ export default function UnitsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const canSeeDayReport =
-    me?.role === "ADMIN" || me?.role === "MANAGER" || me?.role === "AFTERSALES";
-  const canDeleteUnits = me?.role === "ADMIN";
+    me?.role === "ADMIN" ||
+    me?.role === "MANAGER" ||
+    me?.role === "AFTERSALES" ||
+    me?.role === "PREVIEW";
+  const canDeleteUnits = me?.role === "ADMIN" || me?.role === "PREVIEW";
 
   const statusCounts = useMemo(() => {
     const next: Record<UnitDeliveryStatus, number> = {

@@ -6,7 +6,14 @@ import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
-type Role = "ADMIN" | "CALLCENTER" | "MANAGER" | "SALES" | "AFTERSALES" | "ACCOUNTING";
+type Role =
+  | "ADMIN"
+  | "CALLCENTER"
+  | "MANAGER"
+  | "SALES"
+  | "AFTERSALES"
+  | "ACCOUNTING"
+  | "PREVIEW";
 
 type UserRow = {
   id: string;
@@ -19,7 +26,15 @@ type UserRow = {
   createdAt?: string;
 };
 
-const ROLES: Role[] = ["ADMIN", "CALLCENTER", "MANAGER", "SALES", "AFTERSALES", "ACCOUNTING"];
+const ROLES: Role[] = [
+  "ADMIN",
+  "CALLCENTER",
+  "MANAGER",
+  "SALES",
+  "AFTERSALES",
+  "ACCOUNTING",
+  "PREVIEW",
+];
 
 function safeTranslate(
   t: (path: string) => string,
@@ -134,6 +149,8 @@ export default function AdminUsersPage() {
   const [managerId, setManagerId] = useState("");
 
   const isAdmin = me?.role === "ADMIN";
+  const isPreview = me?.role === "PREVIEW";
+  const canOpenPage = isAdmin || isPreview;
   const meId = me?.id as string | undefined;
   const needsManager = role === "SALES" || role === "CALLCENTER";
 
@@ -310,7 +327,7 @@ export default function AdminUsersPage() {
 
   if (!mounted) return <div>{t("common.loading")}</div>;
 
-  if (!isAdmin) {
+  if (!canOpenPage) {
     return (
       <div className="card">
         <div style={{ fontWeight: 900, marginBottom: 8 }}>
@@ -393,6 +410,7 @@ export default function AdminUsersPage() {
             className="primary"
             onClick={createUser}
             disabled={
+              !isAdmin ||
               saving ||
               !name.trim() ||
               !email.trim() ||

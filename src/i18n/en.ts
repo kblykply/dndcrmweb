@@ -82,6 +82,8 @@ meetings: "Meetings",
     SALES: "Sales",
     CALLCENTER: "Call Center",
     AFTERSALES: "After Sales",
+    ACCOUNTING: "Accounting",
+    PREVIEW: "Preview",
   },
   eventTypes: {
     LEAD_FOLLOWUP: "Lead Follow-up",

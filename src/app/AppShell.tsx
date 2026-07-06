@@ -17,9 +17,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const role = me?.role;
 
-  const isAdmin = role === "ADMIN";
-  const isManager = role === "MANAGER" || role === "ADMIN";
-  const isSales = role === "SALES";
+  const isPreview = role === "PREVIEW";
+  const isAdmin = role === "ADMIN" || isPreview;
+  const isManager = role === "MANAGER" || role === "ADMIN" || isPreview;
+  const isSales = role === "SALES" || isPreview;
 
   const canSeeAgencies = isManager || isSales;
   const canSeeCustomers = isManager || isSales;

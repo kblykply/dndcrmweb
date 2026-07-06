@@ -546,6 +546,8 @@ roles: {
   MANAGER: "Yönetici",
   SALES: "Satış",
   AFTERSALES: "Satış Sonrası",
+  ACCOUNTING: "Muhasebe",
+  PREVIEW: "Ön İzleme",
 },
 
 admin: {

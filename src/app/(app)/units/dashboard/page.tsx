@@ -295,7 +295,7 @@ export default function UnitsDashboardPage() {
     setMe(user);
     setAccessChecked(true);
 
-    if (user?.role === "ADMIN") {
+    if (user?.role === "ADMIN" || user?.role === "PREVIEW") {
       load();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -504,7 +504,7 @@ export default function UnitsDashboardPage() {
     color: "var(--text-primary)",
   };
 
-  if (accessChecked && me?.role !== "ADMIN") {
+  if (accessChecked && me?.role !== "ADMIN" && me?.role !== "PREVIEW") {
     return (
       <div style={{ display: "grid", gap: 18, paddingBottom: 28 }}>
         <section

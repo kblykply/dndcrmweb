@@ -221,7 +221,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
 
   const role = me?.role as string | undefined;
-  const canSeeDashboard = role === "ADMIN" || role === "MANAGER";
+  const canSeeDashboard = role === "ADMIN" || role === "MANAGER" || role === "PREVIEW";
   const isManagerView = role === "MANAGER";
 
   async function load() {
@@ -274,6 +274,7 @@ export default function AdminPage() {
       SALES: "#22c55e",
       AFTERSALES: "#14b8a6",
       ACCOUNTING: "#0f766e",
+      PREVIEW: "#6366f1",
     };
 
     return (data?.users?.byRole || []).map((r: any) => ({

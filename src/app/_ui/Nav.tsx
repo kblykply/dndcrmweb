@@ -18,8 +18,9 @@ export default function Nav() {
 
   const role = me?.role as string | undefined;
 
-  const isManager = role === "MANAGER" || role === "ADMIN";
-  const isAdmin = role === "ADMIN";
+  const isPreview = role === "PREVIEW";
+  const isManager = role === "MANAGER" || role === "ADMIN" || isPreview;
+  const isAdmin = role === "ADMIN" || isPreview;
 
   const linkStyle = (active: boolean): React.CSSProperties => ({
     padding: "8px 14px",

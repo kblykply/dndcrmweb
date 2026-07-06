@@ -7,7 +7,14 @@ import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
-type Role = "ADMIN" | "CALLCENTER" | "MANAGER" | "SALES" | "AFTERSALES" | "ACCOUNTING";
+type Role =
+  | "ADMIN"
+  | "CALLCENTER"
+  | "MANAGER"
+  | "SALES"
+  | "AFTERSALES"
+  | "ACCOUNTING"
+  | "PREVIEW";
 
 type UserRow = {
   id: string;
@@ -20,7 +27,15 @@ type UserRow = {
   createdAt?: string;
 };
 
-const ROLES: Role[] = ["ADMIN", "CALLCENTER", "MANAGER", "SALES", "AFTERSALES", "ACCOUNTING"];
+const ROLES: Role[] = [
+  "ADMIN",
+  "CALLCENTER",
+  "MANAGER",
+  "SALES",
+  "AFTERSALES",
+  "ACCOUNTING",
+  "PREVIEW",
+];
 
 function safeTranslate(
   t: (path: string) => string,
@@ -138,6 +153,8 @@ export default function AdminUserDetailPage() {
   const [isActive, setIsActive] = useState(true);
 
   const isAdmin = me?.role === "ADMIN";
+  const isPreview = me?.role === "PREVIEW";
+  const canOpenPage = isAdmin || isPreview;
   const isSelf = !!(me?.id && user?.id && me.id === user.id);
 
   const managerRequired = useMemo(
@@ -295,7 +312,7 @@ export default function AdminUserDetailPage() {
 
   if (!mounted) return <div>{t("common.loading")}</div>;
 
-  if (!isAdmin) {
+  if (!canOpenPage) {
     return (
       <div className="card">
         <div style={{ fontWeight: 900, marginBottom: 8 }}>
@@ -466,6 +483,7 @@ export default function AdminUserDetailPage() {
             onClick={saveUser}
             disabled={
               saving ||
+              !isAdmin ||
               !name.trim() ||
               !email.trim() ||
               (managerRequired && !managerId)
@@ -486,7 +504,7 @@ export default function AdminUserDetailPage() {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <button
             onClick={deactivateUser}
-            disabled={deactivating || saving || !user.isActive}
+            disabled={deactivating || saving || !user.isActive || !isAdmin}
           >
             {deactivating ? t("common.processing") : t("adminUsers.deactivate")}
           </button>
@@ -494,14 +512,14 @@ export default function AdminUserDetailPage() {
           <button
             className="danger"
             onClick={deleteUser}
-            disabled={deleting || forceDeleting || isSelf}
+            disabled={deleting || forceDeleting || isSelf || !isAdmin}
           >
             {deleting ? t("common.deleting") : t("adminUserDetail.deleteUser")}
           </button>
 
           <button
             onClick={forceDeleteUser}
-            disabled={deleting || forceDeleting || isSelf}
+            disabled={deleting || forceDeleting || isSelf || !isAdmin}
             style={{
               height: 36,
               padding: "0 14px",

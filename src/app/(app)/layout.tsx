@@ -451,15 +451,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   const role = me?.role as string | undefined;
-  const isManager = role === "MANAGER" || role === "ADMIN";
-  const isAdmin = role === "ADMIN";
+  const isPreview = role === "PREVIEW";
+  const isManager = role === "MANAGER" || role === "ADMIN" || isPreview;
+  const isAdmin = role === "ADMIN" || isPreview;
   const isAftersales = role === "AFTERSALES";
   const isAccounting = role === "ACCOUNTING";
   const canSeeCRM =
-    role === "ADMIN" || role === "MANAGER" || role === "SALES" || role === "CALLCENTER";
-  const canSeeUnits = canSeeCRM || isAftersales;
-  const canSeeCustomers = canSeeCRM || isAftersales;
-  const canSeeFinance = isAdmin || isAccounting;
+    isPreview ||
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "SALES" ||
+    role === "CALLCENTER";
+  const canSeeUnits = canSeeCRM || isAftersales || isPreview;
+  const canSeeCustomers = canSeeCRM || isAftersales || isPreview;
+  const canSeeFinance = isAdmin || isAccounting || isPreview;
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
 

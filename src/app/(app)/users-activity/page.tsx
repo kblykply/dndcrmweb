@@ -38,6 +38,7 @@ function badgeClass(role?: string) {
   if (role === "CALLCENTER") return "warning";
   if (role === "AFTERSALES") return "info";
   if (role === "ACCOUNTING") return "success";
+  if (role === "PREVIEW") return "info";
   return "";
 }
 
@@ -191,6 +192,7 @@ export default function UsersActivityPage() {
             <option value="CALLCENTER">Callcenter</option>
             <option value="AFTERSALES">After Sales</option>
             <option value="ACCOUNTING">Accounting</option>
+            <option value="PREVIEW">Preview</option>
           </select>
 
           <select

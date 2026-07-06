@@ -228,7 +228,11 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
 
   useEffect(() => {
     const user = getUser();
-    if (user?.role !== "ADMIN" && user?.role !== "ACCOUNTING") {
+    if (
+      user?.role !== "ADMIN" &&
+      user?.role !== "ACCOUNTING" &&
+      user?.role !== "PREVIEW"
+    ) {
       window.location.replace("/leads");
       return;
     }

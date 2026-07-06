@@ -50,7 +50,11 @@ export default function FinanceRatesPage() {
 
   useEffect(() => {
     const user = getUser();
-    if (user?.role !== "ADMIN" && user?.role !== "ACCOUNTING") {
+    if (
+      user?.role !== "ADMIN" &&
+      user?.role !== "ACCOUNTING" &&
+      user?.role !== "PREVIEW"
+    ) {
       window.location.replace("/leads");
       return;
     }
