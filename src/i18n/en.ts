@@ -28,6 +28,8 @@ create:  "Create",
   nav: {
     leads: "Leads",
     customers: "Customers",
+    myCustomers: "My Customers",
+    profile: "My Profile",
     agencies: "Agencies",
     calendar: "Calendar",
     admin: "Admin Panel",

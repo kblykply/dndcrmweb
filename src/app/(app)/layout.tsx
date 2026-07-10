@@ -465,6 +465,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const canSeeUnits = canSeeCRM || isAftersales || isPreview;
   const canSeeCustomers = canSeeCRM || isAftersales || isPreview;
   const canSeeFinance = isAdmin || isAccounting || isPreview;
+  const canSeeMyCustomers =
+    isPreview || role === "ADMIN" || role === "MANAGER" || role === "SALES";
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
 
@@ -521,6 +523,10 @@ const isMeetingsActive = useMemo(
       !isNationalityReportActive &&
       !isDemographicsReportActive,
     [pathname, isNationalityReportActive, isDemographicsReportActive],
+  );
+  const isProfileActive = useMemo(
+    () => pathname === "/profile" || pathname.startsWith("/profile/"),
+    [pathname],
   );
   const isCustomersAreaActive = useMemo(
     () => pathname === "/customers" || pathname.startsWith("/customers/"),
@@ -649,6 +655,15 @@ const isMeetingsActive = useMemo(
                   <CustomersIcon />
                 </NavIconWrap>
                 {t("nav.customers")}
+              </Link>
+            ) : null}
+
+            {canSeeMyCustomers ? (
+              <Link href="/profile" style={navItemStyle(isProfileActive)}>
+                <NavIconWrap>
+                  <CustomersIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.profile", "My Profile")}
               </Link>
             ) : null}
 

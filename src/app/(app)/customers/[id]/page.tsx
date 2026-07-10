@@ -32,6 +32,7 @@ type AssignableUser = {
   name: string;
   email: string;
   role: string;
+  isActive?: boolean;
 };
 
 type Gender = "MALE" | "FEMALE" | "OTHER";
@@ -399,20 +400,25 @@ export default function CustomerDetailPage() {
     }
 
     try {
-      const [salesRes, managerRes] = await Promise.all([
-        authedFetch("/users?role=SALES"),
-        authedFetch("/users?role=MANAGER"),
-      ]);
-
-      const sales = Array.isArray(salesRes) ? salesRes : [];
-      const managers = Array.isArray(managerRes) ? managerRes : [];
-
-      const merged = [...managers, ...sales];
+      const usersRes = await authedFetch("/users?all=true");
+      const merged = Array.isArray(usersRes)
+        ? usersRes.filter(
+            (u) =>
+              u?.isActive !== false &&
+              (u?.role === "SALES" || u?.role === "MANAGER"),
+          )
+        : [];
       const unique = Array.from(
         new Map(merged.map((u) => [u.id, u])).values(),
       );
 
-      setAssignableUsers(unique);
+      setAssignableUsers(
+        unique.sort((a, b) =>
+          `${a.role || ""} ${a.name || ""}`.localeCompare(
+            `${b.role || ""} ${b.name || ""}`,
+          ),
+        ),
+      );
     } catch {
       setAssignableUsers([]);
     }

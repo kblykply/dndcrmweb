@@ -31,6 +31,7 @@ type UserRow = {
   name: string;
   email?: string | null;
   role?: string;
+  isActive?: boolean;
 };
 
 type CustomerRow = {
@@ -159,6 +160,7 @@ export default function CustomersPage() {
   const role = me?.role as string | undefined;
   const isSales = role === "SALES";
   const isManagerOrAdmin = role === "MANAGER" || role === "ADMIN";
+  const canUseOwnerFilter = role === "MANAGER" || role === "ADMIN" || role === "AFTERSALES";
   const canCreate = role === "MANAGER" || role === "ADMIN" || role === "SALES";
   const canDelete = role === "MANAGER" || role === "ADMIN";
 
@@ -234,26 +236,31 @@ export default function CustomersPage() {
   }
 
   async function loadOwnerUsers() {
-    if (!isManagerOrAdmin) {
+    if (!canUseOwnerFilter) {
       setOwnerUsers([]);
       return;
     }
 
     try {
-      const [salesRes, managerRes] = await Promise.all([
-        authedFetch("/users?role=SALES"),
-        authedFetch("/users?role=MANAGER"),
-      ]);
-
-      const sales = Array.isArray(salesRes) ? salesRes : [];
-      const managers = Array.isArray(managerRes) ? managerRes : [];
-
-      const merged = [...managers, ...sales];
+      const usersRes = await authedFetch("/users?all=true");
+      const merged = Array.isArray(usersRes)
+        ? usersRes.filter(
+            (u) =>
+              u?.isActive !== false &&
+              (u?.role === "SALES" || u?.role === "MANAGER"),
+          )
+        : [];
       const unique = Array.from(
         new Map(merged.map((u) => [u.id, u])).values(),
       );
 
-      setOwnerUsers(unique);
+      setOwnerUsers(
+        unique.sort((a, b) =>
+          `${a.role || ""} ${a.name || ""}`.localeCompare(
+            `${b.role || ""} ${b.name || ""}`,
+          ),
+        ),
+      );
     } catch {
       setOwnerUsers([]);
     }
@@ -450,7 +457,7 @@ export default function CustomersPage() {
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, isSales, isManagerOrAdmin, me?.id]);
+  }, [mounted, isSales, canUseOwnerFilter, me?.id]);
 
   const filteredAgencies = useMemo(() => {
     if (!agencySearch.trim()) return agencies.slice(0, 80);

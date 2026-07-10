@@ -34,6 +34,8 @@ create: "Oluştur" ,
   nav: {
     leads: "Leadler",
     customers: "Müşteriler",
+    myCustomers: "Müşterilerim",
+    profile: "Profilim",
     agencies: "Ajanslar",
     calendar: "Takvim",
     admin: "Admin Panel",
