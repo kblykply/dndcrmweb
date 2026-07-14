@@ -7,7 +7,9 @@ import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type CustomerType = "POTENTIAL" | "EXISTING";
-type WorkspaceTab = "CUSTOMERS" | "PRESENTATIONS";
+type AgencyStatus = "ACTIVE" | "PASSIVE" | "PROSPECT" | "DEALING" | "CLOSED";
+type WorkspaceTab = "CUSTOMERS" | "PRESENTATIONS" | "AGENCIES";
+type WorkspaceScope = "mine" | "all";
 
 type UserRow = {
   id: string;
@@ -55,8 +57,27 @@ type PresentationRow = {
   createdBy?: UserRow | null;
 };
 
+type AgencyRow = {
+  id: string;
+  name: string;
+  contactName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  city?: string | null;
+  country?: string | null;
+  status?: AgencyStatus;
+  updatedAt?: string;
+  assignedSales?: UserRow | null;
+  _count?: {
+    notes?: number;
+    meetings?: number;
+    tasks?: number;
+  };
+};
+
 type WorkspaceData = {
   stats?: {
+    scope?: "MINE" | "ALL";
     customers?: number;
     potentialCustomers?: number;
     existingCustomers?: number;
@@ -96,6 +117,26 @@ function statusTone(status: string | undefined) {
   if (status === "COMPLETED") return "success";
   if (status === "CANCELLED") return "danger";
   if (status === "RESCHEDULED") return "warning";
+  return "info";
+}
+
+function agencyStatusLabel(status: string | undefined, locale: string) {
+  const labels: Record<string, { en: string; tr: string }> = {
+    ACTIVE: { en: "Active", tr: "Aktif" },
+    PASSIVE: { en: "Passive", tr: "Pasif" },
+    PROSPECT: { en: "Prospect", tr: "Potansiyel" },
+    DEALING: { en: "Dealing", tr: "Görüşmede" },
+    CLOSED: { en: "Closed", tr: "Kapandı" },
+  };
+
+  return status ? labels[status]?.[locale === "tr" ? "tr" : "en"] || status : "-";
+}
+
+function agencyStatusTone(status: string | undefined) {
+  if (status === "ACTIVE" || status === "DEALING") return "success";
+  if (status === "PROSPECT") return "info";
+  if (status === "PASSIVE") return "warning";
+  if (status === "CLOSED") return "danger";
   return "info";
 }
 
@@ -139,37 +180,66 @@ export default function CustomerWorkspace() {
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
   const [data, setData] = useState<WorkspaceData>({});
+  const [agencies, setAgencies] = useState<AgencyRow[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<UserRow[]>([]);
   const [ownerDrafts, setOwnerDrafts] = useState<Record<string, string>>({});
+  const [agencyDrafts, setAgencyDrafts] = useState<Record<string, string>>({});
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
+  const [selectedAgencyIds, setSelectedAgencyIds] = useState<string[]>([]);
   const [bulkOwnerId, setBulkOwnerId] = useState("");
+  const [bulkAgencyOwnerId, setBulkAgencyOwnerId] = useState("");
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("ALL");
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("CUSTOMERS");
+  const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScope>("mine");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
+  const [savingAgencyId, setSavingAgencyId] = useState("");
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkAgencySaving, setBulkAgencySaving] = useState(false);
   const [err, setErr] = useState("");
   const [notice, setNotice] = useState("");
 
   const customers = Array.isArray(data.customers) ? data.customers : [];
   const presentations = Array.isArray(data.presentations) ? data.presentations : [];
   const stats = data.stats || {};
+  const activeAgencyCount = agencies.filter(
+    (agency) => agency.status === "ACTIVE" || agency.status === "DEALING",
+  ).length;
   const role = me?.role as string | undefined;
   const canUseWorkspace =
     role === "ADMIN" || role === "MANAGER" || role === "SALES" || role === "PREVIEW";
+  const canUseAllScope = role === "ADMIN" || role === "MANAGER";
+  const canManageAgencyAssignments = role === "ADMIN" || role === "MANAGER";
+  const isAllScope = canUseAllScope && workspaceScope === "all";
 
   async function load() {
     setLoading(true);
     setErr("");
 
     try {
-      const [workspace, usersRes] = await Promise.all([
-        authedFetch("/customers/my-workspace"),
+      const workspacePath = isAllScope
+        ? "/customers/my-workspace?scope=all"
+        : "/customers/my-workspace";
+      const agencyParams = new URLSearchParams({
+        page: "1",
+        pageSize: "500",
+      });
+
+      if (isAllScope) {
+        agencyParams.set("scope", "all");
+      } else if (me?.id) {
+        agencyParams.set("assignedSalesId", me.id);
+      }
+
+      const [workspace, agenciesRes, usersRes] = await Promise.all([
+        authedFetch(workspacePath),
+        authedFetch(`/agencies?${agencyParams.toString()}`),
         authedFetch("/users?all=true"),
       ]);
 
       const nextData = (workspace || {}) as WorkspaceData;
+      const nextAgencies = Array.isArray(agenciesRes?.items) ? agenciesRes.items : [];
       const users = Array.isArray(usersRes)
         ? usersRes
             .filter(
@@ -185,6 +255,7 @@ export default function CustomerWorkspace() {
         : [];
 
       setData(nextData);
+      setAgencies(nextAgencies);
       setAssignableUsers(users);
       setOwnerDrafts(
         Object.fromEntries(
@@ -194,12 +265,24 @@ export default function CustomerWorkspace() {
           ]),
         ),
       );
+      setAgencyDrafts(
+        Object.fromEntries(
+          nextAgencies.map((agency: AgencyRow) => [
+            agency.id,
+            agency.assignedSales?.id || "",
+          ]),
+        ),
+      );
       setSelectedCustomerIds((prev) =>
         prev.filter((id) => (nextData.customers || []).some((customer) => customer.id === id)),
+      );
+      setSelectedAgencyIds((prev) =>
+        prev.filter((id) => nextAgencies.some((agency: AgencyRow) => agency.id === id)),
       );
     } catch (e: any) {
       setErr(String(e?.message || e));
       setData({});
+      setAgencies([]);
       setAssignableUsers([]);
     } finally {
       setLoading(false);
@@ -295,6 +378,107 @@ export default function CustomerWorkspace() {
     }
   }
 
+  async function transferAgency(agency: AgencyRow) {
+    if (!canManageAgencyAssignments) return;
+
+    const nextOwnerId = agencyDrafts[agency.id] || "";
+    if (!nextOwnerId || nextOwnerId === agency.assignedSales?.id) return;
+
+    const nextOwner = assignableUsers.find((user) => user.id === nextOwnerId);
+    const ok = window.confirm(
+      locale === "tr"
+        ? `${agency.name} ajansı ${nextOwner?.name || "seçilen kullanıcı"} üzerine aktarılsın mı?`
+        : `Transfer ${agency.name} to ${nextOwner?.name || "selected user"}?`,
+    );
+
+    if (!ok) return;
+
+    setSavingAgencyId(agency.id);
+    setErr("");
+    setNotice("");
+
+    try {
+      await authedFetch(`/agencies/${agency.id}/assign-sales`, {
+        method: "POST",
+        body: JSON.stringify({ salesId: nextOwnerId }),
+      });
+
+      await load();
+      setNotice(locale === "tr" ? "Ajans sorumlusu güncellendi." : "Agency representative updated.");
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setSavingAgencyId("");
+    }
+  }
+
+  async function transferSelectedAgencies() {
+    if (!canManageAgencyAssignments || selectedAgencyIds.length === 0 || !bulkAgencyOwnerId) return;
+
+    const nextOwner = assignableUsers.find((user) => user.id === bulkAgencyOwnerId);
+    const selectedAgencies = agencies.filter((agency) =>
+      selectedAgencyIds.includes(agency.id),
+    );
+    const changedAgencies = selectedAgencies.filter(
+      (agency) => agency.assignedSales?.id !== bulkAgencyOwnerId,
+    );
+
+    if (changedAgencies.length === 0) {
+      setNotice(
+        locale === "tr"
+          ? "Seçili ajanslar zaten bu kullanıcıda."
+          : "Selected agencies already belong to this representative.",
+      );
+      return;
+    }
+
+    const ok = window.confirm(
+      locale === "tr"
+        ? `${changedAgencies.length} ajans ${nextOwner?.name || "seçilen kullanıcı"} üzerine aktarılsın mı?`
+        : `Transfer ${changedAgencies.length} agencies to ${nextOwner?.name || "selected user"}?`,
+    );
+
+    if (!ok) return;
+
+    setBulkAgencySaving(true);
+    setErr("");
+    setNotice("");
+
+    try {
+      await Promise.all(
+        changedAgencies.map((agency) =>
+          authedFetch(`/agencies/${agency.id}/assign-sales`, {
+            method: "POST",
+            body: JSON.stringify({ salesId: bulkAgencyOwnerId }),
+          }),
+        ),
+      );
+
+      await load();
+      setSelectedAgencyIds([]);
+      setBulkAgencyOwnerId("");
+      setNotice(
+        locale === "tr"
+          ? `${changedAgencies.length} ajans aktarıldı.`
+          : `${changedAgencies.length} agencies transferred.`,
+      );
+    } catch (e: any) {
+      setErr(String(e?.message || e));
+    } finally {
+      setBulkAgencySaving(false);
+    }
+  }
+
+  function changeWorkspaceScope(nextScope: WorkspaceScope) {
+    setWorkspaceScope(nextScope);
+    setSelectedCustomerIds([]);
+    setSelectedAgencyIds([]);
+    setBulkOwnerId("");
+    setBulkAgencyOwnerId("");
+    setNotice("");
+    setErr("");
+  }
+
   useEffect(() => {
     setMounted(true);
     setMe(getUser());
@@ -302,7 +486,13 @@ export default function CustomerWorkspace() {
 
   useEffect(() => {
     if (mounted && canUseWorkspace) load();
-  }, [mounted, canUseWorkspace]);
+  }, [mounted, canUseWorkspace, isAllScope]);
+
+  useEffect(() => {
+    if (mounted && !canUseAllScope && workspaceScope === "all") {
+      changeWorkspaceScope("mine");
+    }
+  }, [mounted, canUseAllScope, workspaceScope]);
 
   const filteredCustomers = useMemo(() => {
     const search = q.trim().toLowerCase();
@@ -325,12 +515,40 @@ export default function CustomerWorkspace() {
         .join(" ")
         .toLowerCase()
         .includes(search);
-    });
+      });
   }, [customers, q, typeFilter]);
+
+  const filteredAgencies = useMemo(() => {
+    const search = q.trim().toLowerCase();
+
+    return agencies.filter((agency) => {
+      if (!search) return true;
+
+      return [
+        agency.name,
+        agency.contactName,
+        agency.phone,
+        agency.email,
+        agency.city,
+        agency.country,
+        agency.assignedSales?.name,
+        agency.assignedSales?.email,
+        agency.status,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(search);
+    });
+  }, [agencies, q]);
 
   const allFilteredSelected =
     filteredCustomers.length > 0 &&
     filteredCustomers.every((customer) => selectedCustomerIds.includes(customer.id));
+
+  const allFilteredAgenciesSelected =
+    filteredAgencies.length > 0 &&
+    filteredAgencies.every((agency) => selectedAgencyIds.includes(agency.id));
 
   function toggleCustomerSelection(customerId: string) {
     setSelectedCustomerIds((prev) =>
@@ -349,6 +567,26 @@ export default function CustomerWorkspace() {
 
     setSelectedCustomerIds((prev) =>
       Array.from(new Set([...prev, ...filteredCustomers.map((customer) => customer.id)])),
+    );
+  }
+
+  function toggleAgencySelection(agencyId: string) {
+    setSelectedAgencyIds((prev) =>
+      prev.includes(agencyId)
+        ? prev.filter((id) => id !== agencyId)
+        : [...prev, agencyId],
+    );
+  }
+
+  function toggleFilteredAgencySelection() {
+    if (allFilteredAgenciesSelected) {
+      const filteredIds = new Set(filteredAgencies.map((agency) => agency.id));
+      setSelectedAgencyIds((prev) => prev.filter((id) => !filteredIds.has(id)));
+      return;
+    }
+
+    setSelectedAgencyIds((prev) =>
+      Array.from(new Set([...prev, ...filteredAgencies.map((agency) => agency.id)])),
     );
   }
 
@@ -382,26 +620,62 @@ export default function CustomerWorkspace() {
           <span>{locale === "tr" ? "Kişisel müşteri alanı" : "Personal customer workspace"}</span>
           <h2>{locale === "tr" ? "Müşteri ve sunum özeti" : "Customer and presentation summary"}</h2>
         </div>
-        <button onClick={load} disabled={loading}>
-          {loading
-            ? locale === "tr"
-              ? "Yükleniyor..."
-              : "Loading..."
-            : locale === "tr"
-              ? "Yenile"
-              : "Refresh"}
-        </button>
+        <div className="workspace-overview-actions">
+          {canUseAllScope ? (
+            <div className="scope-switch" role="group" aria-label="Customer scope">
+              <button
+                className={!isAllScope ? "active" : ""}
+                onClick={() => changeWorkspaceScope("mine")}
+                type="button"
+              >
+                {locale === "tr" ? "Müşterilerim" : "My customers"}
+              </button>
+              <button
+                className={isAllScope ? "active" : ""}
+                onClick={() => changeWorkspaceScope("all")}
+                type="button"
+              >
+                {locale === "tr" ? "Tüm müşteriler" : "All customers"}
+              </button>
+            </div>
+          ) : null}
+          <button onClick={load} disabled={loading}>
+            {loading
+              ? locale === "tr"
+                ? "Yükleniyor..."
+                : "Loading..."
+              : locale === "tr"
+                ? "Yenile"
+                : "Refresh"}
+          </button>
+        </div>
       </section>
 
       <section className="workspace-stats">
         <WorkspaceStat
-          label={locale === "tr" ? "Müşterilerim" : "My customers"}
+          label={
+            isAllScope
+              ? locale === "tr"
+                ? "Tüm müşteriler"
+                : "All customers"
+              : locale === "tr"
+                ? "Müşterilerim"
+                : "My customers"
+          }
           value={Number(stats.customers || 0)}
           detail={`${stats.potentialCustomers || 0} ${locale === "tr" ? "potansiyel" : "potential"} / ${stats.existingCustomers || 0} ${locale === "tr" ? "mevcut" : "existing"}`}
           tone="blue"
         />
         <WorkspaceStat
-          label={locale === "tr" ? "Sunumlarım" : "My presentations"}
+          label={
+            isAllScope
+              ? locale === "tr"
+                ? "Tüm sunumlar"
+                : "All presentations"
+              : locale === "tr"
+                ? "Sunumlarım"
+                : "My presentations"
+          }
           value={Number(stats.presentations || 0)}
           detail={`${stats.completedPresentations || 0} ${locale === "tr" ? "tamamlandı" : "completed"}`}
           tone="green"
@@ -413,9 +687,17 @@ export default function CustomerWorkspace() {
           tone="amber"
         />
         <WorkspaceStat
-          label={locale === "tr" ? "Aktarılabilir kullanıcı" : "Assignable users"}
-          value={assignableUsers.length}
-          detail={locale === "tr" ? "Sales / Manager" : "Sales / Manager"}
+          label={
+            isAllScope
+              ? locale === "tr"
+                ? "Tüm ajanslar"
+                : "All agencies"
+              : locale === "tr"
+                ? "Ajanslarım"
+                : "My agencies"
+          }
+          value={agencies.length}
+          detail={`${activeAgencyCount} ${locale === "tr" ? "aktif / görüşmede" : "active / dealing"}`}
           tone="neutral"
         />
       </section>
@@ -438,6 +720,13 @@ export default function CustomerWorkspace() {
               >
                 {locale === "tr" ? "Sunumlar" : "Presentations"}
               </button>
+              <button
+                className={activeTab === "AGENCIES" ? "active" : ""}
+                onClick={() => setActiveTab("AGENCIES")}
+                type="button"
+              >
+                {locale === "tr" ? "Ajanslar" : "Agencies"}
+              </button>
             </div>
 
             <div className="workspace-filters">
@@ -445,9 +734,13 @@ export default function CustomerWorkspace() {
                 value={q}
                 onChange={(event) => setQ(event.target.value)}
                 placeholder={
-                  locale === "tr"
-                    ? "Müşteri, telefon, e-posta, ajans veya sorumlu ara..."
-                    : "Search customer, phone, email, agency or owner..."
+                  activeTab === "AGENCIES"
+                    ? locale === "tr"
+                      ? "Ajans, iletişim, telefon, e-posta veya sorumlu ara..."
+                      : "Search agency, contact, phone, email or representative..."
+                    : locale === "tr"
+                      ? "Müşteri, telefon, e-posta, ajans veya sorumlu ara..."
+                      : "Search customer, phone, email, agency or owner..."
                 }
               />
               <select
@@ -636,6 +929,172 @@ export default function CustomerWorkspace() {
                 </div>
               ) : null}
             </div>
+          ) : activeTab === "AGENCIES" ? (
+            <div className="workspace-list">
+              {canManageAgencyAssignments ? (
+                <div className="bulk-bar">
+                  <label className="bulk-check">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredAgenciesSelected}
+                      onChange={toggleFilteredAgencySelection}
+                      disabled={filteredAgencies.length === 0}
+                    />
+                    <span>
+                      {locale === "tr"
+                        ? "Filtrelenen ajansları seç"
+                        : "Select filtered agencies"}
+                    </span>
+                  </label>
+
+                  <div className="bulk-summary">
+                    {selectedAgencyIds.length}{" "}
+                    {locale === "tr" ? "ajans seçili" : "agencies selected"}
+                  </div>
+
+                  <select
+                    value={bulkAgencyOwnerId}
+                    onChange={(event) => setBulkAgencyOwnerId(event.target.value)}
+                    disabled={selectedAgencyIds.length === 0}
+                  >
+                    <option value="">
+                      {locale === "tr" ? "Yeni temsilci seç" : "Select new representative"}
+                    </option>
+                    {assignableUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} {user.role ? `- ${user.role}` : ""}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    onClick={transferSelectedAgencies}
+                    disabled={
+                      selectedAgencyIds.length === 0 ||
+                      !bulkAgencyOwnerId ||
+                      bulkAgencySaving
+                    }
+                    type="button"
+                  >
+                    {bulkAgencySaving
+                      ? locale === "tr"
+                        ? "Aktarılıyor..."
+                        : "Transferring..."
+                      : locale === "tr"
+                        ? "Toplu aktar"
+                        : "Bulk transfer"}
+                  </button>
+                </div>
+              ) : null}
+
+              {filteredAgencies.map((agency) => {
+                const selectedOwnerId = agencyDrafts[agency.id] || "";
+                const unchanged = selectedOwnerId === (agency.assignedSales?.id || "");
+
+                return (
+                  <article className="customer-row agency-row" key={agency.id}>
+                    <label className="row-check" aria-label={agency.name}>
+                      <input
+                        type="checkbox"
+                        checked={selectedAgencyIds.includes(agency.id)}
+                        onChange={() => toggleAgencySelection(agency.id)}
+                        disabled={!canManageAgencyAssignments}
+                      />
+                    </label>
+
+                    <div className="customer-primary">
+                      <div className="record-title">
+                        <Link href={`/agencies/${agency.id}`}>{agency.name}</Link>
+                        <span className={`badge ${agencyStatusTone(agency.status)}`}>
+                          {agencyStatusLabel(agency.status, locale)}
+                        </span>
+                      </div>
+                      <div className="record-subtitle">{emptyValue(agency.contactName)}</div>
+                      <div className="record-meta">
+                        <span>{emptyValue(agency.phone)}</span>
+                        <span>{emptyValue(agency.email)}</span>
+                        <span>
+                          {[agency.city, agency.country].filter(Boolean).join(", ") || "-"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="customer-context">
+                      <span>{agency.assignedSales?.name || "-"}</span>
+                      <small>
+                        {agency.assignedSales?.role
+                          ? `${agency.assignedSales.role} / ${agency.assignedSales.email || "-"}`
+                          : agency.assignedSales?.email || "-"}
+                      </small>
+                    </div>
+
+                    <div className="customer-counts">
+                      <strong>{agency._count?.meetings || 0}</strong>
+                      <span>{locale === "tr" ? "görüşme" : "meetings"}</span>
+                      <small>
+                        {agency._count?.notes || 0} {locale === "tr" ? "not" : "notes"} /{" "}
+                        {agency._count?.tasks || 0} {locale === "tr" ? "görev" : "tasks"}
+                      </small>
+                    </div>
+
+                    <div className="transfer-box">
+                      <label>
+                        <span>{locale === "tr" ? "Temsilci" : "Representative"}</span>
+                        <select
+                          value={selectedOwnerId}
+                          onChange={(event) =>
+                            setAgencyDrafts((prev) => ({
+                              ...prev,
+                              [agency.id]: event.target.value,
+                            }))
+                          }
+                          disabled={!canManageAgencyAssignments}
+                        >
+                          <option value="">
+                            {locale === "tr" ? "Temsilci seç" : "Select representative"}
+                          </option>
+                          {assignableUsers.map((user) => (
+                            <option key={user.id} value={user.id}>
+                              {user.name} {user.role ? `- ${user.role}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        onClick={() => transferAgency(agency)}
+                        disabled={
+                          !canManageAgencyAssignments ||
+                          !selectedOwnerId ||
+                          unchanged ||
+                          savingAgencyId === agency.id
+                        }
+                        type="button"
+                      >
+                        {savingAgencyId === agency.id
+                          ? locale === "tr"
+                            ? "Aktarılıyor..."
+                            : "Saving..."
+                          : locale === "tr"
+                            ? "Aktar"
+                            : "Transfer"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+
+              {filteredAgencies.length === 0 ? (
+                <div className="workspace-empty">
+                  {loading
+                    ? locale === "tr"
+                      ? "Yükleniyor..."
+                      : "Loading..."
+                    : locale === "tr"
+                      ? "Ajans bulunamadı."
+                      : "No agencies found."}
+                </div>
+              ) : null}
+            </div>
           ) : (
             <div className="workspace-list">
               {presentations.map((presentation) => (
@@ -725,6 +1184,39 @@ const workspaceStyles = `
     align-items: end;
     gap: 12px;
     flex-wrap: wrap;
+  }
+
+  .workspace-overview-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .scope-switch {
+    display: inline-grid;
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    background: var(--surface-2);
+  }
+
+  .scope-switch button {
+    min-height: 38px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
+    white-space: nowrap;
+  }
+
+  .scope-switch button.active {
+    background: var(--surface);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-sm);
   }
 
   .workspace-heading {
@@ -822,7 +1314,7 @@ const workspaceStyles = `
 
   .workspace-tabs {
     display: inline-grid;
-    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    grid-template-columns: repeat(3, minmax(110px, 1fr));
     gap: 4px;
     width: fit-content;
     padding: 4px;
@@ -1113,6 +1605,11 @@ const workspaceStyles = `
     .bulk-bar,
     .transfer-box {
       grid-template-columns: 1fr;
+    }
+
+    .workspace-overview-actions,
+    .scope-switch {
+      width: 100%;
     }
 
     .bulk-check,

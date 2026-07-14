@@ -35,6 +35,22 @@ type AgencyDetail = {
   updatedAt?: string;
   manager?: { id: string; name: string; email: string } | null;
   assignedSales?: { id: string; name: string; email: string; role?: string } | null;
+  salesHistory?: Array<{
+    id: string;
+    createdAt: string;
+    previousSalesName?: string | null;
+    previousSalesEmail?: string | null;
+    previousSalesRole?: string | null;
+    newSalesName?: string | null;
+    newSalesEmail?: string | null;
+    newSalesRole?: string | null;
+    changedByName?: string | null;
+    changedByEmail?: string | null;
+    changedByRole?: string | null;
+    previousSales?: { id: string; name: string; email?: string | null; role?: string | null } | null;
+    newSales?: { id: string; name: string; email?: string | null; role?: string | null } | null;
+    changedBy?: { id: string; name: string; email?: string | null; role?: string | null } | null;
+  }>;
   canSeeContactDetails?: boolean;
   canEdit?: boolean;
   notes?: Array<{
@@ -77,6 +93,22 @@ function safeTranslate(
 ) {
   const translated = t(path);
   return translated === path ? fallback ?? path : translated;
+}
+
+function formatDateTime(date: string | undefined | null, locale: "tr" | "en") {
+  if (!date) return "-";
+  return new Date(date).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
+}
+
+function userLabel(
+  user: { name?: string | null; role?: string | null } | undefined | null,
+  locale: "tr" | "en",
+  fallback?: { name?: string | null; role?: string | null },
+) {
+  const name = user?.name || fallback?.name;
+  const role = user?.role || fallback?.role;
+  if (!name) return locale === "tr" ? "Atanmamış" : "Unassigned";
+  return role ? `${name} (${role})` : name;
 }
 
 export default function AgencyDetailPage() {
@@ -521,6 +553,76 @@ export default function AgencyDetailPage() {
             </button>
           </div>
         ) : null}
+      </div>
+
+      <div className="card" style={{ display: "grid", gap: 12 }}>
+        <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 900 }}>
+            {locale === "tr" ? "Temsilci geçmişi" : "Representative history"}
+          </div>
+          <span className="muted" style={{ fontSize: 13 }}>
+            {(agency.salesHistory || []).length}{" "}
+            {locale === "tr" ? "kayıt" : "records"}
+          </span>
+        </div>
+
+        {(agency.salesHistory || []).length > 0 ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            {(agency.salesHistory || []).map((row) => (
+              <div
+                key={row.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
+                  gap: 10,
+                  alignItems: "center",
+                  border: "1px solid var(--stroke)",
+                  borderRadius: 10,
+                  background: "var(--surface-2)",
+                  padding: 12,
+                }}
+              >
+                <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                  <div style={{ fontWeight: 850, overflowWrap: "anywhere" }}>
+                    {userLabel(row.previousSales, locale, {
+                      name: row.previousSalesName,
+                      role: row.previousSalesRole,
+                    })}{" "}
+                    →{" "}
+                    {userLabel(row.newSales, locale, {
+                      name: row.newSalesName,
+                      role: row.newSalesRole,
+                    })}
+                  </div>
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {locale === "tr" ? "Değiştiren" : "Changed by"}:{" "}
+                    {userLabel(row.changedBy, locale, {
+                      name: row.changedByName,
+                      role: row.changedByRole,
+                    })}
+                  </div>
+                </div>
+                <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
+                  {formatDateTime(row.createdAt, locale)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            className="muted"
+            style={{
+              border: "1px dashed var(--stroke)",
+              borderRadius: 10,
+              background: "var(--surface-2)",
+              padding: 12,
+            }}
+          >
+            {locale === "tr"
+              ? "Henüz temsilci değişikliği kaydı yok."
+              : "No representative changes have been recorded yet."}
+          </div>
+        )}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>

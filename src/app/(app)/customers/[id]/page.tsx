@@ -63,6 +63,37 @@ type CustomerDetail = {
     email?: string | null;
     role?: string | null;
   } | null;
+  ownerHistory?: Array<{
+    id: string;
+    createdAt: string;
+    previousOwnerName?: string | null;
+    previousOwnerEmail?: string | null;
+    previousOwnerRole?: string | null;
+    newOwnerName?: string | null;
+    newOwnerEmail?: string | null;
+    newOwnerRole?: string | null;
+    changedByName?: string | null;
+    changedByEmail?: string | null;
+    changedByRole?: string | null;
+    previousOwner?: {
+      id: string;
+      name: string;
+      email?: string | null;
+      role?: string | null;
+    } | null;
+    newOwner?: {
+      id: string;
+      name: string;
+      email?: string | null;
+      role?: string | null;
+    } | null;
+    changedBy?: {
+      id: string;
+      name: string;
+      email?: string | null;
+      role?: string | null;
+    } | null;
+  }>;
   canSeeContactDetails?: boolean;
   canEdit?: boolean;
   agency?: {
@@ -314,6 +345,16 @@ export default function CustomerDetailPage() {
   function formatDateTime(date?: string | null) {
     if (!date) return "-";
     return new Date(date).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
+  }
+
+  function userLabel(
+    user?: { name?: string | null; role?: string | null } | null,
+    fallback?: { name?: string | null; role?: string | null },
+  ) {
+    const name = user?.name || fallback?.name;
+    const role = user?.role || fallback?.role;
+    if (!name) return locale === "tr" ? "Atanmamış" : "Unassigned";
+    return role ? `${name} (${role})` : name;
   }
 
   function fillCustomerForm(data: CustomerDetail) {
@@ -1178,6 +1219,76 @@ export default function CustomerDetailPage() {
             {customer.notesSummary}
           </div>
         ) : null}
+      </div>
+
+      <div className="card" style={{ display: "grid", gap: 12 }}>
+        <div className="flex-between" style={{ gap: 10, flexWrap: "wrap" }}>
+          <div style={{ fontWeight: 900 }}>
+            {locale === "tr" ? "Sorumlu kullanıcı geçmişi" : "Responsible user history"}
+          </div>
+          <span className="muted" style={{ fontSize: 13 }}>
+            {(customer.ownerHistory || []).length}{" "}
+            {locale === "tr" ? "kayıt" : "records"}
+          </span>
+        </div>
+
+        {(customer.ownerHistory || []).length > 0 ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            {(customer.ownerHistory || []).map((row) => (
+              <div
+                key={row.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0, 1fr) auto",
+                  gap: 10,
+                  alignItems: "center",
+                  border: "1px solid var(--stroke)",
+                  borderRadius: 10,
+                  background: "var(--surface-2)",
+                  padding: 12,
+                }}
+              >
+                <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                  <div style={{ fontWeight: 850, overflowWrap: "anywhere" }}>
+                    {userLabel(row.previousOwner, {
+                      name: row.previousOwnerName,
+                      role: row.previousOwnerRole,
+                    })}{" "}
+                    →{" "}
+                    {userLabel(row.newOwner, {
+                      name: row.newOwnerName,
+                      role: row.newOwnerRole,
+                    })}
+                  </div>
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {locale === "tr" ? "Değiştiren" : "Changed by"}:{" "}
+                    {userLabel(row.changedBy, {
+                      name: row.changedByName,
+                      role: row.changedByRole,
+                    })}
+                  </div>
+                </div>
+                <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
+                  {formatDateTime(row.createdAt)}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div
+            className="muted"
+            style={{
+              border: "1px dashed var(--stroke)",
+              borderRadius: 10,
+              background: "var(--surface-2)",
+              padding: 12,
+            }}
+          >
+            {locale === "tr"
+              ? "Henüz sorumlu kullanıcı değişikliği kaydı yok."
+              : "No responsible user changes have been recorded yet."}
+          </div>
+        )}
       </div>
 
       {canCreatePresentation ? (
