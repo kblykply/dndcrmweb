@@ -536,6 +536,7 @@ export default function UnitDetailPage() {
   const [communicationNotice, setCommunicationNotice] = useState("");
 
   const isAdmin = me?.role === "ADMIN" || me?.role === "PREVIEW";
+  const canCancelUnit = isAdmin || me?.role === "AFTERSALES";
 
   const logs = useMemo(() => unit?.logs || [], [unit?.logs]);
   const unitInformationLogs = useMemo(
@@ -572,8 +573,8 @@ export default function UnitDetailPage() {
       serializeCustomerComplaints(customerComplaints) !==
         serializeCustomerComplaints(normalizeCustomerComplaints(unit.customerComplaint)) ||
       cleanText(unitComplaint) !== cleanText(unit.unitComplaint) ||
-      (isAdmin && isCanceled !== Boolean(unit.isCanceled)) ||
-      (isAdmin && cleanText(cancelReason) !== cleanText(unit.cancelReason)) ||
+      (canCancelUnit && isCanceled !== Boolean(unit.isCanceled)) ||
+      (canCancelUnit && cleanText(cancelReason) !== cleanText(unit.cancelReason)) ||
       kdvStatus !== (unit.kdvStatus || "UNPAID") ||
       trafoStatus !== (unit.trafoStatus || "UNPAID") ||
       electricityProvider !== (unit.electricityProvider || "UNKNOWN") ||
@@ -591,7 +592,7 @@ export default function UnitDetailPage() {
     deliveryStatus,
     electricityProvider,
     generalInfo,
-    isAdmin,
+    canCancelUnit,
     isCanceled,
     kdvStatus,
     rentalPackage,
@@ -664,7 +665,7 @@ export default function UnitDetailPage() {
         rentalStatus,
       };
 
-      if (isAdmin) {
+      if (canCancelUnit) {
         body.isCanceled = isCanceled;
         body.cancelReason = cancelReason;
       }
@@ -1818,15 +1819,15 @@ export default function UnitDetailPage() {
                 ) : null}
               </section>
 
-              {isAdmin ? (
+              {canCancelUnit ? (
                 <section className={`unit-detail-panel unit-detail-cancel-strip ${isCanceled ? "active" : ""}`}>
                   <div className="unit-detail-cancel-header">
                     <div className="unit-detail-panel-title">
-                      <h2>{locale === "tr" ? "Admin iptal" : "Admin cancellation"}</h2>
+                      <h2>{locale === "tr" ? "Unit iptal" : "Unit cancellation"}</h2>
                       <span className="unit-detail-muted">
                         {locale === "tr"
-                          ? "Bu alan sadece admin tarafından düzenlenir."
-                          : "Only admin can update this status."}
+                          ? "Admin ve satış sonrası ekibi bu durumu güncelleyebilir."
+                          : "Admin and aftersales can update this status."}
                       </span>
                     </div>
                     <span className={`unit-detail-cancel-badge ${isCanceled ? "danger" : ""}`}>

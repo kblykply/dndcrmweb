@@ -466,7 +466,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const canSeeCustomers = canSeeCRM || isAftersales || isPreview;
   const canSeeFinance = isAdmin || isAccounting || isPreview;
   const canSeeMyCustomers =
-    isPreview || role === "ADMIN" || role === "MANAGER" || role === "SALES";
+    isPreview ||
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "SALES" ||
+    isAftersales;
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
 
@@ -546,12 +550,13 @@ const isMeetingsActive = useMemo(
     if (
       !isAftersales ||
       isUnitsActive ||
-      isCustomersAreaActive
+      isCustomersAreaActive ||
+      isProfileActive
     ) {
       return;
     }
     window.location.replace("/units");
-  }, [isAftersales, isUnitsActive, isCustomersAreaActive]);
+  }, [isAftersales, isUnitsActive, isCustomersAreaActive, isProfileActive]);
 
   useEffect(() => {
     if (!isAccounting || isFinanceActive) {

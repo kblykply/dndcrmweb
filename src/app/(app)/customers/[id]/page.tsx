@@ -292,13 +292,16 @@ export default function CustomerDetailPage() {
   const [unitSelections, setUnitSelections] = useState<
     Array<{ project: ProjectType; unitNumber: string }>
   >([]);
+  const [customerOwnerId, setCustomerOwnerId] = useState("");
 
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null);
 
   const role = me?.role as string | undefined;
   const isSales = role === "SALES";
+  const isAftersales = role === "AFTERSALES";
   const isManagerOrAdmin = role === "MANAGER" || role === "ADMIN";
+  const canManageCustomerAssignments = isManagerOrAdmin || isAftersales;
 
   const canSeeContactDetails = useMemo(() => {
     if (!customer) return false;
@@ -309,10 +312,10 @@ export default function CustomerDetailPage() {
 
   const canEditCustomer = useMemo(() => {
     if (!customer) return false;
-    if (isManagerOrAdmin) return true;
+    if (isManagerOrAdmin || isAftersales) return true;
     if (!isSales) return false;
     return customer.canEdit === true;
-  }, [customer, isManagerOrAdmin, isSales]);
+  }, [customer, isAftersales, isManagerOrAdmin, isSales]);
 
   const canCreatePresentation = canEditCustomer;
 
@@ -386,6 +389,7 @@ export default function CustomerDetailPage() {
           }))
         : [],
     );
+    setCustomerOwnerId(data.ownerId || "");
   }
 
   async function openCustomerDocument(documentId: string) {
@@ -435,7 +439,7 @@ export default function CustomerDetailPage() {
   }
 
   async function loadAssignableUsers() {
-    if (!isManagerOrAdmin) {
+    if (!canManageCustomerAssignments) {
       setAssignableUsers([]);
       return;
     }
@@ -495,6 +499,7 @@ export default function CustomerDetailPage() {
           job: job.trim() || null,
           project: project || null,
           unitSelections,
+          ownerId: canManageCustomerAssignments ? customerOwnerId || null : undefined,
         }),
       });
 
@@ -941,6 +946,37 @@ export default function CustomerDetailPage() {
                 </option>
               ))}
             </select>
+
+            {canManageCustomerAssignments ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                <input
+                  value={assignableSearch}
+                  onChange={(e) => setAssignableSearch(e.target.value)}
+                  placeholder={
+                    locale === "tr"
+                      ? "Sorumlu kullanıcı ara..."
+                      : "Search responsible user..."
+                  }
+                />
+
+                <select
+                  value={customerOwnerId}
+                  onChange={(e) => setCustomerOwnerId(e.target.value)}
+                >
+                  <option value="">
+                    {locale === "tr"
+                      ? "Sorumlu kullanıcı seç"
+                      : "Select responsible user"}
+                  </option>
+
+                  {filteredAssignableUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({u.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
 
             <input
               value={phone}

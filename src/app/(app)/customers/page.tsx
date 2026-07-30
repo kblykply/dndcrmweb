@@ -161,7 +161,8 @@ export default function CustomersPage() {
   const isSales = role === "SALES";
   const isManagerOrAdmin = role === "MANAGER" || role === "ADMIN";
   const canUseOwnerFilter = role === "MANAGER" || role === "ADMIN" || role === "AFTERSALES";
-  const canCreate = role === "MANAGER" || role === "ADMIN" || role === "SALES";
+  const canCreate =
+    role === "MANAGER" || role === "ADMIN" || role === "SALES" || role === "AFTERSALES";
   const canDelete = role === "MANAGER" || role === "ADMIN";
 
   function handleCountryChange(nextCountry: string) {

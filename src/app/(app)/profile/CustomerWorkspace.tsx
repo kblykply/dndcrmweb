@@ -208,8 +208,14 @@ export default function CustomerWorkspace() {
   ).length;
   const role = me?.role as string | undefined;
   const canUseWorkspace =
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "SALES" ||
+    role === "AFTERSALES" ||
+    role === "PREVIEW";
+  const canUseAllScope = role === "ADMIN" || role === "MANAGER" || role === "AFTERSALES";
+  const canUseAgencyWorkspace =
     role === "ADMIN" || role === "MANAGER" || role === "SALES" || role === "PREVIEW";
-  const canUseAllScope = role === "ADMIN" || role === "MANAGER";
   const canManageAgencyAssignments = role === "ADMIN" || role === "MANAGER";
   const isAllScope = canUseAllScope && workspaceScope === "all";
 
@@ -234,7 +240,9 @@ export default function CustomerWorkspace() {
 
       const [workspace, agenciesRes, usersRes] = await Promise.all([
         authedFetch(workspacePath),
-        authedFetch(`/agencies?${agencyParams.toString()}`),
+        canUseAgencyWorkspace
+          ? authedFetch(`/agencies?${agencyParams.toString()}`)
+          : Promise.resolve({ items: [] }),
         authedFetch("/users?all=true"),
       ]);
 
@@ -486,13 +494,19 @@ export default function CustomerWorkspace() {
 
   useEffect(() => {
     if (mounted && canUseWorkspace) load();
-  }, [mounted, canUseWorkspace, isAllScope]);
+  }, [mounted, canUseWorkspace, canUseAgencyWorkspace, isAllScope]);
 
   useEffect(() => {
     if (mounted && !canUseAllScope && workspaceScope === "all") {
       changeWorkspaceScope("mine");
     }
   }, [mounted, canUseAllScope, workspaceScope]);
+
+  useEffect(() => {
+    if (mounted && !canUseAgencyWorkspace && activeTab === "AGENCIES") {
+      setActiveTab("CUSTOMERS");
+    }
+  }, [activeTab, canUseAgencyWorkspace, mounted]);
 
   const filteredCustomers = useMemo(() => {
     const search = q.trim().toLowerCase();
@@ -686,20 +700,22 @@ export default function CustomerWorkspace() {
           detail={locale === "tr" ? "Planlanan görüşmeler" : "Scheduled meetings"}
           tone="amber"
         />
-        <WorkspaceStat
-          label={
-            isAllScope
-              ? locale === "tr"
-                ? "Tüm ajanslar"
-                : "All agencies"
-              : locale === "tr"
-                ? "Ajanslarım"
-                : "My agencies"
-          }
-          value={agencies.length}
-          detail={`${activeAgencyCount} ${locale === "tr" ? "aktif / görüşmede" : "active / dealing"}`}
-          tone="neutral"
-        />
+        {canUseAgencyWorkspace ? (
+          <WorkspaceStat
+            label={
+              isAllScope
+                ? locale === "tr"
+                  ? "Tüm ajanslar"
+                  : "All agencies"
+                : locale === "tr"
+                  ? "Ajanslarım"
+                  : "My agencies"
+            }
+            value={agencies.length}
+            detail={`${activeAgencyCount} ${locale === "tr" ? "aktif / görüşmede" : "active / dealing"}`}
+            tone="neutral"
+          />
+        ) : null}
       </section>
 
       <section className="workspace-grid">
@@ -720,13 +736,15 @@ export default function CustomerWorkspace() {
               >
                 {locale === "tr" ? "Sunumlar" : "Presentations"}
               </button>
-              <button
-                className={activeTab === "AGENCIES" ? "active" : ""}
-                onClick={() => setActiveTab("AGENCIES")}
-                type="button"
-              >
-                {locale === "tr" ? "Ajanslar" : "Agencies"}
-              </button>
+              {canUseAgencyWorkspace ? (
+                <button
+                  className={activeTab === "AGENCIES" ? "active" : ""}
+                  onClick={() => setActiveTab("AGENCIES")}
+                  type="button"
+                >
+                  {locale === "tr" ? "Ajanslar" : "Agencies"}
+                </button>
+              ) : null}
             </div>
 
             <div className="workspace-filters">
