@@ -35,6 +35,27 @@ function PdcaIcon() {
   );
 }
 
+function QualityIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M12 3.5 19 6v5.2c0 4.4-2.8 7.8-7 9.3-4.2-1.5-7-4.9-7-9.3V6l7-2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="m8.5 12 2.2 2.2 4.9-5.2"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M8 18.3h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 
 
 function OrgChartIcon() {
@@ -110,6 +131,22 @@ function CustomersIcon() {
   );
 }
 
+function MailIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3.5" y="5" width="17" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="m5 8 7 5 7-5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function UnitsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -132,6 +169,27 @@ function UnitsIcon() {
         strokeWidth="1.9"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+
+function ProjectMonopolyIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M8 3v18M16 3v18M3 8h18M3 16h18"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.5 9.5h5v5h-5z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M12 7.2v2.3M12 14.5v2.3M7.2 12h2.3M14.5 12h2.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }
@@ -222,6 +280,22 @@ function AgenciesIcon() {
       <path d="M4 19.5h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M6 19.5V9.5l6-4 6 4v10" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
       <path d="M10 19.5v-4h4v4M9 11h.01M15 11h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function GiftWheelIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="12" cy="12" r="2.3" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M12 3.5v6.2M12 14.3v6.2M3.5 12h6.2M14.3 12h6.2M6 6l4.4 4.4M13.6 13.6 18 18M18 6l-4.4 4.4M10.4 13.6 6 18"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path d="M12 1.8 14.4 5H9.6L12 1.8Z" fill="currentColor" />
     </svg>
   );
 }
@@ -463,7 +537,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     role === "SALES" ||
     role === "CALLCENTER";
   const canSeeUnits = canSeeCRM || isAftersales || isPreview;
+  const canSeeProjectMonopoly = canSeeUnits;
   const canSeeCustomers = canSeeCRM || isAftersales || isPreview;
+  const canSeeBulkEmail = isAdmin || isManager || isAftersales || isPreview;
   const canSeeFinance = isAdmin || isAccounting || isPreview;
   const canSeeMyCustomers =
     isPreview ||
@@ -471,6 +547,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     role === "MANAGER" ||
     role === "SALES" ||
     isAftersales;
+  const canSeeAgentWheel =
+    isPreview || role === "ADMIN" || role === "MANAGER" || role === "SALES";
+  const canSeeQuality =
+    isPreview ||
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "AFTERSALES" ||
+    role === "SALES";
 
   const logoSrc = theme === "dark" ? "/dndwhite.png" : "/dndblack.png";
 
@@ -481,6 +565,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   () => pathname === "/pdca" || pathname.startsWith("/pdca/"),
   [pathname],
 );
+
+  const isQualityActive = useMemo(
+    () => pathname === "/quality-control" || pathname.startsWith("/quality-control/"),
+    [pathname],
+  );
 
 
   const isTasksActive = useMemo(
@@ -513,8 +602,20 @@ const isMeetingsActive = useMemo(
       (pathname.startsWith("/units/") && !isUnitsDashboardActive),
     [pathname, isUnitsDashboardActive],
   );
+  const isProjectMonopolyActive = useMemo(
+    () => pathname === "/project-monopoly" || pathname.startsWith("/project-monopoly/"),
+    [pathname],
+  );
   const isRentProjectionActive = useMemo(
     () => pathname === "/rent-projection" || pathname.startsWith("/rent-projection/"),
+    [pathname],
+  );
+  const isAgentWheelActive = useMemo(
+    () => pathname === "/agent-wheel" || pathname.startsWith("/agent-wheel/"),
+    [pathname],
+  );
+  const isBulkEmailActive = useMemo(
+    () => pathname === "/bulk-email" || pathname.startsWith("/bulk-email/"),
     [pathname],
   );
   const isFinanceActive = useMemo(
@@ -550,13 +651,24 @@ const isMeetingsActive = useMemo(
     if (
       !isAftersales ||
       isUnitsActive ||
+      isProjectMonopolyActive ||
       isCustomersAreaActive ||
-      isProfileActive
+      isProfileActive ||
+      isQualityActive ||
+      isBulkEmailActive
     ) {
       return;
     }
     window.location.replace("/units");
-  }, [isAftersales, isUnitsActive, isCustomersAreaActive, isProfileActive]);
+  }, [
+    isAftersales,
+    isUnitsActive,
+    isProjectMonopolyActive,
+    isCustomersAreaActive,
+    isProfileActive,
+    isQualityActive,
+    isBulkEmailActive,
+  ]);
 
   useEffect(() => {
     if (!isAccounting || isFinanceActive) {
@@ -637,6 +749,15 @@ const isMeetingsActive = useMemo(
   </Link>
 ) : null}
 
+            {canSeeQuality ? (
+              <Link href="/quality-control" style={navItemStyle(isQualityActive)}>
+                <NavIconWrap>
+                  <QualityIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.qualityControl", "Quality Control")}
+              </Link>
+            ) : null}
+
 
 
 
@@ -672,6 +793,15 @@ const isMeetingsActive = useMemo(
               </Link>
             ) : null}
 
+            {canSeeBulkEmail ? (
+              <Link href="/bulk-email" style={navItemStyle(isBulkEmailActive)}>
+                <NavIconWrap>
+                  <MailIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.bulkEmail", "Bulk Email")}
+              </Link>
+            ) : null}
+
             {canSeeUnits ? (
               <Link href="/units" style={navItemStyle(isUnitsActive)}>
                 <NavIconWrap>
@@ -687,6 +817,20 @@ const isMeetingsActive = useMemo(
                   <UnitsIcon />
                 </NavIconWrap>
                 {safeTranslate(t, "nav.unitsDashboard", "Units Dashboard")}
+              </Link>
+            ) : null}
+
+            {canSeeProjectMonopoly ? (
+              <Link
+                href="/project-monopoly"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={navItemStyle(isProjectMonopolyActive)}
+              >
+                <NavIconWrap>
+                  <ProjectMonopolyIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.projectMonopoly", "Project Monopoly")}
               </Link>
             ) : null}
 
@@ -772,6 +916,20 @@ const isMeetingsActive = useMemo(
                   <AgenciesIcon />
                 </NavIconWrap>
                 {t("nav.agencies")}
+              </Link>
+            ) : null}
+
+            {canSeeAgentWheel ? (
+              <Link
+                href="/agent-wheel"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={navItemStyle(isAgentWheelActive)}
+              >
+                <NavIconWrap>
+                  <GiftWheelIcon />
+                </NavIconWrap>
+                {safeTranslate(t, "nav.agentWheel", "Agent Wheel")}
               </Link>
             ) : null}
 

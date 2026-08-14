@@ -43,7 +43,11 @@ meetings: "Meetings",
     demographicsReport: "Demographics",
     units: "All Units",
     unitsDashboard: "Units Dashboard",
-    rentProjection: "Rent Projection"
+    rentProjection: "Rent Projection",
+    agentWheel: "Agent Wheel",
+    qualityControl: "Quality Control",
+    projectMonopoly: "Project Monopoly",
+    bulkEmail: "Bulk Email"
 
       
   },

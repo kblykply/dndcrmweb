@@ -50,7 +50,11 @@ meetings: "Toplantılar",
     demographicsReport: "Demografi",
     units: "Tüm Unitler",
     unitsDashboard: "Unit Dashboard",
-    rentProjection: "Kira Projeksiyonu"
+    rentProjection: "Kira Projeksiyonu",
+    agentWheel: "Acenta Çarkı",
+    qualityControl: "Kalite Kontrol",
+    projectMonopoly: "Proje Monopoly",
+    bulkEmail: "Toplu Mail"
 
   },
 
