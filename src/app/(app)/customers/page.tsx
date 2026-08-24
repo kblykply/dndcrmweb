@@ -160,7 +160,11 @@ export default function CustomersPage() {
   const role = me?.role as string | undefined;
   const isSales = role === "SALES";
   const isManagerOrAdmin = role === "MANAGER" || role === "ADMIN";
-  const canUseOwnerFilter = role === "MANAGER" || role === "ADMIN" || role === "AFTERSALES";
+  const canUseOwnerFilter =
+    role === "MANAGER" ||
+    role === "ADMIN" ||
+    role === "AFTERSALES" ||
+    role === "SALES";
   const canCreate =
     role === "MANAGER" || role === "ADMIN" || role === "SALES" || role === "AFTERSALES";
   const canDelete = role === "MANAGER" || role === "ADMIN";
@@ -452,9 +456,12 @@ export default function CustomersPage() {
 
     if (isSales) {
       setOwnerId(me?.id || "");
-      setOwnerUsers([]);
-    } else {
+    }
+
+    if (canUseOwnerFilter) {
       loadOwnerUsers();
+    } else {
+      setOwnerUsers([]);
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1024,9 +1031,9 @@ export default function CustomersPage() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isSales
-              ? "1fr 220px auto auto"
-              : "1fr 220px 260px auto auto",
+            gridTemplateColumns: canUseOwnerFilter
+              ? "1fr 220px 260px auto auto"
+              : "1fr 220px auto auto",
             gap: 10,
           }}
         >
@@ -1052,7 +1059,7 @@ export default function CustomersPage() {
             ))}
           </select>
 
-          {!isSales ? (
+          {canUseOwnerFilter ? (
             <select
               value={ownerFilterId}
               onChange={(e) => setOwnerFilterId(e.target.value)}

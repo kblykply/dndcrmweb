@@ -5,6 +5,23 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
+import {
+  QUALITY_MODULE_COPY,
+  policyItemsForCard,
+  qualityCardDescription,
+  qualityCardTitle,
+  type QualityLocale,
+} from "@/lib/qualityPolicy";
+import {
+  ISO9001_FOUNDATION,
+  ISO9001_GUIDE_COPY,
+  iso9001ClausesForCard,
+} from "@/lib/iso9001Requirements";
+import {
+  ISO9001_SOURCE_TR,
+  iso9001FoundationFigureDetailsTr,
+  iso9001FoundationSourceTr,
+} from "@/lib/iso9001SourceTr";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type QualityProcessCategory =
@@ -211,46 +228,17 @@ function toDateInput(value?: string | null) {
   return date.toISOString().slice(0, 10);
 }
 
-const MINI_CONTEXT = [
-  ["4.1", "Organization"],
-  ["4.2", "Parties"],
-  ["4.3", "Scope"],
-  ["4.4", "Processes"],
-];
-
-const MINI_OPERATIONAL = [
-  ["8.1", "Plan"],
-  ["8.2", "Terms"],
-  ["8.3", "Design"],
-  ["8.4", "Supply"],
-  ["8.5", "Produce"],
-  ["8.6", "Release"],
-  ["8.7", "Control"],
-];
-
-const MINI_SUPPORT = [
-  ["7.1", "Resources"],
-  ["7.2", "Competence"],
-  ["7.3", "Awareness"],
-  ["7.4", "Info"],
-  ["7.5", "Docs"],
-];
-
-const MINI_VALUES = [
-  ["5", "Integrity"],
-  ["7.4", "Courtesy"],
-  ["7.4", "Clarity"],
-  ["8.6", "Quality"],
-  ["7.2", "Experience"],
-];
-
 function MiniQualityMap({
   currentCode,
   hrefByCode,
+  locale,
 }: {
   currentCode: string;
   hrefByCode: Map<string, string>;
+  locale: QualityLocale;
 }) {
+  const copy = QUALITY_MODULE_COPY[locale].mini;
+
   function isActive(code: string) {
     return code === currentCode || currentCode.startsWith(`${code}.`);
   }
@@ -271,88 +259,80 @@ function MiniQualityMap({
   }
 
   return (
-    <aside className="mini-map" aria-label="Quality process mini map">
+    <aside className="mini-map" aria-label={copy.title}>
       <header className="mini-poster-head">
         <img src="/dndblack.png" alt="DND" />
         <Link href="/quality-control">
-          <strong>DND QUALITY MANAGEMENT SYSTEM</strong>
-          <span>Trust | Quality | Value</span>
+          <strong>{copy.title}</strong>
+          <span>{copy.values}</span>
         </Link>
       </header>
 
       <div className="mini-poster-grid">
         <section className="mini-context">
           <Link className="mini-bar" href={hrefByCode.get("4.1") || "/quality-control"}>
-            Context
+            {copy.context}
           </Link>
           <div className="mini-context-list">
-            {MINI_CONTEXT.map(([code, label]) => node(code, label))}
+            {copy.contextNodes.map(([code, label]) => node(code, label))}
           </div>
         </section>
 
         <section className="mini-center-map">
           <Link className="mini-bar mini-operational-bar" href={hrefByCode.get("8") || "/quality-control"}>
-            8. Operational
+            {copy.operational}
           </Link>
           <div className="mini-operational-row">
-            {MINI_OPERATIONAL.map(([code, label]) => node(code, label, "mini-tall"))}
+            {copy.operationalNodes.map(([code, label]) => node(code, label, "mini-tall"))}
           </div>
           <div className="mini-main-flow">
-            {node("8", "Operation", "mini-operation")}
+            {node("8", locale === "tr" ? "Operasyon" : "Operation", "mini-operation")}
             <div className="mini-core-row">
-              {node("6", "Planning", "mini-blue")}
-              {node("5", "Leadership", "mini-green")}
-              {node("9", "Performance", "mini-blue")}
+              {node("6", locale === "tr" ? "Planlama" : "Planning", "mini-blue")}
+              {node("5", locale === "tr" ? "Liderlik" : "Leadership", "mini-green")}
+              {node("9", locale === "tr" ? "Performans" : "Performance", "mini-blue")}
             </div>
-            {node("10", "Improvement", "mini-blue mini-improvement")}
+            {node("10", locale === "tr" ? "İyileştirme" : "Improvement", "mini-blue mini-improvement")}
           </div>
           <div className="mini-support">
             <Link className="mini-bar" href={hrefByCode.get("7") || "/quality-control"}>
-              7. Support
+              {copy.support}
             </Link>
             <div>
-              {MINI_SUPPORT.map(([code, label]) => node(code, label))}
+              {copy.supportNodes.map(([code, label]) => node(code, label))}
             </div>
           </div>
         </section>
 
         <section className="mini-outputs">
-          <Link href={hrefByCode.get("9.1") || "/quality-control"}>Customer satisfaction</Link>
-          <Link href={hrefByCode.get("9") || "/quality-control"}>QMS results</Link>
-          <Link href={hrefByCode.get("8.2") || "/quality-control"}>Products & services</Link>
-          <Link href={hrefByCode.get("4.4") || "/quality-control"}>Management system</Link>
+          <Link href={hrefByCode.get("9.1") || "/quality-control"}>{copy.outputs[0]}</Link>
+          <Link href={hrefByCode.get("9") || "/quality-control"}>{copy.outputs[1]}</Link>
+          <Link href={hrefByCode.get("8.2") || "/quality-control"}>{copy.outputs[2]}</Link>
+          <Link href={hrefByCode.get("4.4") || "/quality-control"}>{copy.outputs[3]}</Link>
         </section>
       </div>
 
       <div className="mini-bottom-lanes">
         <section>
           <Link className="mini-bar" href={hrefByCode.get("İNŞAAT") || "/quality-control"}>
-            Construction production
+            {copy.construction}
           </Link>
           <div>
-            {node("6", "Project")}
-            {node("8.3", "Design")}
-            {node("8.4", "Supply")}
-            {node("8.5", "Build")}
-            {node("8.6", "Test")}
+            {copy.constructionNodes.map(([code, label]) => node(code, label))}
           </div>
         </section>
         <section>
           <Link className="mini-bar" href={hrefByCode.get("SATIŞ") || "/quality-control"}>
-            Real estate sales
+            {copy.sales}
           </Link>
           <div>
-            {node("7.4", "Market")}
-            {node("4.2", "Customer")}
-            {node("8.2", "Contract")}
-            {node("8.6", "Deliver")}
-            {node("9.1", "After sales")}
+            {copy.salesNodes.map(([code, label]) => node(code, label))}
           </div>
         </section>
       </div>
 
       <footer className="mini-values">
-        {MINI_VALUES.map(([code, label]) => (
+        {copy.valueNodes.map(([code, label]) => (
           <Link key={label} href={hrefByCode.get(code) || "/quality-control"}>
             {label}
           </Link>
@@ -363,7 +343,8 @@ function MiniQualityMap({
 }
 
 export default function QualityDetailPage() {
-  const { locale } = useLanguage();
+  const { locale, setLocale } = useLanguage();
+  const moduleCopy = QUALITY_MODULE_COPY[locale];
   const params = useParams();
   const rawId = (params as any)?.id as string | string[] | undefined;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
@@ -397,6 +378,9 @@ export default function QualityDetailPage() {
   const [docNotes, setDocNotes] = useState("");
 
   const [newLog, setNewLog] = useState("");
+  const [openIsoClauses, setOpenIsoClauses] = useState<string[]>([]);
+  const [frameworkOpen, setFrameworkOpen] = useState(false);
+  const [mapDrawerOpen, setMapDrawerOpen] = useState(true);
 
   const role = me?.role as string | undefined;
   const canUse =
@@ -411,6 +395,10 @@ export default function QualityDetailPage() {
   const checklistDone = item?.checklists?.filter((row) => row.isChecked).length || 0;
   const completion = checklistTotal === 0 ? 0 : Math.round((checklistDone / checklistTotal) * 100);
   const reviewDocs = item?.documents?.filter((doc) => doc.status === "NEEDS_REVIEW").length || 0;
+  const policyLocale = locale === "tr" ? "tr" : "en";
+  const relatedPolicyItems = policyItemsForCard(item?.code, item?.category);
+  const isoGuideCopy = ISO9001_GUIDE_COPY[locale];
+  const isoClauses = iso9001ClausesForCard(item?.code);
   const hrefByCode = new Map<string, string>();
   mapItems.forEach((row) => {
     if (row.code && row.id) hrefByCode.set(row.code, `/quality-control/${row.id}`);
@@ -648,6 +636,53 @@ export default function QualityDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, canUse, id]);
 
+  useEffect(() => {
+    const clauses = iso9001ClausesForCard(item?.code);
+    const directClause = clauses.find((row) => row.code === item?.code);
+    setOpenIsoClauses(clauses.length > 0 ? [directClause?.code || clauses[0].code] : []);
+  }, [item?.code]);
+
+  useEffect(() => {
+    setMapDrawerOpen(true);
+  }, [id]);
+
+  useEffect(() => {
+    if (!mapDrawerOpen) return;
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setMapDrawerOpen(false);
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mapDrawerOpen]);
+
+  useEffect(() => {
+    if (!mapDrawerOpen) return;
+
+    function closeOnPageScroll() {
+      setMapDrawerOpen(false);
+    }
+
+    document.addEventListener("scroll", closeOnPageScroll, { passive: true, capture: true });
+    window.addEventListener("wheel", closeOnPageScroll, { passive: true });
+    window.addEventListener("touchmove", closeOnPageScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener("scroll", closeOnPageScroll, true);
+      window.removeEventListener("wheel", closeOnPageScroll);
+      window.removeEventListener("touchmove", closeOnPageScroll);
+    };
+  }, [mapDrawerOpen]);
+
+  function toggleIsoClause(clauseCode: string) {
+    setOpenIsoClauses((current) =>
+      current.includes(clauseCode)
+        ? current.filter((openCode) => openCode !== clauseCode)
+        : [...current, clauseCode],
+    );
+  }
+
   if (mounted && !canUse) {
     return (
       <main className="quality-detail-page">
@@ -678,19 +713,70 @@ export default function QualityDetailPage() {
     );
   }
 
+  const displayTitle = qualityCardTitle(item.code, item.title, locale);
+  const displayDescription = qualityCardDescription(item.code, item.description, locale);
+
   return (
     <main className="quality-detail-page">
+      <button
+        type="button"
+        className={`map-drawer-toggle ${mapDrawerOpen ? "open" : ""}`}
+        onClick={() => setMapDrawerOpen((current) => !current)}
+        aria-controls="quality-map-drawer"
+        aria-expanded={mapDrawerOpen}
+      >
+        <span aria-hidden="true">{mapDrawerOpen ? "×" : "▦"}</span>
+        {mapDrawerOpen
+          ? locale === "tr"
+            ? "Haritayı kapat"
+            : "Close map"
+          : locale === "tr"
+            ? "Süreç haritası"
+            : "Process map"}
+      </button>
+
+      {mapDrawerOpen ? (
+        <button
+          type="button"
+          className="map-drawer-backdrop"
+          onClick={() => setMapDrawerOpen(false)}
+          aria-label={locale === "tr" ? "Süreç haritasını kapat" : "Close process map"}
+        />
+      ) : null}
+
+      <div
+        id="quality-map-drawer"
+        className={`map-drawer-panel ${mapDrawerOpen ? "open" : ""}`}
+        role="region"
+        aria-label={locale === "tr" ? "Kalite süreç haritası" : "Quality process map"}
+        aria-hidden={!mapDrawerOpen}
+        onClick={(event) => {
+          if ((event.target as HTMLElement).closest("a")) setMapDrawerOpen(false);
+        }}
+      >
+        <MiniQualityMap currentCode={item.code} hrefByCode={hrefByCode} locale={locale} />
+      </div>
+
       <section className="detail-hero">
         <div className="hero-copy">
-          <Link href="/quality-control">← {locale === "tr" ? "Kalite modülü" : "Quality module"}</Link>
+          <div className="hero-topline">
+            <Link href="/quality-control">← {locale === "tr" ? "Kalite modülü" : "Quality module"}</Link>
+            <div className="language-switch" aria-label={moduleCopy.language}>
+              <button type="button" className={locale === "tr" ? "active" : ""} onClick={() => setLocale("tr")}>
+                TR
+              </button>
+              <button type="button" className={locale === "en" ? "active" : ""} onClick={() => setLocale("en")}>
+                EN
+              </button>
+            </div>
+          </div>
           <div className="title-row">
             <span>{item.code}</span>
-            <h1>{item.title}</h1>
+            <h1>{displayTitle}</h1>
           </div>
-          <p>{item.description || "-"}</p>
+          <p>{displayDescription || "-"}</p>
         </div>
         <div className="hero-side">
-          <MiniQualityMap currentCode={item.code} hrefByCode={hrefByCode} />
           <div className="hero-stats">
             <article>
               <span>{locale === "tr" ? "Checklist" : "Checklist"}</span>
@@ -700,13 +786,149 @@ export default function QualityDetailPage() {
             <article>
               <span>{locale === "tr" ? "Doküman" : "Documents"}</span>
               <strong>{item.documents?.length || 0}</strong>
-              <small>{reviewDocs} review</small>
+              <small>{reviewDocs} {moduleCopy.stats.review}</small>
             </article>
           </div>
         </div>
       </section>
 
       {err ? <div className="error-box">{err}</div> : null}
+
+      <section className="iso-guide">
+        <header className="iso-guide-head">
+          <div>
+            <div className="iso-guide-eyebrow">
+              <span>{isoGuideCopy.eyebrow}</span>
+              <b>{isoGuideCopy.source}</b>
+            </div>
+            <h2>{isoGuideCopy.title}</h2>
+            <p>{isoGuideCopy.description}</p>
+          </div>
+          {isoClauses.length > 0 ? (
+            <div className="iso-guide-actions">
+              <button type="button" onClick={() => setOpenIsoClauses(isoClauses.map((row) => row.code))}>
+                {isoGuideCopy.openAll}
+              </button>
+              <button type="button" onClick={() => setOpenIsoClauses([])}>
+                {isoGuideCopy.closeAll}
+              </button>
+            </div>
+          ) : null}
+        </header>
+
+        {isoClauses.length > 0 ? (
+          <div className="iso-clause-list">
+            {isoClauses.map((isoClause) => {
+              const isOpen = openIsoClauses.includes(isoClause.code);
+              return (
+                <article key={isoClause.code} className={isOpen ? "open" : ""}>
+                  <button
+                    type="button"
+                    className="iso-clause-trigger"
+                    onClick={() => toggleIsoClause(isoClause.code)}
+                    aria-expanded={isOpen}
+                  >
+                    <span>{isoClause.code}</span>
+                    <strong>{isoClause.title[locale]}</strong>
+                    <i aria-hidden="true">{isOpen ? "−" : "+"}</i>
+                  </button>
+                  {isOpen ? (
+                    <div className="iso-clause-body">
+                      <div className="iso-clause-summary">
+                        <b className="iso-section-label">{isoGuideCopy.implementationSummary}</b>
+                        <ol>
+                          {isoClause.points[locale].map((point) => (
+                            <li key={point}>{point}</li>
+                          ))}
+                        </ol>
+                        {isoClause.evidence ? (
+                          <aside className="iso-evidence">
+                            <b>{isoGuideCopy.evidence}</b>
+                            <ul>
+                              {isoClause.evidence[locale].map((evidence) => (
+                                <li key={evidence}>{evidence}</li>
+                              ))}
+                            </ul>
+                          </aside>
+                        ) : null}
+                      </div>
+                      {ISO9001_SOURCE_TR[isoClause.code] ? (
+                        <details className="iso-source-text">
+                          <summary>
+                            <span>
+                              <b>{isoGuideCopy.licensedText}</b>
+                              <small>{isoGuideCopy.originalLanguage}</small>
+                            </span>
+                          </summary>
+                          <div className="iso-source-content">
+                            {ISO9001_SOURCE_TR[isoClause.code].split("\n\n").map((paragraph, index) => (
+                              <p key={`${isoClause.code}-source-${index}`}>{paragraph}</p>
+                            ))}
+                          </div>
+                        </details>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="iso-empty">{isoGuideCopy.noClauses}</div>
+        )}
+
+        <div className="iso-framework">
+          <button type="button" onClick={() => setFrameworkOpen((current) => !current)} aria-expanded={frameworkOpen}>
+            <span>
+              <b>{isoGuideCopy.framework}</b>
+              <small>{isoGuideCopy.frameworkDescription}</small>
+            </span>
+            <i aria-hidden="true">{frameworkOpen ? "−" : "+"}</i>
+          </button>
+          {frameworkOpen ? (
+            <div className="iso-framework-grid">
+              {ISO9001_FOUNDATION.map((section) => (
+                <article key={section.code} className={section.code === "B" ? "iso-annex-card" : undefined}>
+                  <span>{section.code}</span>
+                  <h3>{section.title[locale]}</h3>
+                  <ul>
+                    {section.points[locale].map((point) => (
+                      <li key={point}>{point}</li>
+                    ))}
+                  </ul>
+                  {iso9001FoundationSourceTr(section.code) ? (
+                    <details className="iso-foundation-source">
+                      <summary>
+                        <span>
+                          <b>{isoGuideCopy.licensedText}</b>
+                          <small>{isoGuideCopy.originalLanguage}</small>
+                        </span>
+                      </summary>
+                      <div className="iso-foundation-source-content">
+                        {iso9001FoundationSourceTr(section.code)
+                          .split("\n\n")
+                          .map((paragraph, index) => (
+                            <p key={`${section.code}-foundation-source-${index}`}>{paragraph}</p>
+                          ))}
+                        {iso9001FoundationFigureDetailsTr(section.code).length > 0 ? (
+                          <div className="iso-figure-transcription">
+                            <b>{isoGuideCopy.figureTranscription}</b>
+                            <ul>
+                              {iso9001FoundationFigureDetailsTr(section.code).map((detail) => (
+                                <li key={detail}>{detail}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null}
+                      </div>
+                    </details>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </section>
 
       <section className="detail-grid">
         <div className="main-column">
@@ -977,6 +1199,24 @@ export default function QualityDetailPage() {
             </div>
           </section>
 
+          <section className="panel policy-panel">
+            <div className="panel-head compact">
+              <div>
+                <span>{locale === "tr" ? "Kalite politikası" : "Quality policy"}</span>
+                <h2>{locale === "tr" ? "İlgili politika maddeleri" : "Related policy principles"}</h2>
+              </div>
+            </div>
+
+            <div className="policy-principles">
+              {relatedPolicyItems.map((policy) => (
+                <article key={policy.key}>
+                  <strong>{policy.title[policyLocale]}</strong>
+                  <p>{policy.detail[policyLocale]}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
           <section className="panel">
             <div className="panel-head compact">
               <div>
@@ -1030,6 +1270,104 @@ const styles = `
     padding: 8px 0 32px;
   }
 
+  .map-drawer-toggle {
+    position: fixed;
+    z-index: 92;
+    top: max(14px, env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+    min-width: 166px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border: 1px solid #082f67;
+    border-radius: 8px;
+    background: #0b3a75;
+    box-shadow: 0 10px 24px rgba(7, 40, 84, 0.22);
+    color: #ffffff;
+    padding: 0 14px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  .map-drawer-toggle:hover {
+    background: #062f68;
+    box-shadow: 0 13px 28px rgba(7, 40, 84, 0.28);
+    transform: translateY(-1px);
+  }
+
+  .map-drawer-toggle.open {
+    background: #10213b;
+  }
+
+  .map-drawer-toggle span {
+    width: 19px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 21px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .map-drawer-backdrop {
+    position: fixed;
+    z-index: 80;
+    inset: 0;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    cursor: default;
+    animation: map-backdrop-in 180ms ease both;
+  }
+
+  .map-drawer-panel {
+    position: fixed;
+    z-index: 88;
+    top: max(68px, calc(env(safe-area-inset-top) + 58px));
+    right: max(16px, env(safe-area-inset-right));
+    width: min(620px, calc(100vw - 32px));
+    max-height: calc(100dvh - 84px);
+    overflow: auto;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 28px 70px rgba(4, 29, 66, 0.3);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(calc(100% + 36px));
+    transition:
+      transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 180ms ease,
+      visibility 0s linear 260ms;
+    scrollbar-width: thin;
+  }
+
+  .map-drawer-panel.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(0);
+    transition:
+      transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 180ms ease,
+      visibility 0s;
+  }
+
+  .map-drawer-panel .mini-map {
+    min-width: 520px;
+    border-radius: 12px;
+    box-shadow: none;
+  }
+
+  @keyframes map-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
   .detail-hero,
   .panel {
     border: 1px solid var(--stroke);
@@ -1040,7 +1378,7 @@ const styles = `
 
   .detail-hero {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(420px, 560px);
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 18px;
     padding: clamp(18px, 2.4vw, 30px);
     background:
@@ -1053,10 +1391,46 @@ const styles = `
     align-self: end;
   }
 
+  .hero-topline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .language-switch {
+    display: inline-grid;
+    grid-template-columns: repeat(2, 42px);
+    gap: 4px;
+    border: 1px solid var(--stroke);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.75);
+    padding: 4px;
+  }
+
+  .language-switch button {
+    min-height: 32px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: #0b3a75;
+    padding: 0;
+    font-size: 12px;
+    font-weight: 1000;
+    cursor: pointer;
+  }
+
+  .language-switch button.active {
+    background: #0b3a75;
+    color: #fff;
+  }
+
   .hero-side {
     display: grid;
     gap: 12px;
     align-self: start;
+    padding-top: 48px;
   }
 
   a {
@@ -1387,6 +1761,413 @@ const styles = `
     font-weight: 900;
   }
 
+  .iso-guide {
+    overflow: hidden;
+    border: 1px solid #b8cce2;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .iso-guide-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding: clamp(18px, 2.2vw, 26px);
+    border-bottom: 1px solid #d8e3ef;
+    background: #f5f9fd;
+  }
+
+  .iso-guide-head h2,
+  .iso-guide-head p {
+    margin: 0;
+  }
+
+  .iso-guide-head h2 {
+    margin-top: 7px;
+    color: #10213b;
+    font-size: clamp(22px, 2vw, 30px);
+  }
+
+  .iso-guide-head p {
+    max-width: 850px;
+    margin-top: 8px;
+    color: #5b6b80;
+    line-height: 1.55;
+  }
+
+  .iso-guide-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    color: #0b3a75;
+    font-size: 11px;
+    font-weight: 1000;
+    text-transform: uppercase;
+  }
+
+  .iso-guide-eyebrow span {
+    border-radius: 999px;
+    background: #0b3a75;
+    color: #ffffff;
+    padding: 5px 9px;
+  }
+
+  .iso-guide-eyebrow b {
+    color: #60738b;
+  }
+
+  .iso-guide-actions {
+    display: flex;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
+
+  .iso-guide-actions button {
+    min-height: 38px;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #0b3a75;
+    padding: 0 12px;
+  }
+
+  .iso-clause-list article {
+    border-bottom: 1px solid #e0e8f1;
+  }
+
+  .iso-clause-list article:last-child {
+    border-bottom: 0;
+  }
+
+  .iso-clause-trigger {
+    width: 100%;
+    min-height: 66px;
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr) 28px;
+    align-items: center;
+    gap: 14px;
+    border: 0;
+    border-radius: 0;
+    background: #ffffff;
+    color: #10213b;
+    padding: 12px clamp(16px, 2.2vw, 26px);
+    text-align: left;
+  }
+
+  .iso-clause-trigger:hover,
+  .iso-clause-list article.open .iso-clause-trigger {
+    background: #f3f8fd;
+  }
+
+  .iso-clause-trigger span {
+    color: #0b3a75;
+    font-size: 16px;
+    font-weight: 1000;
+  }
+
+  .iso-clause-trigger strong {
+    min-width: 0;
+    font-size: 16px;
+    line-height: 1.35;
+  }
+
+  .iso-clause-trigger i,
+  .iso-framework > button i {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #c8d7e6;
+    border-radius: 50%;
+    color: #0b3a75;
+    font-style: normal;
+    font-size: 20px;
+    line-height: 1;
+  }
+
+  .iso-clause-body {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
+    gap: 24px;
+    padding: 4px clamp(16px, 2.2vw, 26px) 24px 128px;
+    background: #f8fbfe;
+  }
+
+  .iso-clause-summary {
+    min-width: 0;
+  }
+
+  .iso-section-label {
+    display: block;
+    margin-bottom: 12px;
+    color: #0b3a75;
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+
+  .iso-clause-summary > ol {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+    padding-left: 22px;
+    color: #34455c;
+  }
+
+  .iso-clause-summary > ol li {
+    padding-left: 4px;
+    line-height: 1.55;
+  }
+
+  .iso-clause-summary > ol li::marker {
+    color: #0b3a75;
+    font-weight: 1000;
+  }
+
+  .iso-evidence {
+    margin-top: 18px;
+    border-left: 3px solid #d6a649;
+    background: #fff9ed;
+    padding: 14px 16px;
+  }
+
+  .iso-evidence b {
+    display: block;
+    margin-bottom: 8px;
+    color: #7a5204;
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+
+  .iso-evidence ul {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding-left: 18px;
+    color: #5d4b27;
+    line-height: 1.4;
+  }
+
+  .iso-source-text {
+    min-width: 0;
+    align-self: start;
+    border-left: 1px solid #cad8e7;
+    padding-left: 24px;
+  }
+
+  .iso-source-text summary,
+  .iso-foundation-source summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    list-style: none;
+    border: 1px solid #d4e0eb;
+    border-radius: 8px;
+    background: #f7fafc;
+    padding: 12px 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .iso-source-text summary::-webkit-details-marker,
+  .iso-foundation-source summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .iso-source-text summary::after,
+  .iso-foundation-source summary::after {
+    content: "+";
+    flex: 0 0 auto;
+    color: #0b3a75;
+    font-size: 20px;
+    font-style: normal;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .iso-source-text[open] summary::after,
+  .iso-foundation-source[open] summary::after {
+    content: "−";
+  }
+
+  .iso-source-text summary span,
+  .iso-foundation-source summary span {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .iso-source-text summary b,
+  .iso-foundation-source summary b {
+    color: #10213b;
+    font-size: 13px;
+    text-transform: uppercase;
+  }
+
+  .iso-source-text summary small,
+  .iso-foundation-source summary small {
+    color: #61738a;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .iso-source-text[open] summary,
+  .iso-foundation-source[open] summary {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    background: #edf5fb;
+  }
+
+  .iso-source-content,
+  .iso-foundation-source-content {
+    max-height: 560px;
+    overflow-y: auto;
+    border: 1px solid #d4e0eb;
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+    background: #ffffff;
+    padding: 16px;
+    scrollbar-width: thin;
+  }
+
+  .iso-source-text p,
+  .iso-foundation-source p {
+    margin: 0 0 11px;
+    color: #33445a;
+    font-size: 13px;
+    line-height: 1.58;
+  }
+
+  .iso-source-text p:last-child,
+  .iso-foundation-source p:last-child {
+    margin-bottom: 0;
+  }
+
+  .iso-empty {
+    padding: 24px;
+    color: #64748b;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .iso-framework {
+    border-top: 1px solid #cbd9e7;
+    background: #eef5fb;
+  }
+
+  .iso-framework > button {
+    width: 100%;
+    min-height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #10213b;
+    padding: 14px clamp(16px, 2.2vw, 26px);
+    text-align: left;
+  }
+
+  .iso-framework > button span,
+  .iso-framework > button b,
+  .iso-framework > button small {
+    display: block;
+  }
+
+  .iso-framework > button b {
+    font-size: 16px;
+  }
+
+  .iso-framework > button small {
+    margin-top: 4px;
+    color: #60738b;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+
+  .iso-framework-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    border-top: 1px solid #d5e1ec;
+    background: #ffffff;
+  }
+
+  .iso-framework-grid article {
+    position: relative;
+    padding: 22px 24px 22px 72px;
+    border-right: 1px solid #e0e8f1;
+    border-bottom: 1px solid #e0e8f1;
+  }
+
+  .iso-framework-grid article:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .iso-framework-grid .iso-annex-card {
+    grid-column: 1 / -1;
+    border-right: 0;
+  }
+
+  .iso-framework-grid article > span {
+    position: absolute;
+    top: 22px;
+    left: 22px;
+    color: #0b3a75;
+    font-size: 15px;
+    font-weight: 1000;
+  }
+
+  .iso-framework-grid h3 {
+    margin: 0 0 10px;
+    color: #10213b;
+    font-size: 17px;
+  }
+
+  .iso-framework-grid ul {
+    display: grid;
+    gap: 7px;
+    margin: 0;
+    padding-left: 18px;
+    color: #4b5d73;
+    line-height: 1.5;
+  }
+
+  .iso-foundation-source {
+    margin-top: 18px;
+    border-top: 1px solid #d8e3ee;
+    padding-top: 15px;
+  }
+
+  .iso-annex-card .iso-foundation-source-content {
+    max-height: 620px;
+  }
+
+  .iso-figure-transcription {
+    margin-top: 16px;
+    border: 1px solid #c9ddec;
+    border-radius: 8px;
+    background: #f1f7fc;
+    padding: 14px 16px;
+  }
+
+  .iso-figure-transcription > b {
+    display: block;
+    margin-bottom: 9px;
+    color: #0b3a75;
+    font-size: 12px;
+  }
+
+  .iso-figure-transcription ul {
+    color: #334a64;
+    font-size: 13px;
+  }
+
   .detail-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 360px;
@@ -1639,6 +2420,37 @@ const styles = `
     line-height: 1.35;
   }
 
+  .policy-panel {
+    background:
+      linear-gradient(135deg, rgba(11, 74, 148, 0.06), transparent 48%),
+      var(--surface);
+  }
+
+  .policy-principles {
+    display: grid;
+    gap: 10px;
+  }
+
+  .policy-principles article {
+    border: 1px solid color-mix(in srgb, #d4b76a 50%, var(--stroke));
+    border-radius: 16px;
+    background: color-mix(in srgb, #fff9ee 76%, var(--surface));
+    padding: 12px;
+  }
+
+  .policy-principles strong {
+    display: block;
+    color: #0b3a75;
+    font-size: 15px;
+  }
+
+  .policy-principles p {
+    margin: 7px 0 0;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    font-size: 13px;
+  }
+
   .log-form {
     display: grid;
     gap: 10px;
@@ -1661,7 +2473,6 @@ const styles = `
       display: grid;
     }
 
-    .hero-stats,
     .hero-side,
     .form-grid,
     .document-form,
@@ -1670,9 +2481,115 @@ const styles = `
       grid-template-columns: 1fr;
     }
 
+    .hero-side {
+      padding-top: 0;
+    }
+
+    .hero-copy {
+      padding-top: 44px;
+    }
+
     .document-actions {
       justify-content: flex-start;
       flex-wrap: wrap;
+    }
+
+    .iso-guide-head,
+    .iso-clause-body {
+      grid-template-columns: 1fr;
+      display: grid;
+    }
+
+    .iso-guide-actions {
+      justify-content: flex-start;
+    }
+
+    .iso-clause-body {
+      padding: 6px 18px 20px 54px;
+    }
+
+    .iso-source-text {
+      border-top: 1px solid #cad8e7;
+      border-left: 0;
+      padding-top: 20px;
+      padding-left: 0;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .quality-detail-page {
+      padding-top: 8px;
+    }
+
+    .map-drawer-toggle {
+      top: max(10px, env(safe-area-inset-top));
+      right: max(10px, env(safe-area-inset-right));
+      min-width: 150px;
+      min-height: 40px;
+      padding-inline: 12px;
+      font-size: 12px;
+    }
+
+    .map-drawer-panel {
+      top: max(58px, calc(env(safe-area-inset-top) + 50px));
+      right: max(8px, env(safe-area-inset-right));
+      width: calc(100vw - 16px);
+      max-height: calc(100dvh - 68px);
+    }
+
+    .hero-stats {
+      grid-template-columns: 1fr;
+      width: 100%;
+    }
+
+    .iso-guide-head {
+      gap: 16px;
+    }
+
+    .iso-guide-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width: 100%;
+    }
+
+    .iso-clause-trigger {
+      grid-template-columns: 54px minmax(0, 1fr) 28px;
+      gap: 8px;
+      padding-inline: 14px;
+    }
+
+    .iso-clause-trigger span,
+    .iso-clause-trigger strong {
+      font-size: 14px;
+    }
+
+    .iso-clause-body {
+      padding: 4px 16px 18px 32px;
+    }
+
+    .iso-source-text summary,
+    .iso-foundation-source summary {
+      align-items: flex-start;
+    }
+
+    .iso-framework-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .iso-framework-grid article,
+    .iso-framework-grid article:nth-child(2n) {
+      border-right: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .map-drawer-toggle,
+    .map-drawer-panel {
+      transition: none;
+    }
+
+    .map-drawer-backdrop {
+      animation: none;
     }
   }
 `;

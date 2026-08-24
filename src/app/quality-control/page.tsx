@@ -4,6 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
+import {
+  QUALITY_MODULE_COPY,
+  QUALITY_POLICY_ITEMS,
+  qualityCardTitle,
+  type QualityLocale,
+} from "@/lib/qualityPolicy";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type QualityProcessCategory =
@@ -95,44 +101,21 @@ const CATEGORY_LABELS_EN: Record<string, string> = {
   REAL_ESTATE_SALES: "REAL ESTATE SALES PROCESSES",
 };
 
-const OUTPUTS_TR = [
-  "MÜŞTERİ VE İLGİLİ TARAFLARIN MEMNUNİYETİ",
-  "KYS'NİN SONUÇLARI",
-  "ÜRÜN VE HİZMETLER",
-  "ORGANİZASYON YÖNETİM SİSTEMİ",
-];
-
-const OUTPUTS_EN = [
-  "CUSTOMER AND STAKEHOLDER SATISFACTION",
-  "QMS RESULTS",
-  "PRODUCTS AND SERVICES",
-  "ORGANIZATION MANAGEMENT SYSTEM",
-];
-
-const VALUES_TR = [
-  ["DÜRÜSTLÜK", "Her koşulda doğruyu söyler, güvene dayalı ilişkiler kurarız."],
-  ["NEZAKET", "İnsanlara saygıyla yaklaşır, anlayış ve empatiyle hareket ederiz."],
-  ["NETLİK", "Açık, anlaşılır ve zamanında iletişim kurarız."],
-  ["NİTELİK", "İşimizi en yüksek kalite standartlarında yaparız."],
-  ["DENEYİM", "Tecrübemizi paylaşır, sürekli öğrenir ve geliştiririz."],
-];
-
-const VALUES_EN = [
-  ["INTEGRITY", "We build trust through honest relationships."],
-  ["COURTESY", "We work with respect, empathy and care."],
-  ["CLARITY", "We communicate clearly and on time."],
-  ["QUALITY", "We deliver work at high standards."],
-  ["EXPERIENCE", "We share knowledge and keep improving."],
-];
-
 function categoryLabel(value: string, locale: "tr" | "en") {
   return (locale === "tr" ? CATEGORY_LABELS_TR : CATEGORY_LABELS_EN)[value] || value;
 }
 
-function shortTitle(card: QualityCard | undefined, fallback: string) {
-  const rawTitle = (card?.title || fallback).trim();
+function shortTitle(card: QualityCard | undefined, fallbackCode: string, fallback: string, locale: QualityLocale) {
+  const fallbackTitle = qualityCardTitle(fallbackCode, "", locale) || fallback;
+  const rawTitle = card
+    ? qualityCardTitle(card.code, card.title, locale).trim()
+    : fallbackTitle.trim();
   const title = rawTitle.replace(/^\d+(?:\.\d+)?\s*/, "").replace(/^[-.)\s]+/, "");
-  return title.replace(/^Ürün ve Hizmetlerin /, "Ürün ve Hizmetlerin\n");
+  return title
+    .replace(/^Ürün ve Hizmetlerin /, "Ürün ve Hizmetlerin\n")
+    .replace(/^Requirements for Products and Services$/, "Requirements for\nProducts and Services")
+    .replace(/^Externally Provided Products and Services$/, "Externally Provided\nProducts and Services")
+    .replace(/^Monitoring, Measurement, Analysis and Evaluation$/, "Monitoring, Measurement,\nAnalysis and Evaluation");
 }
 
 function ProcessIcon({ kind }: { kind: ProcessIconKind }) {
@@ -337,15 +320,19 @@ function MiniCard({
   fallbackCode,
   fallbackTitle,
   className = "",
+  locale,
 }: {
   card?: QualityCard;
   fallbackCode: string;
   fallbackTitle: string;
   className?: string;
+  locale?: QualityLocale;
 }) {
+  const language = useLanguage();
+  const activeLocale = locale || language.locale;
   const href = card ? `/quality-control/${card.id}` : "/quality-control";
   const code = card?.code || fallbackCode;
-  const title = shortTitle(card, fallbackTitle);
+  const title = shortTitle(card, fallbackCode, fallbackTitle, activeLocale);
 
   return (
     <Link className={`mini-card ${className}`} href={href} title={`${code} ${title.replace(/\n/g, " ")}`}>
@@ -370,15 +357,19 @@ function CoreCard({
   fallbackCode,
   fallbackTitle,
   className = "",
+  locale,
 }: {
   card?: QualityCard;
   fallbackCode: string;
   fallbackTitle: string;
   className?: string;
+  locale?: QualityLocale;
 }) {
+  const language = useLanguage();
+  const activeLocale = locale || language.locale;
   const href = card ? `/quality-control/${card.id}` : "/quality-control";
   const code = card?.code || fallbackCode;
-  const title = shortTitle(card, fallbackTitle);
+  const title = shortTitle(card, fallbackCode, fallbackTitle, activeLocale);
 
   return (
     <Link className={`core-card ${className}`} href={href} title={`${code} ${title.replace(/\n/g, " ")}`}>
@@ -417,7 +408,8 @@ function cardHref(card: QualityCard | undefined) {
 }
 
 export default function QualityControlPage() {
-  const { locale } = useLanguage();
+  const { locale, setLocale } = useLanguage();
+  const copy = QUALITY_MODULE_COPY[locale];
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
   const [items, setItems] = useState<QualityCard[]>([]);
@@ -483,10 +475,15 @@ export default function QualityControlPage() {
     );
   }
 
-  const outputs = locale === "tr" ? OUTPUTS_TR : OUTPUTS_EN;
-  const values = locale === "tr" ? VALUES_TR : VALUES_EN;
+  const outputs = copy.outputs;
+  const values = copy.values;
   const outputLinks = ["9.1", "9", "8.2", "4.4"];
   const valueLinks = ["5", "7.4", "7.4", "8.6", "7.2"];
+  const policyLocale = locale === "tr" ? "tr" : "en";
+  const policyHref = (codes: string[]) => {
+    const code = codes.find((item) => byCode.get(item)) || codes[0];
+    return cardHref(byCode.get(code));
+  };
 
   return (
     <main className="quality-map-page">
@@ -494,17 +491,27 @@ export default function QualityControlPage() {
         <header className="poster-header">
           <div className="brand-block">
             <img src="/dndblack.png" alt="DND" />
-            <strong>DND İNŞAAT</strong>
-            <span>GÜVEN | KALİTE | DEĞER</span>
+            <strong>{copy.brandName}</strong>
+            <span>{copy.brandValues}</span>
           </div>
           <div className="poster-title">
-            <h1>DND İNŞAAT ÜRETİMİ VE GAYRİMENKUL SATIŞ SÜREÇLERİ</h1>
-            <h2>KALİTE YÖNETİM SİSTEMİ</h2>
-            <p>"Güven İnşa Ediyoruz, Değer Üretiyoruz."</p>
+            <h1>{copy.title}</h1>
+            <h2>{copy.subtitle}</h2>
+            <p>{copy.motto}</p>
           </div>
-          <button type="button" onClick={load} disabled={loading}>
-            {loading ? (locale === "tr" ? "Yükleniyor" : "Loading") : locale === "tr" ? "Yenile" : "Refresh"}
-          </button>
+          <div className="poster-actions">
+            <div className="language-switch" aria-label={copy.language}>
+              <button type="button" className={locale === "tr" ? "active" : ""} onClick={() => setLocale("tr")}>
+                TR
+              </button>
+              <button type="button" className={locale === "en" ? "active" : ""} onClick={() => setLocale("en")}>
+                EN
+              </button>
+            </div>
+            <button className="refresh-button" type="button" onClick={load} disabled={loading}>
+              {loading ? copy.loading : copy.refresh}
+            </button>
+          </div>
         </header>
 
         {err ? <div className="error-strip">{err}</div> : null}
@@ -566,9 +573,9 @@ export default function QualityControlPage() {
                 <div className="core-bottom">
                   <CoreCard card={byCode.get("10")} fallbackCode="10" fallbackTitle="İyileştirme" className="improvement-core" />
                   <div className="improvement-row">
-                    <MiniCard card={byCode.get("10.1")} fallbackCode="10.1" fallbackTitle="Uygunsuzluk ve Düzeltici Faaliyet" />
-                    <MiniCard card={byCode.get("10.2")} fallbackCode="10.2" fallbackTitle="Sürekli İyileştirme" />
-                    <MiniCard card={byCode.get("10.3")} fallbackCode="10.3" fallbackTitle="İyileştirme Fırsatları" />
+                    <MiniCard card={byCode.get("10.1")} fallbackCode="10.1" fallbackTitle="İyileştirme - Genel" />
+                    <MiniCard card={byCode.get("10.2")} fallbackCode="10.2" fallbackTitle="Uygunsuzluk ve Düzeltici Faaliyet" />
+                    <MiniCard card={byCode.get("10.3")} fallbackCode="10.3" fallbackTitle="Sürekli İyileştirme" />
                   </div>
                 </div>
               </div>
@@ -602,7 +609,7 @@ export default function QualityControlPage() {
 
             <div className="values-box">
               <Link className="values-heading" href={cardHref(byCode.get("5"))}>
-                DND DEĞERLERİMİZ
+                {copy.valuesHeading}
               </Link>
               {values.map(([title, detail], index) => (
                 <Link key={title} className="value-row" href={cardHref(byCode.get(valueLinks[index]))}>
@@ -616,6 +623,18 @@ export default function QualityControlPage() {
                 </Link>
               ))}
             </div>
+
+            <div className="policy-box">
+              <Link className="policy-heading" href={cardHref(byCode.get("5"))}>
+                {copy.policyHeading}
+              </Link>
+              {QUALITY_POLICY_ITEMS.map((item) => (
+                <Link key={item.key} className="policy-row" href={policyHref(item.codes)}>
+                  <b>{item.title[policyLocale]}</b>
+                  <span>{item.summary[policyLocale]}</span>
+                </Link>
+              ))}
+            </div>
           </aside>
         </section>
 
@@ -625,12 +644,12 @@ export default function QualityControlPage() {
               {categoryLabel("CONSTRUCTION", locale)}
             </Link>
             <div className="lane-steps">
-              <LaneStep href={cardHref(byCode.get("6"))} kind="crane" label="Proje Hazırlık ve Planlama" />
-              <LaneStep href={cardHref(byCode.get("8.3"))} kind="pencil" label="Tasarım & İzinler" />
-              <LaneStep href={cardHref(byCode.get("8.4"))} kind="truck" label="Tedarik & Lojistik" />
-              <LaneStep href={cardHref(byCode.get("8.5"))} kind="building" label="İnşaat Uygulama" />
-              <LaneStep href={cardHref(byCode.get("8.6"))} kind="clipboard" label="Kontrol & Test" />
-              <LaneStep href={cardHref(byCode.get("8.6"))} kind="home" label="Teslimat & Devreye Alma" />
+              <LaneStep href={cardHref(byCode.get("6"))} kind="crane" label={copy.lanes.construction[0]} />
+              <LaneStep href={cardHref(byCode.get("8.3"))} kind="pencil" label={copy.lanes.construction[1]} />
+              <LaneStep href={cardHref(byCode.get("8.4"))} kind="truck" label={copy.lanes.construction[2]} />
+              <LaneStep href={cardHref(byCode.get("8.5"))} kind="building" label={copy.lanes.construction[3]} />
+              <LaneStep href={cardHref(byCode.get("8.6"))} kind="clipboard" label={copy.lanes.construction[4]} />
+              <LaneStep href={cardHref(byCode.get("8.6"))} kind="home" label={copy.lanes.construction[5]} />
             </div>
           </section>
 
@@ -639,20 +658,20 @@ export default function QualityControlPage() {
               {categoryLabel("REAL_ESTATE_SALES", locale)}
             </Link>
             <div className="lane-steps">
-              <LaneStep href={cardHref(byCode.get("7.4"))} kind="message" label="Pazarlama & Tanıtım" />
-              <LaneStep href={cardHref(byCode.get("4.2"))} kind="people" label="Müşteri İlişkileri Yönetimi" />
-              <LaneStep href={cardHref(byCode.get("8.2"))} kind="document" label="Satış & Sözleşme" />
-              <LaneStep href={cardHref(byCode.get("8.2"))} kind="money" label="Ödeme & Finansman" />
-              <LaneStep href={cardHref(byCode.get("8.6"))} kind="home" label="Teslim & Tapu" />
-              <LaneStep href={cardHref(byCode.get("9.1"))} kind="headset" label="Satış Sonrası Hizmetler" />
+              <LaneStep href={cardHref(byCode.get("7.4"))} kind="message" label={copy.lanes.sales[0]} />
+              <LaneStep href={cardHref(byCode.get("4.2"))} kind="people" label={copy.lanes.sales[1]} />
+              <LaneStep href={cardHref(byCode.get("8.2"))} kind="document" label={copy.lanes.sales[2]} />
+              <LaneStep href={cardHref(byCode.get("8.2"))} kind="money" label={copy.lanes.sales[3]} />
+              <LaneStep href={cardHref(byCode.get("8.6"))} kind="home" label={copy.lanes.sales[4]} />
+              <LaneStep href={cardHref(byCode.get("9.1"))} kind="headset" label={copy.lanes.sales[5]} />
             </div>
           </section>
         </section>
 
         <div className="poster-status">
-          <span>{totals?.cards || 0} süreç</span>
-          <span>{totals?.documents || 0} doküman</span>
-          <span>{totals?.completion || 0}% checklist</span>
+          <span>{totals?.cards || 0} {copy.stats.processes}</span>
+          <span>{totals?.documents || 0} {copy.stats.documents}</span>
+          <span>{totals?.completion || 0}% {copy.stats.checklist}</span>
         </div>
 
         <footer className="values-band">
@@ -757,7 +776,39 @@ const styles = `
     font-weight: 900;
   }
 
-  .poster-header button {
+  .poster-actions {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+  }
+
+  .language-switch {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
+    border: 1px solid #86b3d8;
+    border-radius: 8px;
+    background: #f4f8fc;
+    padding: 4px;
+  }
+
+  .language-switch button {
+    min-height: 28px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #0b3a75;
+    font-size: 11px;
+    font-weight: 1000;
+    cursor: pointer;
+  }
+
+  .language-switch button.active {
+    background: #0b3a75;
+    color: #fff;
+  }
+
+  .refresh-button {
     min-height: 38px;
     border: 1px solid #0b3a75;
     border-radius: 8px;
@@ -768,7 +819,7 @@ const styles = `
     cursor: pointer;
   }
 
-  .poster-header button:disabled {
+  .refresh-button:disabled {
     opacity: 0.55;
     cursor: not-allowed;
   }
@@ -820,7 +871,8 @@ const styles = `
   .right-panel,
   .main-map-frame,
   .lane-card,
-  .values-box {
+  .values-box,
+  .policy-box {
     border: 1.5px solid #86b3d8;
     border-radius: 10px;
     background: #fbfdff;
@@ -1136,7 +1188,14 @@ const styles = `
     gap: clamp(7px, 0.6vw, 10px);
   }
 
-  .values-heading {
+  .policy-box {
+    padding: clamp(8px, 0.7vw, 11px);
+    display: grid;
+    gap: clamp(6px, 0.5vw, 8px);
+  }
+
+  .values-heading,
+  .policy-heading {
     margin: 0;
     min-height: 32px;
     display: grid;
@@ -1148,6 +1207,11 @@ const styles = `
     font-weight: 1000;
     text-align: center;
     text-decoration: none;
+  }
+
+  .policy-heading {
+    background: #0b4a94;
+    font-size: clamp(10px, 0.72vw, 12px);
   }
 
   .value-row {
@@ -1178,6 +1242,36 @@ const styles = `
     display: block;
     color: #0b3a75;
     font-size: clamp(9.5px, 0.72vw, 12px);
+  }
+
+  .policy-row {
+    display: grid;
+    gap: 2px;
+    padding: 7px 8px;
+    border: 1px solid #d4b76a;
+    border-radius: 8px;
+    background: #fff9ee;
+    color: #082956;
+    text-decoration: none;
+    transition: background 0.14s ease, transform 0.14s ease, border-color 0.14s ease;
+  }
+
+  .policy-row:hover {
+    background: #eaf7ff;
+    border-color: #0b3a75;
+    transform: translateX(2px);
+  }
+
+  .policy-row b {
+    color: #0b3a75;
+    font-size: clamp(9.5px, 0.7vw, 11px);
+    line-height: 1.1;
+  }
+
+  .policy-row span {
+    color: #314866;
+    font-size: clamp(8.4px, 0.62vw, 10px);
+    line-height: 1.18;
   }
 
   .bottom-lanes {

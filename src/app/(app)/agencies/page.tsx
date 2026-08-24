@@ -20,6 +20,8 @@ type AgencyRow = {
   updatedAt?: string;
   manager?: { id: string; name: string; email: string } | null;
   assignedSales?: { id: string; name: string; email: string; role?: string } | null;
+  canSeeContactDetails?: boolean;
+  canEdit?: boolean;
   _count?: {
     notes: number;
     meetings: number;
@@ -154,7 +156,7 @@ export default function AgenciesPage() {
 
   function canSeeAgencyContact(a: AgencyRow) {
     if (!isSales) return true;
-    return a.assignedSales?.id === me?.id;
+    return a.canSeeContactDetails === true;
   }
 
   function resetCreateForm() {
@@ -207,11 +209,6 @@ export default function AgenciesPage() {
   }
 
   async function loadAssignableUsers() {
-    if (isSales) {
-      setAssignableUsers([]);
-      return;
-    }
-
     try {
       const [salesData, managerData] = await Promise.all([
         authedFetch("/users?role=SALES"),
@@ -578,7 +575,6 @@ export default function AgenciesPage() {
           <select
             value={filterAssignedId}
             onChange={(e) => setFilterAssignedId(e.target.value)}
-            disabled={isSales}
           >
             <option value="">
               {locale === "tr" ? "Tüm sorumlular" : "All assigned users"}

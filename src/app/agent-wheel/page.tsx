@@ -173,7 +173,7 @@ const PRIZES: Prize[] = [
     color: "#070b10",
     textColor: "#ffffff",
     visual: "vacation",
-    image: "https://commons.wikimedia.org/wiki/Special:Redirect/file/Maldives_island_beach_1.jpg?width=500",
+    image: "/images/agent-wheel/vacation-prize.png",
     imageTone: "cover",
     weight: 37,
   },
@@ -976,7 +976,6 @@ export default function AgentWheelPage() {
                     >
                       <PrizeVisual prize={prize} />
                       <strong>{getPrizeName(prize, locale)}</strong>
-                      <span className="prize-odds">{prize.weight}%</span>
                     </div>
                   );
                 })}
@@ -1416,21 +1415,6 @@ const styles = `
       0 1px 0 rgba(0, 0, 0, 0.9),
       0 2px 8px rgba(0, 0, 0, 0.78),
       0 0 14px rgba(0, 0, 0, 0.5);
-  }
-
-  .prize-odds {
-    position: relative;
-    z-index: 2;
-    min-width: 34px;
-    border: 1px solid rgba(255, 248, 219, 0.42);
-    border-radius: 999px;
-    background: rgba(3, 7, 18, 0.52);
-    color: #fff8db;
-    padding: 2px 7px;
-    font-size: clamp(9px, 0.7vw, 11px);
-    line-height: 1.1;
-    font-weight: 1000;
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.82);
   }
 
   .wheel-center {
