@@ -12,6 +12,14 @@ import {
 } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 import { COUNTRIES, NATIONALITY_BY_COUNTRY } from "@/lib/locationData";
+import {
+  PROJECTS,
+  isLandProject,
+  projectCategoryLabel,
+  projectLabel,
+  projectOptionLabel,
+  type ProjectType,
+} from "@/lib/projects";
 
 type PresentationStatus =
   | "SCHEDULED"
@@ -36,11 +44,6 @@ type AssignableUser = {
 };
 
 type Gender = "MALE" | "FEMALE" | "OTHER";
-type ProjectType =
-  | "LA_JOYA"
-  | "LA_JOYA_PERLA"
-  | "LA_JOYA_PERLA_II"
-  | "LAGOON_VERDE";
 
 type CustomerDocumentType = "ID" | "PASSPORT" | "OTHER";
 
@@ -219,21 +222,6 @@ function safeTranslate(
 
 function optionMatch(text: string, query: string) {
   return text.toLowerCase().includes(query.trim().toLowerCase());
-}
-
-function projectLabel(project?: string | null) {
-  switch (project) {
-    case "LA_JOYA":
-      return "La Joya";
-    case "LA_JOYA_PERLA":
-      return "La Joya Perla";
-    case "LA_JOYA_PERLA_II":
-      return "La Joya Perla II";
-    case "LAGOON_VERDE":
-      return "Lagoon Verde";
-    default:
-      return "-";
-  }
 }
 
 export default function CustomerDetailPage() {
@@ -1111,10 +1099,11 @@ export default function CustomerDetailPage() {
               <option value="">
                 {safeTranslate(t, "customers.fields.project", "Project")}
               </option>
-              <option value="LA_JOYA">La Joya</option>
-              <option value="LA_JOYA_PERLA">La Joya Perla</option>
-              <option value="LA_JOYA_PERLA_II">La Joya Perla II</option>
-              <option value="LAGOON_VERDE">Lagoon Verde</option>
+              {PROJECTS.map((item) => (
+                <option key={item} value={item}>
+                  {projectOptionLabel(item, locale)}
+                </option>
+              ))}
             </select>
           </div>
         ) : (
@@ -1219,7 +1208,12 @@ export default function CustomerDetailPage() {
 
             <div>
               <b>{safeTranslate(t, "customers.fields.project", "Project")}:</b>{" "}
-              {projectLabel(customer.project)}
+              {projectLabel(customer.project) || "-"}{" "}
+              {isLandProject(customer.project) ? (
+                <span className="badge warning">
+                  {projectCategoryLabel(customer.project || "", locale)}
+                </span>
+              ) : null}
             </div>
 
             <div>
@@ -1649,10 +1643,11 @@ export default function CustomerDetailPage() {
                     "Select project",
                   )}
                 </option>
-                <option value="LA_JOYA">La Joya</option>
-                <option value="LA_JOYA_PERLA">La Joya Perla</option>
-                <option value="LA_JOYA_PERLA_II">La Joya Perla II</option>
-                <option value="LAGOON_VERDE">Lagoon Verde</option>
+                {PROJECTS.map((item) => (
+                  <option key={item} value={item}>
+                    {projectOptionLabel(item, locale)}
+                  </option>
+                ))}
               </select>
 
               <input
@@ -1688,6 +1683,12 @@ export default function CustomerDetailPage() {
                     {projectLabel(u.project)} / {u.unitNumber}
                   </span>
 
+                  {isLandProject(u.project) ? (
+                    <span className="badge warning">
+                      {projectCategoryLabel(u.project, locale)}
+                    </span>
+                  ) : null}
+
                   <button
                     type="button"
                     onClick={() => removeUnitSelection(i)}
@@ -1718,7 +1719,12 @@ export default function CustomerDetailPage() {
                     fontSize: 13,
                   }}
                 >
-                  {projectLabel(u.project)} / {u.unitNumber}
+                  {projectLabel(u.project)} / {u.unitNumber}{" "}
+                  {isLandProject(u.project) ? (
+                    <span className="badge warning">
+                      {projectCategoryLabel(u.project, locale)}
+                    </span>
+                  ) : null}
                 </div>
               ))
             ) : (

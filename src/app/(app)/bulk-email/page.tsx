@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
-
-type ProjectType =
-  | "LA_JOYA"
-  | "LA_JOYA_PERLA"
-  | "LA_JOYA_PERLA_II"
-  | "LAGOON_VERDE";
+import {
+  PROJECTS,
+  isLandProject,
+  projectCategoryLabel,
+  projectLabel,
+  type ProjectType,
+} from "@/lib/projects";
 
 type BulkRecipient = {
   customerId: string;
@@ -206,20 +207,6 @@ type UserOption = {
   role?: string | null;
 };
 
-const PROJECTS: ProjectType[] = [
-  "LA_JOYA",
-  "LA_JOYA_PERLA",
-  "LA_JOYA_PERLA_II",
-  "LAGOON_VERDE",
-];
-
-const PROJECT_LABELS: Record<ProjectType, string> = {
-  LA_JOYA: "La Joya",
-  LA_JOYA_PERLA: "La Joya Perla",
-  LA_JOYA_PERLA_II: "La Joya Perla II",
-  LAGOON_VERDE: "Lagoon Verde",
-};
-
 const DELIVERY_STATUSES: Array<UnitDeliveryStatus | ""> = [
   "",
   "DELIVERED",
@@ -349,10 +336,6 @@ const MAIL_TEMPLATES: Record<
     },
   },
 };
-
-function projectLabel(project: ProjectType) {
-  return PROJECT_LABELS[project];
-}
 
 function deliveryLabel(status: UnitDeliveryStatus | "", isTr: boolean) {
   if (!status) return isTr ? "Tüm teslim durumları" : "All delivery statuses";
@@ -965,6 +948,11 @@ export default function BulkEmailPage() {
 
         <div className="hero-note">
           <strong>{preview?.projectLabel || projectLabel(project)}</strong>
+          {isLandProject(project) ? (
+            <small className="project-kind">
+              {projectCategoryLabel(project, locale)}
+            </small>
+          ) : null}
           <span>
             {isTr
               ? "Her alıcı ayrı mail alır; diğer müşterileri görmez."
@@ -982,6 +970,11 @@ export default function BulkEmailPage() {
             type="button"
           >
             <span>{projectLabel(item)}</span>
+            {isLandProject(item) ? (
+              <small className="project-kind">
+                {projectCategoryLabel(item, locale)}
+              </small>
+            ) : null}
           </button>
         ))}
       </section>
@@ -2049,7 +2042,7 @@ const pageStyles = `
 
   .project-strip {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 10px;
   }
 
@@ -2068,12 +2061,32 @@ const pageStyles = `
 
   .project-strip button {
     padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
   }
 
   .project-strip button.active {
     background: var(--primary);
     color: var(--primary-foreground);
     border-color: var(--primary);
+  }
+
+  .project-kind {
+    display: inline-flex;
+    width: fit-content;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .project-strip button.active .project-kind {
+    background: rgba(255, 255, 255, 0.18);
+    color: var(--primary-foreground);
   }
 
   .filter-panel {

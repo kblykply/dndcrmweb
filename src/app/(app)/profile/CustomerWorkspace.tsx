@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
+import { projectLabel as catalogProjectLabel } from "@/lib/projects";
 
 type CustomerType = "POTENTIAL" | "EXISTING";
 type AgencyStatus = "ACTIVE" | "PASSIVE" | "PROSPECT" | "DEALING" | "CLOSED";
@@ -141,14 +142,7 @@ function agencyStatusTone(status: string | undefined) {
 }
 
 function projectLabel(value?: string | null) {
-  const labels: Record<string, string> = {
-    LA_JOYA: "La Joya",
-    LA_JOYA_PERLA: "La Joya Perla",
-    LA_JOYA_PERLA_II: "La Joya Perla II",
-    LAGOON_VERDE: "Lagoon Verde",
-  };
-
-  return value ? labels[value] || value : "-";
+  return catalogProjectLabel(value) || "-";
 }
 
 function emptyValue(value?: string | null) {

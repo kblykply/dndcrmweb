@@ -6,12 +6,14 @@ import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
-
-type ProjectType =
-  | "LA_JOYA"
-  | "LA_JOYA_PERLA"
-  | "LA_JOYA_PERLA_II"
-  | "LAGOON_VERDE";
+import {
+  PROJECTS,
+  isLandProject,
+  projectCategoryLabel,
+  projectLabel,
+  projectOptionLabel,
+  type ProjectType,
+} from "@/lib/projects";
 
 type UnitDeliveryStatus = "NOT_READY" | "READY_TO_DELIVER" | "DELIVERED";
 type UnitCompanyStatus = "UNKNOWN" | "DND" | "OTHER";
@@ -87,13 +89,6 @@ type UnitDayReport = {
   }>;
 };
 
-const PROJECTS: ProjectType[] = [
-  "LA_JOYA",
-  "LA_JOYA_PERLA",
-  "LA_JOYA_PERLA_II",
-  "LAGOON_VERDE",
-];
-
 const DELIVERY_STATUSES: UnitDeliveryStatus[] = [
   "NOT_READY",
   "READY_TO_DELIVER",
@@ -111,17 +106,6 @@ function safeTranslate(
   const translated = t(path);
   if (translated === path) return fallback ?? path;
   return translated;
-}
-
-function projectLabel(project: ProjectType) {
-  const labels: Record<ProjectType, string> = {
-    LA_JOYA: "La Joya",
-    LA_JOYA_PERLA: "La Joya Perla",
-    LA_JOYA_PERLA_II: "La Joya Perla II",
-    LAGOON_VERDE: "Lagoon Verde",
-  };
-
-  return labels[project];
 }
 
 function deliveryLabel(status: UnitDeliveryStatus, locale: string) {
@@ -839,7 +823,7 @@ export default function UnitsPage() {
 
         .units-project-strip {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-columns: repeat(5, minmax(0, 1fr));
           gap: 8px;
         }
 
@@ -861,6 +845,26 @@ export default function UnitsPage() {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+
+        .units-project-chip-label {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          min-width: 0;
+        }
+
+        .units-project-chip-label em {
+          flex: none;
+          border: 1px solid color-mix(in srgb, var(--warning) 42%, transparent);
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--warning) 14%, transparent);
+          color: var(--warning);
+          padding: 2px 7px;
+          font-size: 10px;
+          font-style: normal;
+          font-weight: 900;
+          line-height: 1.2;
         }
 
         .units-project-chip strong {
@@ -1530,6 +1534,12 @@ export default function UnitsPage() {
           }
         }
 
+        @media (max-width: 1500px) {
+          .units-project-strip {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+        }
+
         @media (max-width: 820px) {
           .units-title h1 {
             font-size: 24px;
@@ -1634,7 +1644,7 @@ export default function UnitsPage() {
             >
               {PROJECTS.map((project) => (
                 <option key={project} value={project}>
-                  {projectLabel(project)}
+                  {projectOptionLabel(project, locale)}
                 </option>
               ))}
             </select>
@@ -1727,7 +1737,10 @@ export default function UnitsPage() {
               className={`units-project-chip ${projectFilter === project ? "active" : ""}`}
               onClick={() => setProjectFilter(project)}
             >
-              <span>{projectLabel(project)}</span>
+              <span className="units-project-chip-label">
+                <span>{projectLabel(project)}</span>
+                {isLandProject(project) ? <em>{projectCategoryLabel(project, locale)}</em> : null}
+              </span>
               <strong>{projectCounts[project]}</strong>
             </button>
           ))}
@@ -2022,7 +2035,14 @@ export default function UnitsPage() {
                       onClick={() => router.push(`/units/${item.id}`)}
                     >
                     <td>
-                      <span className="badge info">{projectLabel(item.project)}</span>
+                      <div className="units-cell-stack">
+                        <span className="badge info">{projectLabel(item.project)}</span>
+                        {isLandProject(item.project) ? (
+                          <span className="badge warning">
+                            {projectCategoryLabel(item.project, locale)}
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td>
                       <div className="units-cell-stack">

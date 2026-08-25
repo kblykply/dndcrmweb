@@ -12,14 +12,17 @@ import {
 } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 import { COUNTRIES, NATIONALITY_BY_COUNTRY } from "@/lib/locationData";
+import {
+  PROJECTS,
+  isLandProject,
+  projectCategoryLabel,
+  projectLabel,
+  projectOptionLabel,
+  type ProjectType,
+} from "@/lib/projects";
 
 type CustomerType = "POTENTIAL" | "EXISTING";
 type Gender = "MALE" | "FEMALE" | "OTHER";
-type ProjectType =
-  | "LA_JOYA"
-  | "LA_JOYA_PERLA"
-  | "LA_JOYA_PERLA_II"
-  | "LAGOON_VERDE";
 
 type AgencyRow = {
   id: string;
@@ -82,21 +85,6 @@ function safeTranslate(
   const translated = t(path);
   if (translated === path) return fallback ?? path;
   return translated;
-}
-
-function projectLabel(project: string, locale: string) {
-  switch (project) {
-    case "LA_JOYA":
-      return "La Joya";
-    case "LA_JOYA_PERLA":
-      return "La Joya Perla";
-    case "LA_JOYA_PERLA_II":
-      return "La Joya Perla II";
-    case "LAGOON_VERDE":
-      return "Lagoon Verde";
-    default:
-      return locale === "tr" ? "Proje" : "Project";
-  }
 }
 
 function optionMatch(text: string, query: string) {
@@ -840,16 +828,11 @@ export default function CustomersPage() {
                 )}
               </option>
 
-              <option value="LA_JOYA">{projectLabel("LA_JOYA", locale)}</option>
-              <option value="LA_JOYA_PERLA">
-                {projectLabel("LA_JOYA_PERLA", locale)}
-              </option>
-              <option value="LA_JOYA_PERLA_II">
-                {projectLabel("LA_JOYA_PERLA_II", locale)}
-              </option>
-              <option value="LAGOON_VERDE">
-                {projectLabel("LAGOON_VERDE", locale)}
-              </option>
+              {PROJECTS.map((item) => (
+                <option key={item} value={item}>
+                  {projectOptionLabel(item, locale)}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -898,18 +881,11 @@ export default function CustomersPage() {
                   )}
                 </option>
 
-                <option value="LA_JOYA">
-                  {projectLabel("LA_JOYA", locale)}
-                </option>
-                <option value="LA_JOYA_PERLA">
-                  {projectLabel("LA_JOYA_PERLA", locale)}
-                </option>
-                <option value="LA_JOYA_PERLA_II">
-                  {projectLabel("LA_JOYA_PERLA_II", locale)}
-                </option>
-                <option value="LAGOON_VERDE">
-                  {projectLabel("LAGOON_VERDE", locale)}
-                </option>
+                {PROJECTS.map((item) => (
+                  <option key={item} value={item}>
+                    {projectOptionLabel(item, locale)}
+                  </option>
+                ))}
               </select>
 
               <input
@@ -949,8 +925,14 @@ export default function CustomersPage() {
                     }}
                   >
                     <span style={{ fontSize: 13 }}>
-                      {projectLabel(u.project, locale)} / {u.unitNumber}
+                      {projectLabel(u.project)} / {u.unitNumber}
                     </span>
+
+                    {isLandProject(u.project) ? (
+                      <span className="badge warning">
+                        {projectCategoryLabel(u.project, locale)}
+                      </span>
+                    ) : null}
 
                     <button
                       type="button"

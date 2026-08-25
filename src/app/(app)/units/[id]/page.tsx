@@ -6,12 +6,12 @@ import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
-
-type ProjectType =
-  | "LA_JOYA"
-  | "LA_JOYA_PERLA"
-  | "LA_JOYA_PERLA_II"
-  | "LAGOON_VERDE";
+import {
+  isLandProject,
+  projectCategoryLabel,
+  projectLabel,
+  type ProjectType,
+} from "@/lib/projects";
 
 type UnitDeliveryStatus = "NOT_READY" | "READY_TO_DELIVER" | "DELIVERED";
 type UnitCompanyStatus = "UNKNOWN" | "DND" | "OTHER";
@@ -113,17 +113,6 @@ const RENTAL_STATUSES: RentalStatus[] = [
   "DND_UNITS",
   "NOT_INTERESTED",
 ];
-
-function projectLabel(project: ProjectType) {
-  const labels: Record<ProjectType, string> = {
-    LA_JOYA: "La Joya",
-    LA_JOYA_PERLA: "La Joya Perla",
-    LA_JOYA_PERLA_II: "La Joya Perla II",
-    LAGOON_VERDE: "Lagoon Verde",
-  };
-
-  return labels[project];
-}
 
 function deliveryLabel(status: UnitDeliveryStatus | string, locale: string) {
   if (status === "DELIVERED") return locale === "tr" ? "Teslim edildi" : "Delivered";
@@ -1599,7 +1588,19 @@ export default function UnitDetailPage() {
           </div>
           <h1>{unit ? unit.unitNumber : locale === "tr" ? "Unit" : "Unit"}</h1>
           <div className="unit-detail-muted">
-            {unit ? `${projectLabel(unit.project)} / #${unit.id.slice(-6)}` : "-"}
+            {unit ? (
+              <>
+                {projectLabel(unit.project)}
+                {isLandProject(unit.project) ? (
+                  <span className="badge warning" style={{ marginLeft: 8 }}>
+                    {projectCategoryLabel(unit.project, locale)}
+                  </span>
+                ) : null}{" "}
+                / #{unit.id.slice(-6)}
+              </>
+            ) : (
+              "-"
+            )}
           </div>
         </div>
 

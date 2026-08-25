@@ -19,6 +19,7 @@ import {
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
+import { projectLabel as catalogProjectLabel } from "@/lib/projects";
 
 type Currency = "GBP" | "USD" | "EUR" | "TRY";
 type EntryKind = "INCOME" | "EXPENSE";
@@ -163,12 +164,8 @@ function statusLabel(value: string, locale: string) {
 }
 
 function projectLabel(value?: string | null) {
-  if (value === "LA_JOYA") return "La Joya";
-  if (value === "LA_JOYA_PERLA") return "La Joya Perla";
-  if (value === "LA_JOYA_PERLA_II") return "La Joya Perla II";
-  if (value === "LAGOON_VERDE") return "Lagoon Verde";
   if (value === "UNSELECTED") return "Unselected";
-  return value || "-";
+  return catalogProjectLabel(value) || "-";
 }
 
 function entryOwner(entry: FinanceEntry) {

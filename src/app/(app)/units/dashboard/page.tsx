@@ -18,12 +18,14 @@ import {
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
-
-type ProjectType =
-  | "LA_JOYA"
-  | "LA_JOYA_PERLA"
-  | "LA_JOYA_PERLA_II"
-  | "LAGOON_VERDE";
+import {
+  PROJECTS,
+  isLandProject,
+  projectCategoryLabel,
+  projectLabel,
+  projectOptionLabel,
+  type ProjectType,
+} from "@/lib/projects";
 
 type UnitDeliveryStatus = "NOT_READY" | "READY_TO_DELIVER" | "DELIVERED";
 type UnitCompanyStatus = "UNKNOWN" | "DND" | "OTHER";
@@ -76,13 +78,6 @@ type CustomerComplaintRow = {
   status: "DONE" | "UNDONE";
 };
 
-const PROJECTS: ProjectType[] = [
-  "LA_JOYA",
-  "LA_JOYA_PERLA",
-  "LA_JOYA_PERLA_II",
-  "LAGOON_VERDE",
-];
-
 const DELIVERY_STATUSES: UnitDeliveryStatus[] = [
   "DELIVERED",
   "READY_TO_DELIVER",
@@ -128,17 +123,6 @@ function safeTranslate(
   const translated = t(path);
   if (translated === path) return fallback ?? path;
   return translated;
-}
-
-function projectLabel(project: ProjectType | string) {
-  const labels: Record<string, string> = {
-    LA_JOYA: "La Joya",
-    LA_JOYA_PERLA: "La Joya Perla",
-    LA_JOYA_PERLA_II: "La Joya Perla II",
-    LAGOON_VERDE: "Lagoon Verde",
-  };
-
-  return labels[project] || project;
 }
 
 function deliveryLabel(status: UnitDeliveryStatus | string | undefined, locale: string) {
@@ -410,7 +394,7 @@ export default function UnitsDashboardPage() {
       const projectItems = items.filter((item) => item.project === project);
       return {
         key: project,
-        name: projectLabel(project),
+        name: projectOptionLabel(project, locale),
         total: projectItems.length,
         delivered: countItems(
           projectItems,
@@ -1347,7 +1331,12 @@ export default function UnitsDashboardPage() {
                   <tr key={item.id}>
                     <td>
                       <Link href={`/units/${item.id}`} className="units-dashboard-unit-link">
-                        {projectLabel(item.project)} {item.unitNumber}
+                        {projectLabel(item.project)} {item.unitNumber}{" "}
+                        {isLandProject(item.project) ? (
+                          <span className="badge warning">
+                            {projectCategoryLabel(item.project, locale)}
+                          </span>
+                        ) : null}
                       </Link>
                       <span className="muted">
                         {companyLabel(item.companyStatus, locale)}

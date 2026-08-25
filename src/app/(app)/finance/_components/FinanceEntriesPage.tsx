@@ -5,6 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
+import {
+  PROJECTS,
+  projectLabel,
+  projectOptionLabel,
+  type ProjectType,
+} from "@/lib/projects";
 
 type EntryKind = "INCOME" | "EXPENSE";
 type Currency = "GBP" | "USD" | "EUR" | "TRY";
@@ -20,12 +26,6 @@ type PaymentType =
   | "OTHER"
   | "TAX"
   | "SALARY";
-type ProjectType =
-  | "LA_JOYA"
-  | "LA_JOYA_PERLA"
-  | "LA_JOYA_PERLA_II"
-  | "LAGOON_VERDE";
-
 type DueOption = {
   id: string;
   label: string;
@@ -83,12 +83,6 @@ type LookupUnit = {
 
 const CURRENCIES: Currency[] = ["GBP", "USD", "EUR", "TRY"];
 const STATUSES: Status[] = ["PLANNED", "PAID", "OVERDUE", "CANCELED"];
-const PROJECTS: ProjectType[] = [
-  "LA_JOYA",
-  "LA_JOYA_PERLA",
-  "LA_JOYA_PERLA_II",
-  "LAGOON_VERDE",
-];
 const INCOME_TYPES: PaymentType[] = ["SALE_INSTALLMENT", "RENTAL_INCOME", "OTHER"];
 const EXPENSE_TYPES: PaymentType[] = [
   "SUBCONTRACTOR",
@@ -171,14 +165,6 @@ function statusLabel(value: string, locale: string) {
     CANCELED: "Canceled",
   };
   return (locale === "tr" ? tr : en)[value] || value;
-}
-
-function projectLabel(value?: string | null) {
-  if (value === "LA_JOYA") return "La Joya";
-  if (value === "LA_JOYA_PERLA") return "La Joya Perla";
-  if (value === "LA_JOYA_PERLA_II") return "La Joya Perla II";
-  if (value === "LAGOON_VERDE") return "Lagoon Verde";
-  return "-";
 }
 
 function parseOptionDays(value: string) {
@@ -561,7 +547,7 @@ export default function FinanceEntriesPage({ kind }: { kind: EntryKind }) {
               <select value={project} onChange={(e) => setProject(e.target.value)}>
                 <option value="">{locale === "tr" ? "Seçilmedi" : "Not selected"}</option>
                 {PROJECTS.map((item) => (
-                  <option key={item} value={item}>{projectLabel(item)}</option>
+                  <option key={item} value={item}>{projectOptionLabel(item, locale)}</option>
                 ))}
               </select>
             </label>
