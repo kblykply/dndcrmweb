@@ -45,6 +45,7 @@ meetings: "Meetings",
     unitsDashboard: "Units Dashboard",
     rentProjection: "Rent Projection",
     agentWheel: "Agent Wheel",
+    agentWheelManagement: "Wheel Management",
     qualityControl: "Quality Control",
     projectMonopoly: "Project Monopoly",
     bulkEmail: "Bulk Email"

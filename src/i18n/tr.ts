@@ -52,6 +52,7 @@ meetings: "Toplantılar",
     unitsDashboard: "Unit Dashboard",
     rentProjection: "Kira Projeksiyonu",
     agentWheel: "Acenta Çarkı",
+    agentWheelManagement: "Çark Yönetimi",
     qualityControl: "Kalite Kontrol",
     projectMonopoly: "Proje Monopoly",
     bulkEmail: "Toplu Mail"

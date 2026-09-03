@@ -1,8 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { getUser } from "@/lib/auth";
+import { authedFetch } from "@/lib/authedFetch";
+import { projectLabel, type ProjectType } from "@/lib/projects";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 
 type Prize = {
@@ -16,14 +19,58 @@ type Prize = {
   visual: "cash" | "coin" | "extraRoll" | "phone" | "tablet" | "watch" | "console" | "laptop" | "dyson" | "vacation";
   image: string;
   imageTone?: "contain" | "cover";
-  weight: number;
 };
 
 type SpinResult = {
   id: string;
   prizeId: string;
   prizeName: string;
+  prizeNameTr: string;
+  prizeNameEn: string;
+  spunByName: string;
+  agencyName?: string | null;
+  customerName: string;
+  project: ProjectType;
+  block?: string | null;
+  unitNumber: string;
   createdAt: string;
+};
+
+type WheelUnit = {
+  id: string;
+  project: ProjectType;
+  unitNumber: string;
+  block?: string | null;
+  apartment: string;
+  alreadySpun: boolean;
+  previousSpin?: {
+    id: string;
+    prizeId: string;
+    prizeNameTr: string;
+    createdAt: string;
+  } | null;
+};
+
+type WheelCustomer = {
+  id: string;
+  fullName: string;
+  companyName?: string | null;
+  agencyId?: string | null;
+  ownerId?: string | null;
+  owner?: { id: string; name: string } | null;
+  unitSelections: WheelUnit[];
+};
+
+type WheelOptions = {
+  currentUser: { id: string; name: string; email: string; role: string };
+  agencies: Array<{
+    id: string;
+    name: string;
+    status: string;
+    assignedSalesId?: string | null;
+    assignedSales?: { id: string; name: string } | null;
+  }>;
+  customers: WheelCustomer[];
 };
 
 type AgentWheelAudioBuffers = {
@@ -39,6 +86,7 @@ const WHEEL_SETTLE_MS = 7800;
 const WHEEL_SETTLE_DURATION_MS = 1150;
 const WHEEL_STOP_MS = WHEEL_SETTLE_MS + WHEEL_SETTLE_DURATION_MS;
 const WHEEL_RESULT_MS = WHEEL_STOP_MS + 320;
+const NO_BLOCK = "__NO_BLOCK__";
 const AGENT_WHEEL_SOUND_FILES = {
   reelClick: "/sounds/agent-wheel/reel-click.wav",
   winMain: "/sounds/agent-wheel/Money%20Winner.wav",
@@ -61,7 +109,6 @@ const PRIZES: Prize[] = [
     visual: "coin",
     image: "https://commons.wikimedia.org/wiki/Special:Redirect/file/British_Currency_-_United_Kingdom_Money_-_GBP_Pounds.jpg?width=500",
     imageTone: "cover",
-    weight: 1,
   },
   {
     id: "extra_roll",
@@ -73,7 +120,6 @@ const PRIZES: Prize[] = [
     textColor: "#ffffff",
     visual: "extraRoll",
     image: "",
-    weight: 2,
   },
   {
     id: "iphone",
@@ -86,7 +132,6 @@ const PRIZES: Prize[] = [
     visual: "phone",
     image: "/images/agent-wheel/iphone-prize.png",
     imageTone: "contain",
-    weight: 3,
   },
   {
     id: "macbook",
@@ -98,7 +143,6 @@ const PRIZES: Prize[] = [
     textColor: "#111827",
     visual: "laptop",
     image: "/images/agent-wheel/macbook-prize-v2.png",
-    weight: 4,
   },
   {
     id: "gold",
@@ -111,7 +155,6 @@ const PRIZES: Prize[] = [
     visual: "cash",
     image: "/images/agent-wheel/tam-altin-prize.png",
     imageTone: "contain",
-    weight: 6,
   },
   {
     id: "dyson",
@@ -124,7 +167,6 @@ const PRIZES: Prize[] = [
     visual: "dyson",
     image: "/images/agent-wheel/dyson-gift-card.png",
     imageTone: "contain",
-    weight: 8,
   },
   {
     id: "ipad",
@@ -137,7 +179,6 @@ const PRIZES: Prize[] = [
     visual: "tablet",
     image: "/images/agent-wheel/ipad-prize.png",
     imageTone: "contain",
-    weight: 10,
   },
   {
     id: "watch",
@@ -150,7 +191,6 @@ const PRIZES: Prize[] = [
     visual: "watch",
     image: "/images/agent-wheel/apple-watch-prize.png",
     imageTone: "contain",
-    weight: 13,
   },
   {
     id: "playstation",
@@ -162,7 +202,6 @@ const PRIZES: Prize[] = [
     textColor: "#ffffff",
     visual: "console",
     image: "/ps5.png",
-    weight: 16,
   },
   {
     id: "vacation",
@@ -175,7 +214,6 @@ const PRIZES: Prize[] = [
     visual: "vacation",
     image: "/images/agent-wheel/vacation-prize.png",
     imageTone: "cover",
-    weight: 37,
   },
 ];
 
@@ -184,31 +222,22 @@ function getPrizeName(prize: Prize, locale: "tr" | "en") {
 }
 
 function pickRandomIndex(max: number) {
-  const random = pickRandomFloat();
-  return Math.floor(random * max);
+  return Math.floor(Math.random() * max);
 }
 
-function pickRandomFloat() {
-  if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
-    const values = new Uint32Array(1);
-    window.crypto.getRandomValues(values);
-    return values[0] / 4294967296;
+function readableError(error: unknown, locale: "tr" | "en") {
+  const raw = error instanceof Error ? error.message : String(error || "");
+  try {
+    const parsed = JSON.parse(raw);
+    const message = Array.isArray(parsed?.message)
+      ? parsed.message.join(" ")
+      : parsed?.message;
+    if (message) return String(message);
+  } catch {
+    // The API can also return a plain-text message.
   }
 
-  return Math.random();
-}
-
-function pickWeightedPrizeIndex(prizes: Prize[]) {
-  const totalWeight = prizes.reduce((sum, prize) => sum + prize.weight, 0);
-  const roll = pickRandomFloat() * totalWeight;
-  let cursor = 0;
-
-  for (let index = 0; index < prizes.length; index += 1) {
-    cursor += prizes[index].weight;
-    if (roll < cursor) return index;
-  }
-
-  return prizes.length - 1;
+  return raw || (locale === "tr" ? "İşlem tamamlanamadı." : "The request could not be completed.");
 }
 
 function PrizeVisual({ prize }: { prize: Prize }) {
@@ -262,10 +291,21 @@ export default function AgentWheelPage() {
   const [wheelSettling, setWheelSettling] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [result, setResult] = useState<SpinResult | null>(null);
+  const [options, setOptions] = useState<WheelOptions | null>(null);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [optionsError, setOptionsError] = useState("");
+  const [spinError, setSpinError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [agencyChoice, setAgencyChoice] = useState("DIRECT");
+  const [customerId, setCustomerId] = useState("");
+  const [project, setProject] = useState<"" | ProjectType>("");
+  const [block, setBlock] = useState("");
+  const [unitSelectionId, setUnitSelectionId] = useState("");
 
   const role = me?.role as string | undefined;
   const canUseWheel =
     role === "ADMIN" || role === "MANAGER" || role === "SALES" || role === "PREVIEW";
+  const canManageWheel = role === "ADMIN" || role === "MANAGER";
   const sliceAngle = 360 / PRIZES.length;
 
   const wheelGradient = useMemo(
@@ -278,11 +318,64 @@ export default function AgentWheelPage() {
     [sliceAngle],
   );
   const winningPrize = result ? PRIZES.find((prize) => prize.id === result.prizeId) : null;
+  const selectedCustomer = useMemo(
+    () => options?.customers.find((customer) => customer.id === customerId) || null,
+    [customerId, options],
+  );
+  const availableProjects = useMemo(() => {
+    const values = new Set(
+      (selectedCustomer?.unitSelections || []).map((unit) => unit.project),
+    );
+    return Array.from(values);
+  }, [selectedCustomer]);
+  const projectUnits = useMemo(
+    () =>
+      (selectedCustomer?.unitSelections || []).filter(
+        (unit) => unit.project === project,
+      ),
+    [project, selectedCustomer],
+  );
+  const availableBlocks = useMemo(() => {
+    const values = new Set(
+      projectUnits.map((unit) => unit.block || NO_BLOCK),
+    );
+    return Array.from(values).sort((a, b) =>
+      a.localeCompare(b, locale === "tr" ? "tr" : "en", {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    );
+  }, [locale, projectUnits]);
+  const availableUnits = useMemo(
+    () =>
+      projectUnits.filter((unit) => (unit.block || NO_BLOCK) === block),
+    [block, projectUnits],
+  );
+  const selectedUnit = useMemo(
+    () => availableUnits.find((unit) => unit.id === unitSelectionId) || null,
+    [availableUnits, unitSelectionId],
+  );
+  const canSubmitSale = Boolean(
+    customerId && project && block && selectedUnit && !selectedUnit.alreadySpun,
+  );
 
   useEffect(() => {
+    const currentUser = getUser();
     setMounted(true);
-    setMe(getUser());
+    setMe(currentUser);
     preloadAudioBuffers();
+    if (currentUser?.role === "PREVIEW") {
+      setOptions({
+        currentUser,
+        agencies: [],
+        customers: [],
+      });
+      setOptionsLoading(false);
+    } else if (currentUser) {
+      void loadWheelOptions();
+    } else {
+      setOptionsLoading(false);
+    }
 
     return () => {
       if (spinTimer.current) window.clearTimeout(spinTimer.current);
@@ -296,6 +389,20 @@ export default function AgentWheelPage() {
       }
     };
   }, []);
+
+  async function loadWheelOptions() {
+    setOptionsLoading(true);
+    setOptionsError("");
+    try {
+      const data = (await authedFetch("/agent-wheel/options")) as WheelOptions;
+      setOptions(data);
+      setMe(data.currentUser);
+    } catch (error) {
+      setOptionsError(readableError(error, locale));
+    } finally {
+      setOptionsLoading(false);
+    }
+  }
 
   useEffect(() => {
     function handleSpaceSpin(event: KeyboardEvent) {
@@ -788,8 +895,90 @@ export default function AgentWheelPage() {
     }
   }
 
-  function spinWheel() {
-    if (spinning) return;
+  async function spinWheel() {
+    if (spinning || submitting) return;
+    if (!canSubmitSale || !selectedUnit) {
+      setSpinError(
+        selectedUnit?.alreadySpun
+          ? locale === "tr"
+            ? "Bu satış için çark daha önce çevrilmiş."
+            : "The wheel has already been used for this sale."
+          : locale === "tr"
+            ? "Çevirmeden önce acente, müşteri, proje, blok ve daire seçimini tamamlayın."
+            : "Select the agency, customer, project, block and unit before spinning.",
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    setSpinError("");
+
+    let storedResult: SpinResult;
+    let prizeIndex = -1;
+
+    try {
+      const response = (await authedFetch("/agent-wheel/spins", {
+        method: "POST",
+        body: JSON.stringify({
+          customerId,
+          unitSelectionId: selectedUnit.id,
+          agencyId: agencyChoice === "DIRECT" ? null : agencyChoice,
+        }),
+      })) as Omit<SpinResult, "prizeName">;
+
+      prizeIndex = PRIZES.findIndex((prize) => prize.id === response.prizeId);
+      if (prizeIndex < 0) {
+        throw new Error(
+          locale === "tr"
+            ? "Ödül yapılandırması ekranda bulunamadı."
+            : "The prize configuration is missing from the wheel.",
+        );
+      }
+
+      storedResult = {
+        ...response,
+        prizeName: locale === "tr" ? response.prizeNameTr : response.prizeNameEn,
+      };
+
+      setOptions((current) =>
+        current
+          ? {
+              ...current,
+              customers: current.customers.map((customer) => ({
+                ...customer,
+                unitSelections: customer.unitSelections.map((unit) =>
+                  unit.id === selectedUnit.id
+                    ? {
+                        ...unit,
+                        alreadySpun: true,
+                        previousSpin: {
+                          id: response.id,
+                          prizeId: response.prizeId,
+                          prizeNameTr: response.prizeNameTr,
+                          createdAt: response.createdAt,
+                        },
+                      }
+                    : unit,
+                ),
+              })),
+            }
+          : current,
+      );
+    } catch (error) {
+      const message = readableError(error, locale);
+      setSpinError(
+        message.includes("already used")
+          ? locale === "tr"
+            ? "Bu satış için çark daha önce çevrilmiş."
+            : "The wheel has already been used for this sale."
+          : message,
+      );
+      void loadWheelOptions();
+      setSubmitting(false);
+      return;
+    }
+
+    setSubmitting(false);
 
     if (spinTimer.current) window.clearTimeout(spinTimer.current);
     if (settleTimer.current) window.clearTimeout(settleTimer.current);
@@ -799,8 +988,6 @@ export default function AgentWheelPage() {
     stopAudioSources();
     sampleSequenceActiveRef.current = false;
 
-    const prizeIndex = pickWeightedPrizeIndex(PRIZES);
-    const prize = PRIZES[prizeIndex];
     const jitter = (Math.random() - 0.5) * (sliceAngle * 0.42);
     const centerAngle = prizeIndex * sliceAngle + jitter;
     const currentRotation = ((rotation % 360) + 360) % 360;
@@ -827,15 +1014,8 @@ export default function AgentWheelPage() {
       }, WHEEL_SETTLE_MS);
 
       spinTimer.current = window.setTimeout(() => {
-        const nextResult: SpinResult = {
-          id: `${Date.now()}-${prize.id}`,
-          prizeId: prize.id,
-          prizeName: getPrizeName(prize, locale),
-          createdAt: new Date().toISOString(),
-        };
-
         stopAudioSources();
-        setResult(nextResult);
+        setResult(storedResult);
         setSpinning(false);
         setWheelSettling(false);
         setCelebrating(true);
@@ -871,6 +1051,23 @@ export default function AgentWheelPage() {
     }
   }
 
+  if (mounted && !me) {
+    return (
+      <main className="agent-wheel-page">
+        <section className="agent-wheel-access">
+          <h1>{locale === "tr" ? "Oturum gerekli" : "Sign in required"}</h1>
+          <p>
+            {locale === "tr"
+              ? "Satış bilgilerini doğrulamak ve çarkı çevirmek için CRM hesabınızla giriş yapın."
+              : "Sign in with your CRM account to verify the sale and use the wheel."}
+          </p>
+          <Link href="/">{locale === "tr" ? "Giriş ekranına dön" : "Go to sign in"}</Link>
+        </section>
+        <style jsx>{styles}</style>
+      </main>
+    );
+  }
+
   if (mounted && me && !canUseWheel) {
     return (
       <main className="agent-wheel-page">
@@ -894,6 +1091,16 @@ export default function AgentWheelPage() {
         <div className="hero-glow two" />
         <div className="hero-top">
           <div className="hero-actions">
+            {canManageWheel ? (
+              <Link
+                className="hero-link"
+                href="/agent-wheel-management"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {locale === "tr" ? "Çekiliş kayıtları" : "Spin records"}
+              </Link>
+            ) : null}
             <button
               type="button"
               className={`sound-toggle ${soundEnabled ? "is-on" : "is-off"}`}
@@ -916,6 +1123,165 @@ export default function AgentWheelPage() {
         </div>
 
         <div className="agent-wheel-layout">
+          <aside className="sale-console" aria-label={locale === "tr" ? "Satış seçimi" : "Sale selection"}>
+            <div className="sale-console-heading">
+              <span>{locale === "tr" ? "SATIŞ DOĞRULAMA" : "SALE VERIFICATION"}</span>
+              <strong>{locale === "tr" ? "Çekiliş kaydı" : "Wheel entry"}</strong>
+            </div>
+
+            <div className="spinner-identity">
+              <span className="spinner-avatar" aria-hidden="true">
+                {(options?.currentUser.name || me?.name || "D").slice(0, 1).toUpperCase()}
+              </span>
+              <span>
+                <small>{locale === "tr" ? "Çarkı çeviren" : "Sales representative"}</small>
+                <strong>{options?.currentUser.name || me?.name || "-"}</strong>
+              </span>
+            </div>
+
+            {optionsLoading ? (
+              <div className="sale-console-state">{locale === "tr" ? "Satışlar yükleniyor..." : "Loading sales..."}</div>
+            ) : optionsError ? (
+              <div className="sale-console-state error">
+                <span>{optionsError}</span>
+                <button type="button" onClick={() => void loadWheelOptions()}>
+                  {locale === "tr" ? "Tekrar dene" : "Try again"}
+                </button>
+              </div>
+            ) : (
+              <div className="sale-form">
+                <label>
+                  <span>{locale === "tr" ? "Acente" : "Agency"}</span>
+                  <select
+                    value={agencyChoice}
+                    disabled={spinning || submitting}
+                    onChange={(event) => {
+                      setAgencyChoice(event.target.value);
+                      setSpinError("");
+                    }}
+                  >
+                    <option value="DIRECT">
+                      {locale === "tr"
+                        ? "Kendim için çeviriyorum (Direkt satış)"
+                        : "My direct sale (No agency)"}
+                    </option>
+                    {(options?.agencies || []).map((agency) => (
+                      <option key={agency.id} value={agency.id}>
+                        {agency.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>{locale === "tr" ? "Müşteri" : "Customer"}</span>
+                  <select
+                    value={customerId}
+                    disabled={spinning || submitting}
+                    onChange={(event) => {
+                      setCustomerId(event.target.value);
+                      setProject("");
+                      setBlock("");
+                      setUnitSelectionId("");
+                      setSpinError("");
+                    }}
+                  >
+                    <option value="">{locale === "tr" ? "Müşteri seçin" : "Select customer"}</option>
+                    {(options?.customers || []).map((customer) => (
+                      <option key={customer.id} value={customer.id}>
+                        {customer.fullName}{customer.companyName ? ` · ${customer.companyName}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="sale-property-grid">
+                  <label>
+                    <span>{locale === "tr" ? "Proje" : "Project"}</span>
+                    <select
+                      value={project}
+                      disabled={!selectedCustomer || spinning || submitting}
+                      onChange={(event) => {
+                        setProject(event.target.value as "" | ProjectType);
+                        setBlock("");
+                        setUnitSelectionId("");
+                        setSpinError("");
+                      }}
+                    >
+                      <option value="">{locale === "tr" ? "Seçin" : "Select"}</option>
+                      {availableProjects.map((projectId) => (
+                        <option key={projectId} value={projectId}>
+                          {projectLabel(projectId)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>{locale === "tr" ? "Blok" : "Block"}</span>
+                    <select
+                      value={block}
+                      disabled={!project || spinning || submitting}
+                      onChange={(event) => {
+                        setBlock(event.target.value);
+                        setUnitSelectionId("");
+                        setSpinError("");
+                      }}
+                    >
+                      <option value="">{locale === "tr" ? "Seçin" : "Select"}</option>
+                      {availableBlocks.map((blockId) => (
+                        <option key={blockId} value={blockId}>
+                          {blockId === NO_BLOCK
+                            ? locale === "tr"
+                              ? "Blok yok"
+                              : "No block"
+                            : blockId}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <label>
+                  <span>{locale === "tr" ? "Daire / Arsa" : "Unit / Plot"}</span>
+                  <select
+                    value={unitSelectionId}
+                    disabled={!block || spinning || submitting}
+                    onChange={(event) => {
+                      setUnitSelectionId(event.target.value);
+                      setSpinError("");
+                    }}
+                  >
+                    <option value="">{locale === "tr" ? "Satışı seçin" : "Select sale"}</option>
+                    {availableUnits.map((unit) => (
+                      <option key={unit.id} value={unit.id} disabled={unit.alreadySpun}>
+                        {unit.apartment || unit.unitNumber}
+                        {unit.alreadySpun
+                          ? locale === "tr"
+                            ? " · Daha önce çevrildi"
+                            : " · Already used"
+                          : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className={`sale-readiness ${canSubmitSale ? "ready" : ""}`}>
+                  <span aria-hidden="true" />
+                  {canSubmitSale
+                    ? locale === "tr"
+                      ? "Satış doğrulandı, çark hazır"
+                      : "Sale verified, wheel ready"
+                    : locale === "tr"
+                      ? "Satış bilgilerini tamamlayın"
+                      : "Complete the sale information"}
+                </div>
+              </div>
+            )}
+
+            {spinError ? <div className="spin-error">{spinError}</div> : null}
+          </aside>
+
           <section className="wheel-stage" aria-label={locale === "tr" ? "Hediye çarkı" : "Prize wheel"}>
             <div
               className={`wheel-pointer ${spinning ? "is-ticking" : ""} ${
@@ -995,10 +1361,14 @@ export default function AgentWheelPage() {
               <button
                 className="spin-button main-spin"
                 type="button"
-                onClick={spinWheel}
-                disabled={spinning}
+                onClick={() => void spinWheel()}
+                disabled={spinning || submitting || !canSubmitSale}
               >
-                {spinning
+                {submitting
+                  ? locale === "tr"
+                    ? "Satış doğrulanıyor..."
+                    : "Verifying sale..."
+                  : spinning
                   ? locale === "tr"
                     ? "Çark dönüyor..."
                     : "Spinning..."
@@ -1068,12 +1438,20 @@ export default function AgentWheelPage() {
               <p>
                 {winningPrize?.id === "extra_roll"
                   ? locale === "tr"
-                    ? "Ekstra çevirme hakkı kazandınız. Paneli kapatıp tekrar çevirin."
-                    : "You won an extra roll. Close this panel and spin again."
+                    ? "Ekstra çevirme ödülü kaydedildi. Bu satış için ikinci çekiliş yapılamaz."
+                    : "The extra-roll prize was recorded. This sale cannot be spun again."
                   : locale === "tr"
                     ? "Tebrikler, hediye kazandınız!"
                     : "Congratulations, you won this prize!"}
               </p>
+              <div className="result-sale-summary">
+                <strong>{result.customerName}</strong>
+                <span>
+                  {projectLabel(result.project)} · {result.block ? `${locale === "tr" ? "Blok" : "Block"} ${result.block} · ` : ""}
+                  {result.unitNumber}
+                </span>
+                <span>{result.agencyName || (locale === "tr" ? "Direkt satış" : "Direct sale")}</span>
+              </div>
             </div>
           </div>
         ) : null}
@@ -1169,7 +1547,8 @@ const styles = `
     margin-bottom: 0;
   }
 
-  .hero-top button {
+  .hero-top button,
+  .hero-link {
     border: 1px solid rgba(248, 212, 119, 0.34);
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.08);
@@ -1177,6 +1556,8 @@ const styles = `
     font-weight: 900;
     padding: 12px 16px;
     cursor: pointer;
+    text-decoration: none;
+    line-height: 1.2;
   }
 
   .hero-actions {
@@ -1226,18 +1607,195 @@ const styles = `
 
   .agent-wheel-layout {
     display: grid;
-    grid-template-columns: 1fr;
-    justify-items: center;
-    width: min(920px, 100%);
+    grid-template-columns: minmax(300px, 350px) minmax(0, 1fr);
+    justify-items: stretch;
+    width: min(1280px, 100%);
     margin: 0 auto;
     gap: clamp(12px, 1.8vw, 22px);
     align-items: center;
     min-height: 0;
   }
 
+  .sale-console {
+    width: 100%;
+    max-height: calc(100vh - 105px);
+    overflow: auto;
+    align-self: center;
+    display: grid;
+    gap: 14px;
+    padding: 18px;
+    border: 1px solid rgba(248, 212, 119, 0.3);
+    border-radius: 18px;
+    background: rgba(6, 10, 17, 0.86);
+    box-shadow:
+      0 26px 60px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(16px);
+  }
+
+  .sale-console-heading {
+    display: grid;
+    gap: 3px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(248, 212, 119, 0.18);
+  }
+
+  .sale-console-heading span,
+  .spinner-identity small,
+  .sale-form label > span {
+    color: #d8b964;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .sale-console-heading strong {
+    color: #fff9e8;
+    font-size: 22px;
+    line-height: 1.15;
+  }
+
+  .spinner-identity {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+  }
+
+  .spinner-avatar {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255, 228, 153, 0.45);
+    border-radius: 50%;
+    background: linear-gradient(145deg, #f4ce69, #8d5a11);
+    color: #0d1118;
+    font-size: 17px;
+    font-weight: 1000;
+  }
+
+  .spinner-identity > span:last-child {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+
+  .spinner-identity strong {
+    overflow: hidden;
+    color: #ffffff;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sale-form {
+    display: grid;
+    gap: 11px;
+  }
+
+  .sale-form label {
+    min-width: 0;
+    display: grid;
+    gap: 6px;
+  }
+
+  .sale-form select {
+    width: 100%;
+    min-width: 0;
+    height: 42px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 9px;
+    background: #111722;
+    color: #f8fafc;
+    padding: 0 34px 0 11px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 750;
+    outline: none;
+  }
+
+  .sale-form select:focus {
+    border-color: #e8bf55;
+    box-shadow: 0 0 0 3px rgba(232, 191, 85, 0.14);
+  }
+
+  .sale-form select:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+  }
+
+  .sale-property-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(88px, 0.6fr);
+    gap: 9px;
+  }
+
+  .sale-readiness {
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #9ca3af;
+    font-size: 11px;
+    font-weight: 850;
+  }
+
+  .sale-readiness span {
+    width: 9px;
+    height: 9px;
+    flex: none;
+    border-radius: 50%;
+    background: #6b7280;
+  }
+
+  .sale-readiness.ready {
+    color: #86efac;
+  }
+
+  .sale-readiness.ready span {
+    background: #22c55e;
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.72);
+  }
+
+  .sale-console-state,
+  .spin-error {
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 9px;
+    background: rgba(15, 23, 42, 0.64);
+    color: #cbd5e1;
+    padding: 11px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .sale-console-state.error,
+  .spin-error {
+    border-color: rgba(248, 113, 113, 0.34);
+    background: rgba(127, 29, 29, 0.22);
+    color: #fecaca;
+  }
+
+  .sale-console-state.error {
+    display: grid;
+    gap: 9px;
+  }
+
+  .sale-console-state button {
+    width: fit-content;
+    border: 1px solid rgba(248, 212, 119, 0.36);
+    border-radius: 8px;
+    background: rgba(248, 212, 119, 0.12);
+    color: #fff4c2;
+    padding: 7px 10px;
+    font-weight: 850;
+    cursor: pointer;
+  }
+
   .wheel-stage {
     position: relative;
-    width: min(100%, 880px);
+    width: min(100%, 820px);
     height: 100%;
     min-height: 0;
     display: grid;
@@ -1249,7 +1807,7 @@ const styles = `
 
   .wheel-shell {
     --bulb-radius: clamp(232px, 31.5vw, 335px);
-    width: min(100%, 710px, calc(100vh - 170px));
+    width: min(100%, 690px, calc(100vh - 205px));
     aspect-ratio: 1;
     border-radius: 999px;
     position: relative;
@@ -1619,6 +2177,31 @@ const styles = `
     text-transform: uppercase;
   }
 
+  .result-sale-summary {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 14px;
+    max-width: 560px;
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(248, 212, 119, 0.24);
+  }
+
+  .result-sale-summary strong,
+  .result-sale-summary span {
+    display: inline;
+    color: #e5e7eb;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.35;
+    text-transform: none;
+  }
+
+  .result-sale-summary strong {
+    color: #ffffff;
+  }
+
   .result-prize-art {
     display: none;
   }
@@ -1726,6 +2309,7 @@ const styles = `
 
   .agent-wheel-access {
     width: min(1440px, calc(100% - 32px));
+    align-self: center;
     margin: 0 auto;
     border: 1px solid rgba(248, 212, 119, 0.2);
     border-radius: 22px;
@@ -1789,6 +2373,18 @@ const styles = `
   .agent-wheel-access p {
     margin: 0;
     color: var(--text-secondary);
+  }
+
+  .agent-wheel-access a {
+    width: fit-content;
+    display: inline-flex;
+    margin-top: 18px;
+    border-radius: 8px;
+    background: #d8aa48;
+    color: #111827;
+    padding: 10px 14px;
+    font-weight: 900;
+    text-decoration: none;
   }
 
   @keyframes burst {
@@ -2043,17 +2639,40 @@ const styles = `
 
   @media (max-width: 1120px) {
     .agent-wheel-layout {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(260px, 310px) minmax(0, 1fr);
+    }
+
+    .sale-console {
+      padding: 14px;
+    }
+
+    .sale-console-heading strong {
+      font-size: 19px;
     }
   }
 
   @media (max-width: 760px) {
+    .agent-wheel-page,
+    .agent-wheel-hero {
+      height: auto;
+      min-height: 100vh;
+      overflow: auto;
+    }
+
     .agent-wheel-hero {
       border-radius: 18px;
     }
 
     .hero-top {
       display: grid;
+    }
+
+    .agent-wheel-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .sale-console {
+      max-height: none;
     }
 
     .wheel-shell {

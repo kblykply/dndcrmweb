@@ -614,6 +614,12 @@ const isMeetingsActive = useMemo(
     () => pathname === "/agent-wheel" || pathname.startsWith("/agent-wheel/"),
     [pathname],
   );
+  const isAgentWheelManagementActive = useMemo(
+    () =>
+      pathname === "/agent-wheel-management" ||
+      pathname.startsWith("/agent-wheel-management/"),
+    [pathname],
+  );
   const isBulkEmailActive = useMemo(
     () => pathname === "/bulk-email" || pathname.startsWith("/bulk-email/"),
     [pathname],
@@ -930,6 +936,22 @@ const isMeetingsActive = useMemo(
                   <GiftWheelIcon />
                 </NavIconWrap>
                 {safeTranslate(t, "nav.agentWheel", "Agent Wheel")}
+              </Link>
+            ) : null}
+
+            {isManager ? (
+              <Link
+                href="/agent-wheel-management"
+                style={navItemStyle(isAgentWheelManagementActive)}
+              >
+                <NavIconWrap>
+                  <GiftWheelIcon />
+                </NavIconWrap>
+                {safeTranslate(
+                  t,
+                  "nav.agentWheelManagement",
+                  "Wheel Management",
+                )}
               </Link>
             ) : null}
 
