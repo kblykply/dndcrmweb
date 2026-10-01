@@ -4,6 +4,7 @@ export const PROJECTS = [
   "LA_JOYA_PERLA_II",
   "LAGOON_VERDE",
   "GECITKALE_1_ETAP",
+  "NEOCITY",
 ] as const;
 
 export type ProjectType = (typeof PROJECTS)[number];
@@ -11,7 +12,7 @@ export type ProjectCategory = "RESIDENTIAL" | "LAND";
 
 export const PROJECT_META: Record<
   ProjectType,
-  { label: string; category: ProjectCategory }
+  { label: string; category: ProjectCategory | null }
 > = {
   LA_JOYA: { label: "La Joya", category: "RESIDENTIAL" },
   LA_JOYA_PERLA: { label: "La Joya Perla", category: "RESIDENTIAL" },
@@ -21,6 +22,7 @@ export const PROJECT_META: Record<
   },
   LAGOON_VERDE: { label: "Lagoon Verde", category: "RESIDENTIAL" },
   GECITKALE_1_ETAP: { label: "Geçitkale 1. Etap", category: "LAND" },
+  NEOCITY: { label: "Neocity", category: null },
 };
 
 export function projectLabel(project?: string | null) {
