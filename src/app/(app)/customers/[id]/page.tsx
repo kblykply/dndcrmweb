@@ -438,7 +438,7 @@ export default function CustomerDetailPage() {
         ? usersRes.filter(
             (u) =>
               u?.isActive !== false &&
-              (u?.role === "SALES" || u?.role === "MANAGER"),
+              ["SALES", "MANAGER", "ADMIN"].includes(u?.role),
           )
         : [];
       const unique = Array.from(
