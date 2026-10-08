@@ -1,5 +1,12 @@
 export const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}) {
   const headers = new Headers({
     "Content-Type": "application/json",
@@ -10,19 +17,25 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     extra.forEach((value, key) => headers.set(key, value));
   }
 
-  const res = await fetch(`${API}${path}`, {
-    ...init,
-    headers,
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API}${path}`, {
+      ...init,
+      headers,
+      cache: "no-store",
+    });
+  } catch {
+    // A status of zero means no HTTP response was received.
+    throw new ApiError(0, "Network request failed");
+  }
 
   if (!res.ok) {
     if (res.status === 401) {
-      throw new Error("Unauthorized");
+      throw new ApiError(res.status, "Unauthorized");
     }
 
     const text = await res.text();
-    throw new Error(text || `HTTP ${res.status}`);
+    throw new ApiError(res.status, text || `HTTP ${res.status}`);
   }
 
   const contentType = res.headers.get("content-type") || "";

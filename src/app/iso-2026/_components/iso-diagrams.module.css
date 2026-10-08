@@ -1,0 +1,720 @@
+.diagram {
+  --diagram-plan: #426485;
+  --diagram-do: #27766b;
+  --diagram-check: #a4772f;
+  --diagram-act: #795c97;
+  --diagram-arrow: #82919e;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text-primary);
+  container-type: inline-size;
+}
+
+.systemHeader,
+.processHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--stroke);
+  background: var(--surface-2);
+}
+
+.systemHeader > span,
+.processHeader > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.scopeLink {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 11px;
+  transition:
+    border-color 160ms,
+    background 160ms;
+}
+
+.scopeLink b,
+.controlLinks b {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pdcaLayout {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.85fr) minmax(390px, 2.65fr) minmax(
+      140px,
+      0.85fr
+    );
+  align-items: center;
+  gap: 30px;
+  padding: 25px 22px 22px;
+}
+
+.rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.railLabel {
+  padding: 0 2px 3px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
+.incomingArrow,
+.outgoingArrow {
+  position: absolute;
+  top: 50%;
+  color: var(--diagram-arrow);
+}
+
+.incomingArrow {
+  right: -27px;
+}
+.outgoingArrow {
+  left: -27px;
+}
+
+.clauseLink {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 80px;
+  padding: 13px 14px 15px;
+  border: 1px solid var(--stroke);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text-primary);
+  text-decoration: none;
+  transition:
+    border-color 160ms,
+    box-shadow 160ms,
+    background 160ms;
+}
+
+.clauseLink:hover {
+  border-color: var(--diagram-plan);
+  background: color-mix(in srgb, var(--diagram-plan) 5%, var(--surface));
+  box-shadow: 0 4px 12px
+    color-mix(in srgb, var(--diagram-plan) 10%, transparent);
+  text-decoration: none;
+}
+
+.clauseLink:focus-visible,
+.scopeLink:focus-visible,
+.processPoint:focus-visible,
+.controlLinks a:focus-visible {
+  z-index: 3;
+  outline: 3px solid var(--info);
+  outline-offset: 3px;
+}
+
+.clauseLink strong {
+  padding-right: 4px;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.nodeTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 9px;
+  color: var(--text-secondary);
+}
+
+.clauseNumber {
+  min-width: 24px;
+  padding: 2px 5px;
+  border: 1px solid var(--stroke);
+  border-radius: 5px;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.openIcon {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.clauseLink:hover .openIcon {
+  color: var(--info);
+  opacity: 1;
+}
+
+.cycle {
+  position: relative;
+  width: 100%;
+  height: 430px;
+  min-width: 0;
+}
+.cycleDrawing {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.cycleTrack {
+  fill: none;
+  stroke: var(--stroke);
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+}
+.centerHalo {
+  fill: color-mix(in srgb, var(--diagram-plan) 4%, transparent);
+  stroke: var(--stroke);
+  stroke-width: 1;
+}
+.spokes {
+  fill: none;
+  stroke: var(--stroke);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 5;
+}
+.planArc,
+.doArc,
+.checkArc,
+.actArc {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.planArc {
+  stroke: var(--diagram-plan);
+}
+.doArc {
+  stroke: var(--diagram-do);
+}
+.checkArc {
+  stroke: var(--diagram-check);
+}
+.actArc {
+  stroke: var(--diagram-act);
+}
+.arrowHead {
+  fill: var(--diagram-arrow);
+}
+
+.planNode,
+.checkNode,
+.actNode,
+.leadershipNode {
+  position: absolute;
+  z-index: 1;
+  width: 128px;
+}
+
+.planNode {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  border-top: 3px solid var(--diagram-plan);
+}
+.checkNode {
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  border-top: 3px solid var(--diagram-check);
+}
+.actNode {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 152px;
+  border-top: 3px solid var(--diagram-act);
+}
+.leadershipNode {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 122px;
+  min-height: 126px;
+  border-color: var(--diagram-plan);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--diagram-plan) 7%, var(--surface));
+}
+.leadershipNode strong {
+  font-size: 15px;
+}
+.leadershipNode .nodeTop {
+  color: var(--diagram-plan);
+}
+.phase {
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.055em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.leadershipNode .phase {
+  font-size: 8px;
+  letter-spacing: 0.025em;
+}
+
+.doGroup {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 1;
+  width: 230px;
+  transform: translateX(-50%);
+}
+.doLabel {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--diagram-do);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-align: center;
+  text-transform: uppercase;
+}
+.doGroup > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+.doNode {
+  border-top: 3px solid var(--diagram-do);
+}
+.doNode .nodeTop {
+  color: var(--diagram-do);
+}
+
+.caption {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
+  padding: 13px 18px;
+  border-top: 1px solid var(--stroke);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+.caption svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.processHeader {
+  padding: 17px 20px;
+}
+.processDirection {
+  color: var(--text-muted);
+}
+.processFlow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 24px;
+  padding: 60px 20px 6px;
+}
+.processStep {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.processCard {
+  width: 100%;
+  min-height: 176px;
+  padding: 16px 14px 18px;
+}
+.processCard .nodeTop {
+  margin-bottom: 7px;
+}
+.processCard strong {
+  font-size: 13px;
+}
+.description {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.65;
+}
+.sourceStep,
+.recipientStep {
+  background: var(--surface-2);
+}
+.inputStep {
+  border-top: 3px solid var(--diagram-plan);
+}
+.activityStep {
+  border-top: 3px solid var(--diagram-do);
+  background: color-mix(in srgb, var(--diagram-do) 5%, var(--surface));
+}
+.outputStep {
+  border-top: 3px solid var(--diagram-act);
+}
+.processPoint {
+  position: absolute;
+  top: -34px;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 27px;
+  padding: 2px 1px;
+  color: var(--diagram-plan);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.processPoint::after {
+  position: absolute;
+  left: 7px;
+  bottom: -6px;
+  width: 0;
+  height: 6px;
+  border-left: 1px dotted var(--diagram-arrow);
+  content: "";
+}
+.endPoint {
+  color: var(--diagram-act);
+}
+.flowConnector {
+  position: absolute;
+  top: 48%;
+  right: -22px;
+  display: flex;
+  color: var(--diagram-arrow);
+}
+.verticalArrow {
+  display: none;
+}
+.controlsBand {
+  position: relative;
+  margin: 0 20px;
+  padding: 31px 0 20px;
+  text-align: center;
+}
+.controlBracket {
+  position: absolute;
+  top: 8px;
+  right: 22%;
+  left: 22%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  height: 15px;
+  border-bottom: 1px dashed var(--diagram-arrow);
+  border-radius: 0 0 7px 7px;
+}
+.controlBracket span {
+  position: relative;
+  width: 1px;
+  height: 15px;
+  border-left: 1px dashed var(--diagram-arrow);
+}
+.controlBracket span::before {
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--diagram-arrow);
+  content: "";
+}
+.controlsBand p {
+  margin: 9px 0 12px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.controlLinks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.controlLinks a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+.scopeLink:hover,
+.controlLinks a:hover {
+  border-color: var(--diagram-plan);
+  background: var(--surface-3);
+}
+.processPoint:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+:global(html[data-theme="dark"]) .diagram {
+  --diagram-plan: #91b4d6;
+  --diagram-do: #7ac4b6;
+  --diagram-check: #ddbc7b;
+  --diagram-act: #bba3d9;
+  --diagram-arrow: #798c9b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(html:not([data-theme="light"]):not([data-theme="dark"])) .diagram {
+    --diagram-plan: #91b4d6;
+    --diagram-do: #7ac4b6;
+    --diagram-check: #ddbc7b;
+    --diagram-act: #bba3d9;
+    --diagram-arrow: #798c9b;
+  }
+}
+
+@container (max-width: 860px) {
+  .pdcaLayout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 20px;
+  }
+  .rail {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .railLabel {
+    grid-column: 1 / -1;
+  }
+  .rail .clauseLink {
+    min-height: 94px;
+  }
+  .incomingArrow,
+  .outgoingArrow {
+    display: none;
+  }
+  .cycle {
+    width: 100%;
+    max-width: 560px;
+    height: 410px;
+    margin: 0 auto;
+  }
+  .cycle::before,
+  .cycle::after {
+    position: absolute;
+    top: -16px;
+    left: 50%;
+    width: 1px;
+    height: 12px;
+    background: var(--diagram-arrow);
+    content: "";
+  }
+  .cycle::after {
+    top: auto;
+    bottom: -16px;
+  }
+  .processFlow {
+    gap: 20px;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+  .processCard {
+    padding: 12px 10px 16px;
+  }
+  .processCard strong {
+    font-size: 12px;
+  }
+  .flowConnector {
+    right: -20px;
+  }
+}
+
+@container (max-width: 600px) {
+  .systemHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px 16px;
+  }
+  .pdcaLayout {
+    gap: 23px;
+    padding: 17px 12px;
+  }
+  .rail {
+    gap: 7px;
+  }
+  .rail .clauseLink {
+    padding: 10px 9px 17px;
+  }
+  .rail .clauseLink strong {
+    font-size: 11px;
+  }
+  .rail .nodeTop > svg {
+    width: 15px;
+  }
+  .cycle {
+    height: 400px;
+  }
+  .planNode,
+  .checkNode {
+    width: 29%;
+    max-width: 124px;
+    padding: 11px 9px 16px;
+  }
+  .leadershipNode {
+    width: 31%;
+    max-width: 122px;
+    min-height: 116px;
+    padding: 12px 10px;
+  }
+  .leadershipNode strong {
+    font-size: 14px;
+  }
+  .cycle .clauseLink strong {
+    font-size: 12px;
+  }
+  .phase {
+    font-size: 8px;
+  }
+  .doGroup {
+    width: 210px;
+  }
+  .doNode {
+    min-height: 78px;
+    padding: 10px 11px 15px;
+  }
+  .actNode {
+    width: 142px;
+    min-height: 99px;
+    padding: 11px 12px 14px;
+  }
+  .processFlow {
+    grid-template-columns: 1fr;
+    gap: 30px;
+    padding: 20px;
+  }
+  .processStep {
+    flex-direction: column;
+  }
+  .processPoint {
+    position: relative;
+    top: auto;
+    left: auto;
+    align-self: flex-start;
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
+  .processPoint::after {
+    display: none;
+  }
+  .processCard {
+    min-height: 112px;
+    padding: 15px 17px 18px;
+    gap: 5px;
+  }
+  .processCard .nodeTop {
+    margin-bottom: 3px;
+  }
+  .processCard strong {
+    font-size: 14px;
+  }
+  .processCard .description {
+    font-size: 12px;
+  }
+  .flowConnector {
+    top: auto;
+    right: auto;
+    bottom: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  .horizontalArrow {
+    display: none;
+  }
+  .verticalArrow {
+    display: block;
+  }
+  .processDirection {
+    transform: rotate(90deg);
+  }
+  .controlsBand {
+    margin: 0 20px;
+    padding-top: 7px;
+    border-top: 1px dashed var(--diagram-arrow);
+  }
+  .controlBracket {
+    display: none;
+  }
+  .controlLinks {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .caption {
+    padding: 12px 14px;
+    font-size: 10px;
+  }
+}
+
+@container (max-width: 350px) {
+  .rail {
+    grid-template-columns: 1fr;
+  }
+  .rail .clauseLink {
+    display: grid;
+    grid-template-columns: 57px 1fr;
+    align-items: center;
+    min-height: 60px;
+    padding: 10px 19px 10px 10px;
+  }
+  .rail .clauseLink strong {
+    font-size: 12px;
+  }
+  .cycle .clauseLink strong {
+    font-size: 11px;
+  }
+  .leadershipNode .phase {
+    font-size: 7px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clauseLink,
+  .scopeLink {
+    transition: none;
+  }
+}

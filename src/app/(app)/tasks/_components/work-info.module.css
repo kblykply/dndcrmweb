@@ -1,0 +1,209 @@
+.trigger.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex: 0 0 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  color: #55716f;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.trigger.trigger:hover,
+.trigger.trigger[aria-expanded="true"] {
+  color: #11685f;
+  background: #e6f2ef;
+  border-color: #c9e2db;
+}
+.trigger.trigger:focus-visible {
+  outline: 2px solid #147d73;
+  outline-offset: 2px;
+}
+.trigger.trigger > svg {
+  width: 16px;
+  height: 16px;
+  color: inherit;
+}
+.corner.corner {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.field {
+  position: relative;
+  min-width: 0;
+}
+.field .corner {
+  top: 0;
+  right: 0;
+}
+.fieldName {
+  display: block;
+  min-height: 28px;
+  padding: 3px 36px 0 0;
+  overflow-wrap: anywhere;
+}
+.dialog {
+  --help-ink: #202a30;
+  --help-muted: #58686d;
+  --help-line: #e0e6e7;
+  --help-surface: #fff;
+  --help-example: #f0f7f5;
+  --help-accent: #147d73;
+  position: fixed;
+  inset: 0;
+  width: min(620px, calc(100% - 32px));
+  max-width: calc(100% - 32px);
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--help-line);
+  border-radius: 8px;
+  background: var(--help-surface);
+  color: var(--help-ink);
+  box-shadow: 0 24px 80px #10252133;
+  overflow: hidden;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.65;
+  text-align: left;
+  letter-spacing: 0;
+}
+.dialog::backdrop {
+  background: #10202470;
+}
+.dialog * {
+  box-sizing: border-box;
+  min-width: 0;
+  letter-spacing: 0;
+}
+.surface {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 34px);
+}
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--help-line);
+  flex-shrink: 0;
+}
+.header span {
+  color: var(--help-accent);
+  font-size: 10px;
+  font-weight: 750;
+}
+.header h2 {
+  font-size: 20px;
+  line-height: 1.35;
+  font-weight: 700;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--help-ink);
+}
+.header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--help-line);
+  border-radius: 6px;
+  background: var(--help-surface);
+  color: var(--help-muted);
+  cursor: pointer;
+}
+.header button:hover {
+  background: var(--help-example);
+}
+.header button:focus-visible {
+  outline: 2px solid var(--help-accent);
+  outline-offset: 2px;
+}
+.body {
+  padding: 20px 22px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.body:focus-visible {
+  outline: 2px solid var(--help-accent);
+  outline-offset: -2px;
+}
+.body section + section {
+  margin-top: 22px;
+}
+.body h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--help-ink);
+}
+.body p {
+  margin: 0;
+  color: var(--help-muted);
+}
+.body ol,
+.body ul {
+  margin: 0;
+  padding-left: 21px;
+}
+.body li {
+  padding-left: 3px;
+  overflow-wrap: anywhere;
+}
+.body li + li {
+  margin-top: 10px;
+}
+.example {
+  padding: 14px 16px;
+  border-left: 3px solid var(--help-accent);
+  background: var(--help-example);
+}
+.example li::marker {
+  color: var(--help-accent);
+  font-weight: 700;
+}
+:global(html[data-theme="dark"]) .dialog {
+  --help-ink: #e3e9e9;
+  --help-muted: #b1bec2;
+  --help-line: #354349;
+  --help-surface: #202b30;
+  --help-example: #253c39;
+  --help-accent: #79cfbb;
+}
+:global(html[data-theme="dark"]) .trigger {
+  color: #a7c4bc;
+}
+:global(html[data-theme="dark"]) .trigger:hover,
+:global(html[data-theme="dark"]) .trigger[aria-expanded="true"] {
+  color: #8bdfc9;
+  background: #253c39;
+  border-color: #3d665b;
+}
+@media (max-width: 480px) {
+  .header {
+    padding: 16px;
+    gap: 10px;
+  }
+  .header h2 {
+    font-size: 18px;
+  }
+  .body {
+    padding: 16px;
+  }
+  .example {
+    padding: 12px;
+  }
+}

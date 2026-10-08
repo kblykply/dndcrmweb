@@ -155,6 +155,9 @@ export default function Notifications() {
     });
 
     socketRef.current = socket;
+    // The mounted effect already loads HTTP data, even when sockets are down.
+    // Keep this per socket setup so effect cleanup/replay cannot skip a reconnect.
+    let hasConnected = false;
 
     const handleNew = (notification: NotificationItem) => {
       let inserted = false;
@@ -217,7 +220,8 @@ export default function Notifications() {
     socket.on("connect", () => {
       setError(null);
       socket.emit("notifications:join", {});
-      loadNotifications();
+      if (hasConnected) loadNotifications();
+      hasConnected = true;
     });
 
     return () => {

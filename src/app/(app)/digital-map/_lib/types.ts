@@ -1,0 +1,48 @@
+export const nodeKinds = ["SERVER", "MACHINE", "CLOUD", "SERVICE", "BACKEND", "DATABASE", "WEBSITE", "PANEL", "SYSTEM", "GROUP", "GATEWAY"] as const;
+export type NodeKind = typeof nodeKinds[number];
+export const edgeKinds = ["ACCESS", "API", "DATABASE", "NETWORK", "DATA"] as const;
+export type EdgeKind = typeof edgeKinds[number];
+export type Environment = "PRODUCTION" | "STAGING" | "DEVELOPMENT";
+export type AssetStatus = "ACTIVE" | "PLANNED" | "MAINTENANCE";
+export type MapNode = {
+  id: string;
+  kind: NodeKind;
+  name: string;
+  parentId: string | null;
+  position: { x: number; y: number };
+  width: number;
+  height: number;
+  address: string;
+  technology: string;
+  owner: string;
+  notes: string;
+  environment: Environment;
+  status: AssetStatus;
+  systemKey?: string;
+  url?: string;
+  imageId?: string;
+};
+export type MapEdge = {
+  id: string;
+  source: string;
+  target: string;
+  kind: EdgeKind;
+  label: string;
+  protocol: string;
+  access: string;
+  notes: string;
+  bidirectional?: boolean;
+};
+export type MapDocument = { name: string; nodes: MapNode[]; edges: MapEdge[] };
+export type MapWorkspace = MapDocument & {
+  id: string;
+  version: number;
+  updatedAt: string | null;
+  updatedByName: string | null;
+  canEdit: boolean;
+};
+export type MapSelection = { type: "node" | "edge"; id: string } | null;
+export type MapLocale = "tr" | "en";
+export type MapViewMode = "systems" | "technical";
+export type MapLayer = "ALL" | "DATA" | "ACCESS";
+export type MapImage = { id: string; name: string; mimeType: string; size: number; createdAt: string };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
@@ -159,7 +159,15 @@ export default function LeadsPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const requestId = useRef(0);
+  const pendingRequest = useRef<AbortController | null>(null);
+  const totalCache = useRef<{
+    key: string;
+    total: number;
+    expiresAt: number;
+  } | null>(null);
 
   const [statusFilter, setStatusFilter] =
     useState<(typeof STATUSES)[number]>("ALL");
@@ -190,7 +198,27 @@ export default function LeadsPage() {
     nextQ = q,
     nextPageSize = pageSize,
     nextInterest = interestFilter,
-  ) {
+    options: { reuseTotal?: boolean } = {},
+  ): Promise<void> {
+    const currentRequestId = ++requestId.current;
+    pendingRequest.current?.abort();
+    const controller = new AbortController();
+    pendingRequest.current = controller;
+    const isCurrent = () =>
+      requestId.current === currentRequestId && !controller.signal.aborted;
+    const countKey = JSON.stringify([
+      me?.id ?? null,
+      me?.role ?? null,
+      nextStatus,
+      nextInterest,
+      nextQ.trim(),
+    ]);
+    const cachedTotal =
+      options.reuseTotal &&
+      totalCache.current?.key === countKey &&
+      totalCache.current.expiresAt > Date.now()
+        ? totalCache.current.total
+        : undefined;
     setErr(null);
     setLoading(true);
 
@@ -203,15 +231,44 @@ export default function LeadsPage() {
 
       params.set("page", String(nextPage));
       params.set("pageSize", String(nextPageSize));
+      if (cachedTotal !== undefined) params.set("includeTotal", "false");
 
-      const res = await authedFetch(`/leads?${params.toString()}`);
-      const items = Array.isArray(res?.items) ? res.items : [];
+      const res = await authedFetch(`/leads?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      if (!isCurrent()) return;
+      const items: LeadRow[] = Array.isArray(res?.items) ? res.items : [];
+      if (nextPage > 1 && items.length === 0) {
+        // Another user may have removed the last page since our count was read.
+        // A fresh first page restores both the visible rows and the pagination.
+        totalCache.current = null;
+        await load(1, nextStatus, nextQ, nextPageSize, nextInterest);
+        return;
+      }
+      const resolvedTotal = res?.total == null ? cachedTotal : Number(res.total);
+      const resolvedPageSize = Number(res?.pageSize || nextPageSize);
+      if (typeof resolvedTotal !== "number" || !Number.isFinite(resolvedTotal)) {
+        throw new Error(
+          locale === "tr"
+            ? "Liste toplamı alınamadı. Lütfen yeniden arayın."
+            : "The list total could not be loaded. Please search again.",
+        );
+      }
+      // Only a fresh server count renews the short-lived pagination cache.
+      if (res?.total != null) {
+        totalCache.current = {
+          key: countKey,
+          total: resolvedTotal,
+          expiresAt: Date.now() + 30_000,
+        };
+      }
 
       setLeads(items);
-      setTotal(Number(res?.total || 0));
-      setTotalPages(Math.max(1, Number(res?.totalPages || 1)));
+      setTotal(resolvedTotal);
+      setTotalPages(Math.max(1, Math.ceil(resolvedTotal / resolvedPageSize)));
       setPage(Number(res?.page || nextPage));
-      setPageSize(Number(res?.pageSize || nextPageSize));
+      setPageSize(resolvedPageSize);
+      setHasLoaded(true);
 
       setFollowById((prev) => {
         const next = { ...prev };
@@ -236,10 +293,14 @@ export default function LeadsPage() {
         }
         return next;
       });
-    } catch (e: any) {
-      setErr(normalizeErrorMessage(e?.message || e, t, locale));
+    } catch (e: unknown) {
+      if (isCurrent())
+        setErr(normalizeErrorMessage(e instanceof Error ? e.message : e, t, locale));
     } finally {
-      setLoading(false);
+      if (isCurrent()) {
+        pendingRequest.current = null;
+        setLoading(false);
+      }
     }
   }
 
@@ -274,6 +335,7 @@ export default function LeadsPage() {
       setSource("Website");
       setShowCreate(false);
 
+      totalCache.current = null;
       await load(1, statusFilter, q, pageSize, interestFilter);
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, t, locale));
@@ -308,6 +370,7 @@ export default function LeadsPage() {
       });
 
       setCallNoteById((p) => ({ ...p, [leadId]: "" }));
+      totalCache.current = null;
       await load(page, statusFilter, q, pageSize, interestFilter);
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, t, locale));
@@ -340,6 +403,7 @@ export default function LeadsPage() {
       });
 
       setFollowById((p) => ({ ...p, [leadId]: "" }));
+      totalCache.current = null;
       await load(page, statusFilter, q, pageSize, interestFilter);
     } catch (e: any) {
       setErr(normalizeErrorMessage(e?.message || e, t, locale));
@@ -362,6 +426,10 @@ export default function LeadsPage() {
   useEffect(() => {
     setMounted(true);
     setMe(getUser());
+    return () => {
+      pendingRequest.current?.abort();
+      totalCache.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -378,11 +446,12 @@ export default function LeadsPage() {
   }, [statusFilter, interestFilter, pageSize]);
 
   const pageInfoText = useMemo(() => {
+    if (!hasLoaded) return loading ? t("common.loading") : "—";
     if (!total) return t("common.noRecords");
     const start = (page - 1) * pageSize + 1;
     const end = Math.min(page * pageSize, total);
     return `${start}-${end} / ${total}`;
-  }, [page, pageSize, total, t]);
+  }, [hasLoaded, loading, page, pageSize, total, t]);
 
   if (!mounted) return <div>{t("common.loading")}</div>;
 
@@ -403,7 +472,7 @@ export default function LeadsPage() {
           >
             <div style={{ fontSize: 24, fontWeight: 900 }}>{t("leads.title")}</div>
             <span className="badge" style={{ fontWeight: 800 }}>
-              {total} {t("leads.leadCount")}
+              {hasLoaded ? total : "—"} {t("leads.leadCount")}
             </span>
           </div>
         </div>
@@ -549,7 +618,7 @@ export default function LeadsPage() {
       </div>
 
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <table>
+        <table aria-busy={loading}>
           <thead>
             <tr>
               <th style={{ width: 44 }}>
@@ -716,7 +785,12 @@ export default function LeadsPage() {
           </tbody>
         </table>
 
-        {leads.length === 0 ? (
+        {loading && leads.length === 0 ? (
+          <div role="status" style={{ padding: 14, color: "var(--text-secondary)" }}>
+            {t("common.loading")}
+          </div>
+        ) : null}
+        {!loading && !err && leads.length === 0 ? (
           <div style={{ padding: 14, color: "var(--text-secondary)" }}>
             {t("leads.noLeads")}
           </div>
@@ -740,7 +814,7 @@ export default function LeadsPage() {
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button
               onClick={() =>
-                load(Math.max(1, page - 1), statusFilter, q, pageSize, interestFilter)
+                load(Math.max(1, page - 1), statusFilter, q, pageSize, interestFilter, { reuseTotal: true })
               }
               disabled={page <= 1 || loading}
             >
@@ -753,7 +827,7 @@ export default function LeadsPage() {
 
             <button
               onClick={() =>
-                load(Math.min(totalPages, page + 1), statusFilter, q, pageSize, interestFilter)
+                load(Math.min(totalPages, page + 1), statusFilter, q, pageSize, interestFilter, { reuseTotal: true })
               }
               disabled={page >= totalPages || loading}
             >

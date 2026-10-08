@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import { setSession } from "@/lib/auth";
 
 export default function LoginPage() {
@@ -19,22 +19,30 @@ export default function LoginPage() {
     setErr(null);
     setLoading(true);
     try {
-     const res = await apiFetch("/auth/login", {
-  method: "POST",
-  body: JSON.stringify({ email, password }),
-});
+      const res = await apiFetch("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
 
-setSession(res.user, res.accessToken, res.refreshToken);
-window.location.href =
-  res.user?.role === "PREVIEW"
-    ? "/admin"
-    : res.user?.role === "AFTERSALES"
-    ? "/units"
-    : res.user?.role === "ACCOUNTING"
-      ? "/finance"
-      : "/leads";
-    } catch (e: any) {
-      setErr("E-posta veya şifre hatalı.");
+      setSession(res.user, res.accessToken, res.refreshToken);
+      window.location.href =
+        res.user?.role === "PREVIEW"
+          ? "/admin"
+          : res.user?.role === "AFTERSALES"
+            ? "/units"
+            : res.user?.role === "ACCOUNTING"
+              ? "/finance"
+              : "/leads";
+    } catch (error: unknown) {
+      if (error instanceof ApiError && error.status === 401) {
+        setErr("E-posta veya şifre hatalı.");
+      } else if (error instanceof ApiError && error.status === 0) {
+        setErr("Sunucuya bağlanılamadı. Bağlantınızı kontrol edip tekrar deneyin.");
+      } else if (error instanceof ApiError && error.status >= 500) {
+        setErr("Giriş hizmetinde geçici bir sorun var. Lütfen tekrar deneyin.");
+      } else {
+        setErr("Giriş yapılamadı. Lütfen tekrar deneyin.");
+      }
     } finally {
       setLoading(false);
     }

@@ -1,669 +1,164 @@
 "use client";
-
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Building2, CheckCheck, CircleAlert, FileCheck2, List, Network, Plus, RefreshCw, Search, UserRound, Users, X } from "lucide-react";
+import { useLanguage } from "@/app/_ui/LanguageProvider";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
-import { useLanguage } from "@/app/_ui/LanguageProvider";
+import { errorText, orgCopy } from "./_lib/copy";
+import { chartRows, definitionChecks, isOverdue } from "./_lib/model";
+import { definitionFor, emptyWorkspace, type Kind, type OrgNode, type Workspace } from "./_lib/types";
+import OrganizationCanvas from "./_components/OrganizationCanvas";
+import Modal from "./_components/Modal";
+import s from "./organization.module.css";
 
-type OrgNode = {
-  id: string;
-  name: string;
-  type?: string | null;
-  color?: string | null;
-  parentId?: string | null;
-  order: number;
-  children: OrgNode[];
-};
-
-type FlatOrgNode = {
-  id: string;
-  name: string;
-  type?: string | null;
-  color?: string | null;
-  parentId?: string | null;
-  order: number;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-function safeTranslate(
-  t: (path: string) => string,
-  path: string,
-  fallback?: string | null,
-) {
-  const translated = t(path);
-  if (translated === path) return fallback ?? path;
-  return translated;
-}
-
-function getNodeBg(color?: string | null) {
-  if (!color) return "linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)";
-
-  const c = color.trim().toLowerCase();
-
-  if (
-    c === "yellow" ||
-    c === "#facc15" ||
-    c === "#fde68a" ||
-    c === "#f59e0b"
-  ) {
-    return "linear-gradient(180deg, #fde68a 0%, #fcd34d 100%)";
-  }
-
-  if (
-    c === "green" ||
-    c === "#86efac" ||
-    c === "#4ade80" ||
-    c === "#22c55e"
-  ) {
-    return "linear-gradient(180deg, #bbf7d0 0%, #86efac 100%)";
-  }
-
-  if (
-    c === "blue" ||
-    c === "#93c5fd" ||
-    c === "#60a5fa" ||
-    c === "#3b82f6"
-  ) {
-    return "linear-gradient(180deg, #bfdbfe 0%, #93c5fd 100%)";
-  }
-
-  if (
-    c === "pink" ||
-    c === "#f9a8d4" ||
-    c === "#f472b6"
-  ) {
-    return "linear-gradient(180deg, #fbcfe8 0%, #f9a8d4 100%)";
-  }
-
-  if (
-    c === "purple" ||
-    c === "#c4b5fd" ||
-    c === "#a78bfa"
-  ) {
-    return "linear-gradient(180deg, #ddd6fe 0%, #c4b5fd 100%)";
-  }
-
-  if (c.startsWith("#")) {
-    return color;
-  }
-
-  return "linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)";
-}
-
-function HierarchyNode({
-  node,
-  level = 0,
-}: {
-  node: OrgNode;
-  level?: number;
-}) {
-  const hasChildren = node.children?.length > 0;
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        justifyItems: "center",
-        gap: 18,
-        minWidth: 220,
-      }}
-    >
-      <div
-        style={{
-          minWidth: 180,
-          maxWidth: 260,
-          padding: "14px 18px",
-          borderRadius: 18,
-          border: "1px solid rgba(15,23,42,.08)",
-          background: getNodeBg(node.color),
-          boxShadow: "0 10px 30px rgba(15,23,42,.10)",
-          textAlign: "center",
-        }}
-      >
-        {node.type ? (
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: ".08em",
-              textTransform: "uppercase",
-              color: "rgba(15,23,42,.58)",
-              marginBottom: 6,
-            }}
-          >
-            {node.type}
-          </div>
-        ) : null}
-
-        <div
-          style={{
-            fontSize: level === 0 ? 18 : 15,
-            fontWeight: 900,
-            lineHeight: 1.25,
-            color: "#0f172a",
-            wordBreak: "break-word",
-          }}
-        >
-          {node.name}
-        </div>
-      </div>
-
-      {hasChildren ? (
-        <div
-          style={{
-            display: "grid",
-            justifyItems: "center",
-            gap: 16,
-            width: "100%",
-          }}
-        >
-          <div
-            style={{
-              width: 2,
-              height: 18,
-              background: "rgba(100,116,139,.45)",
-              borderRadius: 999,
-            }}
-          />
-
-          <div
-            style={{
-              display: "flex",
-              gap: 22,
-              alignItems: "flex-start",
-              justifyContent: "center",
-              flexWrap: "wrap",
-              width: "100%",
-            }}
-          >
-            {node.children.map((child) => (
-              <HierarchyNode key={child.id} node={child} level={level + 1} />
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-export default function OrgChartPage() {
-  const { t, locale } = useLanguage();
-
-  const [mounted, setMounted] = useState(false);
-  const [me, setMe] = useState<any>(null);
-
-  const [tree, setTree] = useState<OrgNode[]>([]);
-  const [flat, setFlat] = useState<FlatOrgNode[]>([]);
-  const [loading, setLoading] = useState(false);
+export default function OrganizationPage() {
+  const { locale } = useLanguage();
+  const copy = orgCopy[locale];
+  const router = useRouter();
+  const [me, setMe] = useState<{ id: string; role: string } | null>(null);
+  const [data, setData] = useState<Workspace>(emptyWorkspace);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [tab, setTab] = useState("chart");
+  const [query, setQuery] = useState("");
+  const [kind, setKind] = useState("");
+  const [status, setStatus] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [create, setCreate] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newKind, setNewKind] = useState<Kind>("POSITION");
+  const [newParent, setNewParent] = useState("");
   const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [createError, setCreateError] = useState("");
+  const canEdit = !!me && ["ADMIN", "MANAGER"].includes(me.role);
 
-  const [showEditor, setShowEditor] = useState(false);
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [type, setType] = useState("");
-  const [color, setColor] = useState("yellow");
-  const [parentId, setParentId] = useState("");
-  const [order, setOrder] = useState("0");
-
-  useEffect(() => {
-    setMounted(true);
-    setMe(getUser());
-  }, []);
-
-  const role = me?.role as string | undefined;
-  const canEdit = role === "ADMIN" || role === "MANAGER";
-
-  async function loadAll() {
-    setErr(null);
-    setLoading(true);
-
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    try { setData(await authedFetch("/org-chart/workspace") as Workspace); }
+    catch (error) { setError(errorText(error, copy)); }
+    finally { setLoading(false); }
+  }, [copy]);
+  useEffect(() => { setMe(getUser()); void load(); }, [load]);
+  const active = useMemo(() => data.nodes.filter((node) => node.status !== "ARCHIVED"), [data.nodes]);
+  const filtered = useMemo(() => data.nodes.filter((node) => {
+    if (status === "ARCHIVED" ? node.status !== "ARCHIVED" : node.status === "ARCHIVED") return false;
+    if (kind && node.kind !== kind) return false;
+    if (status === "VACANT" && (node.kind !== "POSITION" || node.assigneeId)) return false;
+    if (["APPROVED", "DRAFT"].includes(status) && node.status !== status) return false;
+    return [node.name, node.code, node.assignee?.name].filter(Boolean).join(" ").toLocaleLowerCase(locale).includes(query.trim().toLocaleLowerCase(locale));
+  }), [data.nodes, kind, status, query, locale]);
+  const rows = useMemo(() => chartRows(
+    status === "ARCHIVED" ? data.nodes : active, new Set(filtered.map((node) => node.id)), collapsed, !!query || !!kind || !!status,
+  ), [active, data.nodes, filtered, collapsed, query, kind, status]);
+  const toggle = useCallback((id: string) => setCollapsed((old) => {
+    const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next;
+  }), []);
+  const selected = data.nodes.find((node) => node.id === selectedId);
+  const positions = active.filter((node) => node.kind === "POSITION");
+  const occupied = positions.filter((node) => node.assignee?.isActive).length;
+  const needsReview = active.filter((node) => node.status === "DRAFT" || isOverdue(node)).length;
+  const parentName = (node: OrgNode) => data.nodes.find((parent) => parent.id === node.parentId)?.name || copy.noParent;
+  function closeCreate() { if (!saving) { setCreate(false); setCreateError(""); } }
+  async function createRecord(event: React.FormEvent) {
+    event.preventDefault(); setSaving(true); setCreateError("");
     try {
-      const [treeRes, flatRes] = await Promise.all([
-        authedFetch("/org-chart"),
-        authedFetch("/org-chart/flat"),
-      ]);
-
-      setTree(Array.isArray(treeRes) ? treeRes : []);
-      setFlat(Array.isArray(flatRes) ? flatRes : []);
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-      setTree([]);
-      setFlat([]);
-    } finally {
-      setLoading(false);
-    }
+      const node = await authedFetch("/org-chart", { method: "POST", body: JSON.stringify({
+        ...definitionFor(), name: newName, kind: newKind, parentId: newParent || null, reviewDueAt: null,
+      }) }) as OrgNode;
+      router.push("/org-chart/" + node.id);
+    } catch (error) { setCreateError(errorText(error, copy)); setSaving(false); }
   }
 
-  useEffect(() => {
-    if (!mounted) return;
-    loadAll();
-  }, [mounted]);
-
-  function resetForm() {
-    setEditingId(null);
-    setName("");
-    setType("");
-    setColor("yellow");
-    setParentId("");
-    setOrder("0");
-  }
-
-  function startCreate() {
-    resetForm();
-    setShowEditor(true);
-  }
-
-  function startEdit(node: FlatOrgNode) {
-    setEditingId(node.id);
-    setName(node.name || "");
-    setType(node.type || "");
-    setColor(node.color || "yellow");
-    setParentId(node.parentId || "");
-    setOrder(String(node.order ?? 0));
-    setShowEditor(true);
-  }
-
-  async function saveNode() {
-    if (!name.trim()) return;
-
-    setSaving(true);
-    setErr(null);
-
-    try {
-      const body = {
-        name: name.trim(),
-        type: type.trim() || null,
-        color: color.trim() || null,
-        parentId: parentId || null,
-        order: Number(order || 0),
-      };
-
-      if (editingId) {
-        await authedFetch(`/org-chart/${editingId}`, {
-          method: "PATCH",
-          body: JSON.stringify(body),
-        });
-      } else {
-        await authedFetch("/org-chart", {
-          method: "POST",
-          body: JSON.stringify(body),
-        });
-      }
-
-      resetForm();
-      setShowEditor(false);
-      await loadAll();
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function deleteNode(id: string, label: string) {
-    const ok = window.confirm(
-      locale === "tr"
-        ? `"${label}" düğümünü silmek istediğinize emin misiniz?`
-        : `Are you sure you want to delete "${label}"?`,
-    );
-
-    if (!ok) return;
-
-    setErr(null);
-
-    try {
-      await authedFetch(`/org-chart/${id}`, {
-        method: "DELETE",
-      });
-
-      if (editingId === id) {
-        resetForm();
-      }
-
-      await loadAll();
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    }
-  }
-
-  const pageTitle = safeTranslate(
-    t,
-    "orgChart.title",
-    locale === "tr" ? "Organizasyon Şeması" : "Organizational Chart",
-  );
-
-  const pageSubtitle = safeTranslate(
-    t,
-    "orgChart.subtitle",
-    locale === "tr"
-      ? "Şirket yapısını herkes görebilir, yönetici ve admin düzenleyebilir."
-      : "Everyone can view the company structure, managers and admins can edit it.",
-  );
-
-  const rootCount = useMemo(() => tree.length, [tree]);
-  const totalCount = useMemo(() => flat.length, [flat]);
-
-  if (!mounted) {
-    return <div>{t("common.loading")}</div>;
-  }
-
-  return (
-    <div style={{ display: "grid", gap: 14 }}>
-      <div
-        className="flex-between"
-        style={{ gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}
-      >
-        <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-            {safeTranslate(
-              t,
-              "orgChart.label",
-              locale === "tr" ? "Kurumsal Yapı" : "Corporate Structure",
-            )}
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{pageTitle}</div>
-          <div className="muted" style={{ fontSize: 13 }}>
-            {pageSubtitle}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button onClick={() => loadAll()} disabled={loading}>
-            {loading ? t("common.loading") : t("common.refresh")}
-          </button>
-
-          {canEdit ? (
-            <button className="primary" onClick={startCreate}>
-              {safeTranslate(
-                t,
-                "orgChart.newNode",
-                locale === "tr" ? "Yeni Düğüm" : "New Node",
-              )}
-            </button>
-          ) : null}
-        </div>
+  return <div className={s.page}>
+    <header className={s.header}>
+      <div className={s.brand}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/dndblack.png" alt="DND" width={72} height={40} />
+        <div><span className={s.eyebrow}>{copy.company}</span><h1>{copy.title}</h1></div>
       </div>
-
-      {err ? (
-        <div
-          className="card"
-          style={{
-            border: "1px solid rgba(239,68,68,.35)",
-            background: "rgba(239,68,68,.08)",
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {err}
-        </div>
-      ) : null}
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gap: 14,
-        }}
-      >
-        <div className="card">
-          <div className="muted">
-            {safeTranslate(
-              t,
-              "orgChart.stats.rootNodes",
-              locale === "tr" ? "Ana Düğüm" : "Root Nodes",
-            )}
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{rootCount}</div>
-        </div>
-
-        <div className="card">
-          <div className="muted">
-            {safeTranslate(
-              t,
-              "orgChart.stats.totalNodes",
-              locale === "tr" ? "Toplam Düğüm" : "Total Nodes",
-            )}
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{totalCount}</div>
-        </div>
+      <div className={s.actions}>
+        <button className={s.iconButton} title={copy.refresh} aria-label={copy.refresh} disabled={loading} onClick={() => void load()}><RefreshCw size={17} /></button>
+        {canEdit && <button className={s.primaryButton} onClick={() => { setNewName(""); setNewKind("POSITION"); setNewParent(selectedId || ""); setCreate(true); }}><Plus size={17} />{copy.newRecord}</button>}
       </div>
-
-      {canEdit && showEditor ? (
-        <div className="card" style={{ display: "grid", gap: 12 }}>
-          <div style={{ fontWeight: 900 }}>
-            {editingId
-              ? safeTranslate(
-                  t,
-                  "orgChart.editNode",
-                  locale === "tr" ? "Düğüm Düzenle" : "Edit Node",
-                )
-              : safeTranslate(
-                  t,
-                  "orgChart.createNode",
-                  locale === "tr" ? "Yeni Düğüm Oluştur" : "Create Node",
-                )}
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-              gap: 10,
-            }}
-          >
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={safeTranslate(
-                t,
-                "orgChart.fields.name",
-                locale === "tr" ? "İsim / Başlık" : "Name / Title",
-              )}
-            />
-
-            <input
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              placeholder={safeTranslate(
-                t,
-                "orgChart.fields.type",
-                locale === "tr" ? "Tip" : "Type",
-              )}
-            />
-
-            <select value={color} onChange={(e) => setColor(e.target.value)}>
-              <option value="yellow">Yellow</option>
-              <option value="green">Green</option>
-              <option value="blue">Blue</option>
-              <option value="pink">Pink</option>
-              <option value="purple">Purple</option>
-            </select>
-
-            <input
-              value={order}
-              onChange={(e) => setOrder(e.target.value)}
-              placeholder={safeTranslate(
-                t,
-                "orgChart.fields.order",
-                locale === "tr" ? "Sıra" : "Order",
-              )}
-            />
-
-            <select
-              value={parentId}
-              onChange={(e) => setParentId(e.target.value)}
-              style={{ gridColumn: "span 2" }}
-            >
-              <option value="">
-                {safeTranslate(
-                  t,
-                  "orgChart.fields.noParent",
-                  locale === "tr" ? "Üst düğüm yok" : "No parent",
-                )}
-              </option>
-
-              {flat
-                .filter((node) => node.id !== editingId)
-                .map((node) => (
-                  <option key={node.id} value={node.id}>
-                    {node.name}
-                  </option>
-                ))}
-            </select>
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-            <button
-              onClick={() => {
-                resetForm();
-                setShowEditor(false);
-              }}
-            >
-              {safeTranslate(
-                t,
-                "common.cancel",
-                locale === "tr" ? "Vazgeç" : "Cancel",
-              )}
-            </button>
-
-            <button
-              className="primary"
-              onClick={saveNode}
-              disabled={saving || !name.trim()}
-            >
-              {saving
-                ? safeTranslate(
-                    t,
-                    "orgChart.saving",
-                    locale === "tr" ? "Kaydediliyor..." : "Saving...",
-                  )
-                : safeTranslate(
-                    t,
-                    "common.save",
-                    locale === "tr" ? "Kaydet" : "Save",
-                  )}
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="card" style={{ overflow: "auto", padding: 22 }}>
-        {loading ? (
-          <div>{t("common.loading")}</div>
-        ) : tree.length === 0 ? (
-          <div className="muted">
-            {safeTranslate(
-              t,
-              "orgChart.noData",
-              locale === "tr"
-                ? "Henüz organizasyon şeması düğümü bulunmuyor."
-                : "No organizational chart nodes yet.",
-            )}
-          </div>
-        ) : (
-          <div
-            style={{
-              minWidth: 900,
-              display: "flex",
-              gap: 28,
-              justifyContent: "center",
-              alignItems: "flex-start",
-              flexWrap: "wrap",
-            }}
-          >
-            {tree.map((node) => (
-              <HierarchyNode key={node.id} node={node} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {canEdit ? (
-        <div className="card" style={{ display: "grid", gap: 12 }}>
-          <div style={{ fontWeight: 900 }}>
-            {safeTranslate(
-              t,
-              "orgChart.editorTable",
-              locale === "tr" ? "Düğüm Listesi" : "Node List",
-            )}
-          </div>
-
-          <div style={{ overflow: "auto" }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>
-                    {safeTranslate(t, "orgChart.table.name", locale === "tr" ? "İsim" : "Name")}
-                  </th>
-                  <th>
-                    {safeTranslate(t, "orgChart.table.type", locale === "tr" ? "Tip" : "Type")}
-                  </th>
-                  <th>
-                    {safeTranslate(t, "orgChart.table.parent", locale === "tr" ? "Üst" : "Parent")}
-                  </th>
-                  <th>
-                    {safeTranslate(t, "orgChart.table.order", locale === "tr" ? "Sıra" : "Order")}
-                  </th>
-                  <th>
-                    {safeTranslate(
-                      t,
-                      "orgChart.table.actions",
-                      locale === "tr" ? "İşlem" : "Actions",
-                    )}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {flat.map((node) => {
-                  const parent = flat.find((x) => x.id === node.parentId);
-
-                  return (
-                    <tr key={node.id}>
-                      <td style={{ fontWeight: 800 }}>{node.name}</td>
-                      <td>{node.type || "-"}</td>
-                      <td>{parent?.name || "-"}</td>
-                      <td>{node.order ?? 0}</td>
-                      <td>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <button onClick={() => startEdit(node)}>
-                            {safeTranslate(
-                              t,
-                              "common.edit",
-                              locale === "tr" ? "Düzenle" : "Edit",
-                            )}
-                          </button>
-                          <button
-                            className="danger"
-                            onClick={() => deleteNode(node.id, node.name)}
-                          >
-                            {safeTranslate(
-                              t,
-                              "common.delete",
-                              locale === "tr" ? "Sil" : "Delete",
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-            {flat.length === 0 ? (
-              <div style={{ padding: 14, color: "var(--text-secondary)" }}>
-                {safeTranslate(
-                  t,
-                  "orgChart.noFlatData",
-                  locale === "tr" ? "Düğüm bulunamadı." : "No nodes found.",
-                )}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+    </header>
+    <div className={s.metrics}>
+      {[{ title: copy.departments, value: active.filter((node) => node.kind === "DEPARTMENT").length, Icon: Building2 },
+        { title: copy.positionsCount, value: positions.length, Icon: Users },
+        { title: copy.occupied, value: occupied, Icon: UserRound },
+        { title: copy.reviewNeeded, value: needsReview, Icon: FileCheck2 }].map(({ title, value, Icon }) =>
+        <div className={s.metric} key={title}><div className={s.metricIcon}><Icon size={20} /></div><div><strong>{loading ? "..." : value}</strong><span>{title}</span></div></div>)}
     </div>
-  );
+    {error && <div className={s.error} role="alert">{error}</div>}
+    <div className={s.tabs} role="tablist" aria-label={copy.title}>
+      {[{ id: "chart", title: copy.chart, Icon: Network }, { id: "positions", title: copy.positions, Icon: List }, { id: "quality", title: copy.quality, Icon: CheckCheck }]
+        .map(({ id, title, Icon }) => <button key={id} role="tab" aria-selected={tab === id} className={s.tab} onClick={() => setTab(id)}><Icon size={16} />{title}</button>)}
+    </div>
+    {tab !== "quality" && <div className={s.toolbar}>
+      <div className={s.search}><Search size={17} /><input aria-label={copy.search} placeholder={copy.search} value={query} onChange={(event) => setQuery(event.target.value)} /></div>
+      <select value={kind} onChange={(event) => setKind(event.target.value)} aria-label={copy.kind}>
+        <option value="">{copy.allKinds}</option>{Object.entries(copy.kinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+      </select>
+      <select value={status} onChange={(event) => setStatus(event.target.value)} aria-label={copy.status}>
+        <option value="">{copy.allStatuses}</option><option value="VACANT">{copy.vacancy}</option>
+        <option value="DRAFT">{copy.statuses.DRAFT}</option><option value="APPROVED">{copy.statuses.APPROVED}</option><option value="ARCHIVED">{copy.archived}</option>
+      </select>
+      {(query || kind || status) && <button className={s.iconButton} title={copy.clear} aria-label={copy.clear} onClick={() => { setQuery(""); setKind(""); setStatus(""); }}><X size={16} /></button>}
+      <span className={s.count}>{filtered.length} / {data.nodes.length}</span>
+    </div>}
+    {loading && !data.nodes.length ? <div className={s.empty} role="status">{copy.loading}</div> : <>
+      {tab === "chart" && <div className={s.workspace}>
+        <OrganizationCanvas rows={rows} allRows={active} copy={copy} selectedId={selectedId} collapsed={collapsed} onToggle={toggle} onSelect={setSelectedId} />
+        {selected && <aside className={s.summary}>
+          <div className={s.actions}><span className={s.badge} data-status={selected.status}>{copy.statuses[selected.status]}</span>
+            <button className={s.iconButton} style={{ marginLeft: "auto" }} title={copy.close} aria-label={copy.close} onClick={() => setSelectedId(null)}><X size={16} /></button></div>
+          <h2>{selected.name}</h2><span className={s.muted}>{selected.code || copy.kinds[selected.kind]} · {copy.revision} {selected.revision}</span>
+          {selected.kind === "POSITION" && <div className={s.infoLine}><span className={s.label}>{copy.assignee}</span><strong>{selected.assignee?.name || copy.vacant}</strong>
+            {selected.assignee && !selected.assignee.isActive && <p>{copy.inactive}</p>}</div>}
+          <div className={s.infoLine}><span className={s.label}>{copy.parentId}</span><strong>{parentName(selected)}</strong></div>
+          <div className={s.infoLine}><span className={s.label}>{copy.definitionReadiness}</span><strong>{definitionChecks(selected).filter((item) => item.complete).length} / {definitionChecks(selected).length}</strong>
+            <progress className={s.progress} value={definitionChecks(selected).filter((item) => item.complete).length} max={definitionChecks(selected).length} /></div>
+          <p>{selected.purpose || copy.notSet}</p>
+          <Link className={s.primaryButton} href={"/org-chart/" + selected.id}>{copy.detail}<ArrowRight size={16} /></Link>
+        </aside>}
+      </div>}
+      {tab === "positions" && <div className={s.tableWrap}><table className={s.table}>
+        <thead><tr><th>{copy.name}</th><th>{copy.parentId}</th><th>{copy.assignee}</th><th>{copy.status}</th><th>{copy.reviewDueAt}</th><th /></tr></thead>
+        <tbody>{filtered.map((node) => <tr key={node.id}>
+          <td><Link className={s.textLink} href={"/org-chart/" + node.id}>{node.name}</Link><small>{node.code || copy.kinds[node.kind]}</small></td>
+          <td>{parentName(node)}</td><td>{node.assignee?.name || (node.kind === "POSITION" ? copy.vacant : "-")}{node.assignee && !node.assignee.isActive && <small>{copy.inactive}</small>}</td>
+          <td><span className={s.badge} data-status={node.status}>{copy.statuses[node.status]}</span><small>{copy.revision} {node.revision}</small></td>
+          <td>{node.reviewDueAt?.slice(0, 10) || copy.notSet}{isOverdue(node) && <small className={s.warn}>{copy.overdue}</small>}</td>
+          <td><Link className={s.iconButton} title={copy.detail} aria-label={copy.detail + ": " + node.name} href={"/org-chart/" + node.id}><ArrowRight size={16} /></Link></td>
+        </tr>)}</tbody>
+      </table>{!filtered.length && <div className={s.empty}>{copy.noResults}</div>}</div>}
+      {tab === "quality" && <>
+        <div className={s.qualityIntro}><h2>{copy.quality}</h2><span className={s.muted}>ISO 9001:2015 · 4.4 / 5.3 / 7.2 / 7.5</span></div>
+        <div className={s.tableWrap}><table className={s.table}><thead><tr><th>{copy.process}</th><th>{copy.raci.ACCOUNTABLE}</th><th>{copy.raci.RESPONSIBLE}</th><th>{copy.raci.CONSULTED} / {copy.raci.INFORMED}</th></tr></thead>
+          <tbody>{data.qualityCards.map((card) => {
+            const linked = active.filter((node) => node.processes.some((link) => link.cardId === card.id));
+            return <tr key={card.id}><td><strong>{card.code}</strong><small>{card.title}</small></td>
+              {(["ACCOUNTABLE", "RESPONSIBLE", "OTHER"] as const).map((raci) => {
+                const assigned = linked.filter((node) => node.processes.some((link) => link.cardId === card.id &&
+                  (raci === "OTHER" ? ["CONSULTED", "INFORMED"].includes(link.responsibility) : link.responsibility === raci)));
+                return <td key={raci}><div className={s.pillList}>{assigned.map((node) => <Link key={node.id} className={s.badge} href={"/org-chart/" + node.id}>{node.name}</Link>)}
+                  {!assigned.length && (raci === "ACCOUNTABLE" ? <span className={s.muted}><CircleAlert size={13} /> {copy.missingOwner}</span> : "-")}</div></td>;
+              })}</tr>;
+          })}</tbody></table>{!data.qualityCards.length && <div className={s.empty}>{copy.noQuality}</div>}</div>
+      </>}
+    </>}
+    {create && <Modal title={copy.newRecord} closeLabel={copy.close} onClose={closeCreate}>
+      <form onSubmit={(event) => void createRecord(event)}>
+        {createError && <div className={s.error} role="alert">{createError}</div>}
+        <div className={s.formGrid}>
+          <label className={s.field + " " + s.full}>{copy.name}<input autoFocus required maxLength={160} value={newName} onChange={(event) => setNewName(event.target.value)} /></label>
+          <label className={s.field}>{copy.kind}<select value={newKind} onChange={(event) => setNewKind(event.target.value as Kind)}>{Object.entries(copy.kinds).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+          <label className={s.field}>{copy.parentId}<select value={newParent} onChange={(event) => setNewParent(event.target.value)}><option value="">{copy.noParent}</option>{active.map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}</select></label>
+        </div>
+        <div className={s.actions}><button type="button" className={s.button} onClick={closeCreate} disabled={saving}>{copy.cancel}</button><button className={s.primaryButton} disabled={saving || !newName.trim()}><Plus size={16} />{saving ? copy.saving : copy.newRecord}</button></div>
+      </form>
+    </Modal>}
+  </div>;
 }

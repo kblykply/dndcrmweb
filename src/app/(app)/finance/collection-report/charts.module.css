@@ -1,0 +1,69 @@
+.dashboard { --chart-amount: #188878; --chart-scheduled: #b7c9d2; --chart-settled: #667fa0; min-width: 0; height: 100%; }
+.card { min-width: 0; min-height: 475px; height: 100%; box-sizing: border-box; overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); padding: 22px 22px 14px; display: flex; flex-direction: column; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.title { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.icon { display: inline-flex; flex: 0 0 36px; height: 36px; align-items: center; justify-content: center; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+.header h2 { margin: 0; font-size: 17px; line-height: 1.4; letter-spacing: -.02em; font-weight: 650; }
+.header p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.currencyTools { display: flex; align-items: center; gap: 10px; }
+.currencyChoice { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.currencyChoice select, .viewChoice select { border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); font: inherit; font-size: 12px; min-width: 0; max-width: 200px; min-height: 34px; padding: 7px 9px; }
+.currencyBadge { display: inline-flex; max-width: 150px; overflow-wrap: anywhere; padding: 6px 9px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 650; }
+.viewTools { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.viewChoice { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+.monthlyDetails summary:focus-visible, .performanceTable button:focus-visible, .currencyChoice select:focus-visible, .viewChoice select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.periodSummary { min-width: 0; }
+.periodSummary > span { display: block; color: var(--muted); font-size: 12px; }
+.periodSummary strong { display: block; color: var(--ink); font-size: 24px; line-height: 1.3; font-weight: 650; letter-spacing: -.025em; font-variant-numeric: tabular-nums; margin-top: 5px; overflow-wrap: anywhere; }
+.periodSummary strong small { font-size: 12px; color: var(--muted); letter-spacing: 0; font-weight: 500; }
+.plot { width: 100%; height: 262px; min-width: 0; margin-top: 6px; }
+.plot :global(.recharts-bar-rectangle), .plot :global(.recharts-area-dot) { cursor: default; }
+.valueLabel { font-variant-numeric: tabular-nums; }
+.legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend i { width: 9px; height: 9px; border-radius: 3px; }
+.monthlyDetails { margin-top: auto; border-top: 1px solid var(--line); padding-top: 11px; }
+.monthlyDetails summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; list-style: none; cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.8; padding: 3px 0; }
+.monthlyDetails summary::-webkit-details-marker { display: none; }
+.monthlyDetails summary svg { transition: transform .18s; }
+.monthlyDetails[open] summary { color: var(--accent); }
+.monthlyDetails[open] summary svg { transform: rotate(180deg); }
+.performanceTable { overflow: auto; max-height: 380px; margin-top: 12px; }
+.performanceTable table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
+.performanceTable th { color: var(--muted); font-size: 12px; font-weight: 500; background: var(--paper); position: sticky; top: 0; z-index: 1; }
+.performanceTable th, .performanceTable td { padding: 11px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.performanceTable th:first-child, .performanceTable td:first-child { text-align: left; }
+.performanceTable tr[data-selected="true"] { background: var(--accent-soft); }
+.performanceTable td { font-weight: 600; }
+.performanceTable small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; margin-top: 3px; }
+.performanceTable button { display: inline-flex; align-items: center; gap: 6px; height: auto; min-height: 30px; border: 0; background: transparent; color: var(--ink); font: inherit; font-weight: 400; padding: 0; cursor: pointer; }
+.performanceTable button:hover:not(:disabled) { color: var(--accent); }
+.performanceTable button:disabled { opacity: .5; cursor: default; }
+.notice { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 10px 0; }
+.tooltip { min-width: 195px; max-width: 280px; padding: 15px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); color: var(--ink); box-shadow: 0 10px 35px #172c3520; font-size: 12px; }
+.tooltip > strong { font-size: 13px; }
+.tooltip > span { display: block; color: var(--muted); margin-top: 4px; }
+.tooltip p { display: flex; align-items: baseline; justify-content: space-between; gap: 15px; color: var(--muted); margin: 12px 0 0; }
+.tooltip b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.tooltip small { display: block; color: var(--muted); margin-top: 11px; font-size: 12px; }
+.empty { min-height: 270px; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.7; padding: 20px; margin: 0; }
+:global([data-theme="dark"]) .dashboard { --chart-amount: #68c9b3; --chart-scheduled: #657d8b; --chart-settled: #9ab3d7; }
+@media (max-width: 620px) {
+  .card { padding: 18px 14px 12px; border-radius: 16px; min-height: 475px; }
+  .header { margin-bottom: 18px; }
+  .header h2 { font-size: 16px; }
+  .icon { flex-basis: 32px; height: 32px; border-radius: 9px; }
+  .title { gap: 9px; }
+  .currencyChoice { min-width: 0; }
+  .currencyChoice select { max-width: 145px; }
+  .currencyBadge { max-width: 105px; }
+  .viewTools { gap: 14px; }
+  .viewChoice { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 10px; }
+  .viewChoice select { max-width: 185px; }
+  .plot { height: 245px; }
+  .denseLabels .valueLabel { display: none; }
+  .tooltip { max-width: 240px; }
+  .periodSummary strong { font-size: 24px; }
+  .monthlyDetails { margin-top: 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .monthlyDetails summary svg { transition: none; } }

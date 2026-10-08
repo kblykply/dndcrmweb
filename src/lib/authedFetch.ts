@@ -62,7 +62,7 @@ async function parseError(res: Response) {
   }
 }
 
-export async function authedFetch(path: string, init: RequestInit = {}) {
+export async function authedFetch(path: string, init: RequestInit = {}, responseType?: "blob") {
   const makeRequest = (headersOverride?: Record<string, string>) => {
     const isFormData =
       typeof FormData !== "undefined" && init.body instanceof FormData;
@@ -104,8 +104,10 @@ export async function authedFetch(path: string, init: RequestInit = {}) {
   }
 
   if (!res.ok) {
-    throw new Error((await parseError(res)) || `Request failed (${res.status})`);
+    throw Object.assign(new Error((await parseError(res)) || `Request failed (${res.status})`), { status: res.status });
   }
+
+  if (responseType === "blob") return res.blob();
 
   const contentType = res.headers.get("content-type");
 

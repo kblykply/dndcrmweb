@@ -1,3 +1,14 @@
+export const AUTH_SESSION_CHANGED_EVENT = "crm:session-changed";
+let sessionVersion = 0;
+
+export function getAuthSessionVersion() {
+  return sessionVersion;
+}
+
+function sessionChanged() {
+  window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
+}
+
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("accessToken");
@@ -29,12 +40,15 @@ export function setSession(user: any, accessToken: string, refreshToken: string)
   localStorage.setItem("user", JSON.stringify(user));
   localStorage.setItem("accessToken", accessToken);
   localStorage.setItem("refreshToken", refreshToken);
+  sessionVersion += 1;
+  sessionChanged();
 }
 
 // 🔥 NEW
 export function setAccessToken(token: string) {
   if (typeof window === "undefined") return;
   localStorage.setItem("accessToken", token);
+  sessionChanged();
 }
 
 // 🔥 UPDATED (clear refresh too)
@@ -44,6 +58,8 @@ export function clearSession() {
   localStorage.removeItem("user");
   localStorage.removeItem("accessToken");
   localStorage.removeItem("refreshToken");
+  sessionVersion += 1;
+  sessionChanged();
 }
 
 // 🔥 NEW (better logout)

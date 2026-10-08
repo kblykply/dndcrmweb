@@ -1,1132 +1,962 @@
 "use client";
-
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { io, Socket } from "socket.io-client";
+import { useRouter } from "next/navigation";
+import {
+  Archive,
+  BarChart3,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  Download,
+  Eye,
+  FolderKanban,
+  Funnel,
+  GanttChart,
+  Inbox,
+  LayoutGrid,
+  List,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings2,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
 import { authedFetch } from "@/lib/authedFetch";
-import { getAccessToken, getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
-
-type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE" | "CANCELLED";
-type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
-type TaskTab = "my" | "team";
-
-type UserRow = {
-  id: string;
-  name: string;
-  email?: string | null;
-  role?: string | null;
-};
-
-type LeadLite = {
-  id: string;
-  fullName: string;
-  phone?: string | null;
-  status?: string | null;
-};
-
-type AgencyLite = {
-  id: string;
-  name: string;
-};
-
-type CustomerLite = {
-  id: string;
-  fullName: string;
-  companyName?: string | null;
-};
-
-type TaskRow = {
-  id: string;
-  title: string;
-  description?: string | null;
-  status: TaskStatus;
-  priority: TaskPriority;
-  dueAt?: string | null;
-  completedAt?: string | null;
-  createdAt?: string | null;
-  updatedAt?: string | null;
-  assignedToId?: string | null;
-  createdById?: string | null;
-  assignedTo?: UserRow | null;
-  createdBy?: UserRow | null;
-  lead?: LeadLite | null;
-  agency?: AgencyLite | null;
-  customer?: CustomerLite | null;
-};
-
-type RealtimeNotification = {
-  id: string;
-  type: string;
-  entityType?: string | null;
-  entityId?: string | null;
-  link?: string | null;
-  metaJson?: any;
-};
-
-function getApiBase() {
-  const raw =
-    process.env.NEXT_PUBLIC_API_URL ||
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    "";
-
-  return raw.replace(/\/$/, "");
-}
-
-function safeTranslate(
-  t: (path: string) => string,
-  path: string,
-  fallback?: string | null,
-) {
-  const translated = t(path);
-  if (translated === path) return fallback ?? path;
-  return translated;
-}
-
-function statusBadgeClass(status?: string) {
-  if (status === "DONE") return "success";
-  if (status === "CANCELLED") return "danger";
-  if (status === "IN_PROGRESS") return "warning";
-  return "info";
-}
-
-function priorityBadgeClass(priority?: string) {
-  if (priority === "HIGH") return "danger";
-  if (priority === "MEDIUM") return "warning";
-  return "info";
-}
-
-function isOverdue(task?: TaskRow | null) {
-  if (!task?.dueAt) return false;
-  if (task.status === "DONE" || task.status === "CANCELLED") return false;
-  return new Date(task.dueAt).getTime() < Date.now();
-}
+import { errorText, workCopy } from "./_lib/copy";
+import {
+  dateTime,
+  emptyReport,
+  emptyWorkspace,
+  overdue,
+  priorities,
+  shortId,
+  statuses,
+  type Report,
+  type Status,
+  type WorkItem,
+  type Workspace,
+} from "./_lib/types";
+import TaskForm from "./_components/TaskForm";
+import ProjectForm from "./_components/ProjectForm";
+import Board from "./_components/Board";
+import Schedule from "./_components/Schedule";
+import Reports from "./_components/Reports";
+import Modal from "./_components/Modal";
+import WorkInfo from "./_components/WorkInfo";
+import s from "./work.module.css";
 
 export default function TasksPage() {
-  const { t, locale } = useLanguage();
-
-  const [mounted, setMounted] = useState(false);
-  const [me, setMe] = useState<any>(null);
-
-  const [tab, setTab] = useState<TaskTab>("my");
-  const [status, setStatus] = useState<string>("ALL");
-  const [q, setQ] = useState("");
-  const [userFilterId, setUserFilterId] = useState("");
-
-  const [myTasks, setMyTasks] = useState<TaskRow[]>([]);
-  const [teamTasks, setTeamTasks] = useState<TaskRow[]>([]);
-
-  const [managerUsers, setManagerUsers] = useState<UserRow[]>([]);
-  const [salesUsers, setSalesUsers] = useState<UserRow[]>([]);
-  const [callcenterUsers, setCallcenterUsers] = useState<UserRow[]>([]);
-  const [agencies, setAgencies] = useState<AgencyLite[]>([]);
-  const [customers, setCustomers] = useState<CustomerLite[]>([]);
-  const [leads, setLeads] = useState<LeadLite[]>([]);
-
-  const [loadingMy, setLoadingMy] = useState(false);
-  const [loadingTeam, setLoadingTeam] = useState(false);
-  const [loadingRefs, setLoadingRefs] = useState(false);
-  const [savingId, setSavingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [selected, setSelected] = useState<TaskRow | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<TaskPriority>("MEDIUM");
-  const [dueAt, setDueAt] = useState("");
-  const [assignedToId, setAssignedToId] = useState("");
-  const [leadId, setLeadId] = useState("");
-  const [agencyId, setAgencyId] = useState("");
-  const [customerId, setCustomerId] = useState("");
-
-  const socketRef = useRef<Socket | null>(null);
-
-  const role = me?.role as string | undefined;
-  const isAdmin = role === "ADMIN";
-  const isManager = role === "MANAGER";
-  const isSales = role === "SALES";
-  const canSeeTeam = isAdmin || isManager;
-  const canCreate = isAdmin || isManager || isSales;
-  const canDelete = isAdmin || isManager;
-
+  const { locale } = useLanguage();
+  const c = workCopy[locale];
+  const router = useRouter();
+  const [workspace, setWorkspace] = useState<Workspace>(emptyWorkspace);
+  const [items, setItems] = useState<WorkItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [report, setReport] = useState<Report>(emptyReport);
+  const [section, setSection] = useState("my");
+  const [view, setView] = useState<
+    "board" | "list" | "calendar" | "timeline" | "reports"
+  >("board");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [priority, setPriority] = useState("");
+  const [assignee, setAssignee] = useState("");
+  const [department, setDepartment] = useState("");
+  const [range, setRange] = useState("");
+  const [archived, setArchived] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [taskForm, setTaskForm] = useState(false);
+  const [projectForm, setProjectForm] = useState<"new" | "edit" | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkForm, setBulkForm] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState("");
+  const [bulkPriority, setBulkPriority] = useState("");
+  const [bulkAssignee, setBulkAssignee] = useState("");
+  const [bulkError, setBulkError] = useState("");
+  const generation = useRef(0);
+  const invalidate = useCallback(() => {
+    generation.current++;
+  }, []);
+  const project = workspace.projects.find((p) => p.id === section);
+  const projectId = !["my", "all", "created", "watching"].includes(section)
+    ? section
+    : "";
+  const canCreate =
+    !!workspace.me &&
+    workspace.me.role !== "PREVIEW" &&
+    (!project || project.canEdit);
+  const filtered = !!(
+    query ||
+    status ||
+    priority ||
+    assignee ||
+    range ||
+    department ||
+    archived
+  );
+  const params = new URLSearchParams({
+    scope: ["my", "created", "watching"].includes(section) ? section : "all",
+    ...(projectId ? { projectId } : {}),
+    ...(search ? { search } : {}),
+    ...(status ? { status } : {}),
+    ...(priority ? { priority } : {}),
+    ...(assignee ? { assignedToId: assignee } : {}),
+    ...(range ? { range } : {}),
+    ...(department ? { departmentId: department } : {}),
+    archived: String(archived),
+  }).toString();
+  const loadWorkspace = useCallback(async () => {
+    setWorkspace(await authedFetch("/tasks/workspace"));
+  }, []);
+  const load = useCallback(
+    async (skip = 0) => {
+      const request = ++generation.current;
+      setLoading(true);
+      setError("");
+      try {
+        const result = (await authedFetch(
+          `/tasks?${params}&skip=${skip}&take=100`,
+        )) as { items: WorkItem[]; total: number };
+        if (request !== generation.current) return;
+        setItems((old) =>
+          skip
+            ? [
+                ...old,
+                ...result.items.filter(
+                  (row) => !old.some((item) => item.id === row.id),
+                ),
+              ]
+            : result.items,
+        );
+        setTotal(result.total);
+        if (!skip) {
+          setSelected(new Set());
+          const report = (await authedFetch(
+            "/tasks/report?" + params,
+          )) as Report;
+          if (request === generation.current) setReport(report);
+        }
+      } catch (error) {
+        if (request === generation.current) setError(errorText(error, c));
+      } finally {
+        if (request === generation.current) setLoading(false);
+      }
+    },
+    [params, c],
+  );
   useEffect(() => {
-    if (!mounted || !me?.id) return;
-
-    if (isSales && !assignedToId) {
-      setAssignedToId(me.id);
-    }
-  }, [mounted, isSales, me?.id, assignedToId]);
-
-  function formatDateTime(v?: string | null) {
-    if (!v) return "-";
-    return new Date(v).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
+    void loadWorkspace().catch((error) => setError(errorText(error, c)));
+  }, [loadWorkspace, c]);
+  useEffect(() => {
+    void load();
+    return invalidate;
+  }, [load, invalidate]);
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(query), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const title =
+    project?.name ||
+    (
+      {
+        my: c.my,
+        all: c.all,
+        created: c.created,
+        watching: c.watching,
+        personal: c.personal,
+      } as Record<string, string>
+    )[section] ||
+    c.title;
+  function select(id: string) {
+    setSelected((old) => {
+      const next = new Set(old);
+      if (next.has(id)) next.delete(id);
+      else if (next.size < 50) next.add(id);
+      return next;
+    });
   }
-
-  function statusLabel(value?: string | null) {
-    if (!value) return "-";
-    return safeTranslate(t, `taskStatuses.${value}`, value);
-  }
-
-  function priorityLabel(value?: string | null) {
-    if (!value) return "-";
-    return safeTranslate(t, `taskPriorities.${value}`, value);
-  }
-
-  async function loadMyTasks(nextStatus = status, nextSearch = q) {
-    setLoadingMy(true);
-    setErr(null);
-
+  async function move(item: WorkItem, status: Status) {
+    setBusy(true);
+    setError("");
+    setNotice("");
     try {
-      const params = new URLSearchParams();
-      if (nextStatus !== "ALL") params.set("status", nextStatus);
-      if (nextSearch.trim()) params.set("search", nextSearch.trim());
-
-      const query = params.toString();
-      const res = await authedFetch(`/tasks/my${query ? `?${query}` : ""}`);
-      const nextItems = Array.isArray(res) ? res : [];
-
-      setMyTasks(nextItems);
-      setSelected((prev) => {
-        if (!prev) return null;
-        return nextItems.find((x) => x.id === prev.id) || null;
+      await authedFetch("/tasks/" + item.id, {
+        method: "PATCH",
+        body: JSON.stringify({ status, version: item.version }),
       });
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-      setMyTasks([]);
-      setSelected((prev) => (tab === "my" ? null : prev));
+      setNotice(c.moved);
+      await load();
+    } catch (error) {
+      setError(errorText(error, c));
     } finally {
-      setLoadingMy(false);
+      setBusy(false);
     }
   }
-
-  async function loadTeamTasks(
-    nextStatus = status,
-    nextSearch = q,
-    nextUserFilterId = userFilterId,
-  ) {
-    if (!canSeeTeam) {
-      setTeamTasks([]);
+  async function archiveProject() {
+    if (
+      !project ||
+      !window.confirm(project.archivedAt ? c.restoreConfirm : c.archiveConfirm)
+    )
       return;
-    }
-
-    setLoadingTeam(true);
-    setErr(null);
-
+    setBusy(true);
+    setError("");
     try {
-      const params = new URLSearchParams();
-      if (nextStatus !== "ALL") params.set("status", nextStatus);
-      if (nextSearch.trim()) params.set("search", nextSearch.trim());
-      if (nextUserFilterId) params.set("assignedToId", nextUserFilterId);
-
-      const query = params.toString();
-      const res = await authedFetch(`/tasks${query ? `?${query}` : ""}`);
-      const nextItems = Array.isArray(res) ? res : [];
-
-      setTeamTasks(nextItems);
-      setSelected((prev) => {
-        if (!prev) return null;
-        return nextItems.find((x) => x.id === prev.id) || null;
-      });
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-      setTeamTasks([]);
-      setSelected((prev) => (tab === "team" ? null : prev));
-    } finally {
-      setLoadingTeam(false);
-    }
-  }
-
-  async function loadRefs() {
-    if (!canCreate && !canSeeTeam) return;
-
-    setLoadingRefs(true);
-
-    try {
-      const [
-        managerRes,
-        salesRes,
-        callcenterRes,
-        agenciesRes,
-        customersRes,
-        leadsRes,
-      ] = await Promise.all([
-        authedFetch("/users?role=MANAGER"),
-        authedFetch("/users?role=SALES"),
-        authedFetch("/users?role=CALLCENTER"),
-        authedFetch("/agencies?page=1&pageSize=300"),
-        authedFetch("/customers"),
-        authedFetch("/leads?page=1&pageSize=300"),
-      ]);
-
-      setManagerUsers(Array.isArray(managerRes) ? managerRes : []);
-      setSalesUsers(Array.isArray(salesRes) ? salesRes : []);
-      setCallcenterUsers(Array.isArray(callcenterRes) ? callcenterRes : []);
-      setAgencies(Array.isArray(agenciesRes?.items) ? agenciesRes.items : []);
-      setCustomers(Array.isArray(customersRes) ? customersRes : []);
-      setLeads(Array.isArray(leadsRes?.items) ? leadsRes.items : []);
-    } catch {
-      setManagerUsers([]);
-      setSalesUsers([]);
-      setCallcenterUsers([]);
-      setAgencies([]);
-      setCustomers([]);
-      setLeads([]);
-    } finally {
-      setLoadingRefs(false);
-    }
-  }
-
-  async function refreshActive(nextStatus = status, nextSearch = q) {
-    if (tab === "team" && canSeeTeam) {
-      await loadTeamTasks(nextStatus, nextSearch, userFilterId);
-    } else {
-      await loadMyTasks(nextStatus, nextSearch);
-    }
-  }
-
-  async function markDone(taskId: string) {
-    setSavingId(taskId);
-    setErr(null);
-
-    try {
-      await authedFetch(`/tasks/${taskId}/done`, { method: "PATCH" });
-
-      await Promise.all([
-        loadMyTasks(status, q),
-        canSeeTeam ? loadTeamTasks(status, q, userFilterId) : Promise.resolve(),
-      ]);
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setSavingId(null);
-    }
-  }
-
-  async function cancelTask(taskId: string) {
-    setSavingId(taskId);
-    setErr(null);
-
-    try {
-      await authedFetch(`/tasks/${taskId}/cancel`, { method: "PATCH" });
-
-      await Promise.all([
-        loadMyTasks(status, q),
-        canSeeTeam ? loadTeamTasks(status, q, userFilterId) : Promise.resolve(),
-      ]);
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setSavingId(null);
-    }
-  }
-
-  async function deleteTask(taskId: string) {
-    if (!canDelete) return;
-
-    const confirmed = window.confirm(
-      locale === "tr"
-        ? "Bu görevi kalıcı olarak silmek istediğinize emin misiniz?"
-        : "Are you sure you want to permanently delete this task?",
-    );
-
-    if (!confirmed) return;
-
-    setDeletingId(taskId);
-    setErr(null);
-
-    try {
-      await authedFetch(`/tasks/${taskId}`, { method: "DELETE" });
-
-      setSelected((prev) => (prev?.id === taskId ? null : prev));
-
-      await Promise.all([
-        loadMyTasks(status, q),
-        canSeeTeam ? loadTeamTasks(status, q, userFilterId) : Promise.resolve(),
-      ]);
-    } catch (e: any) {
-      setErr(String(e?.message || e));
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
-  async function createTask() {
-    if (!title.trim() || !assignedToId) return;
-
-    setCreating(true);
-    setErr(null);
-
-    try {
-      await authedFetch("/tasks", {
+      await authedFetch(`/tasks/projects/${project.id}/archive`, {
         method: "POST",
         body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || undefined,
-          priority,
-          dueAt: dueAt ? new Date(dueAt).toISOString() : null,
-          assignedToId,
-          leadId: leadId || null,
-          agencyId: agencyId || null,
-          customerId: customerId || null,
+          version: project.version,
+          archived: !project.archivedAt,
         }),
       });
-
-      setTitle("");
-      setDescription("");
-      setPriority("MEDIUM");
-      setDueAt("");
-      setAssignedToId(isSales && me?.id ? me.id : "");
-      setLeadId("");
-      setAgencyId("");
-      setCustomerId("");
-      setShowCreate(false);
-
-      await Promise.all([
-        loadMyTasks(status, q),
-        canSeeTeam ? loadTeamTasks(status, q, userFilterId) : Promise.resolve(),
-      ]);
-    } catch (e: any) {
-      setErr(String(e?.message || e));
+      await loadWorkspace();
+      await load();
+    } catch (e) {
+      setError(errorText(e, c));
     } finally {
-      setCreating(false);
+      setBusy(false);
     }
   }
-
-  useEffect(() => {
-    setMounted(true);
-    setMe(getUser());
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
-    loadMyTasks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted]);
-
-  useEffect(() => {
-    if (!mounted || !canSeeTeam) return;
-    loadTeamTasks(status, q, userFilterId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, canSeeTeam]);
-
-  useEffect(() => {
-    if (!mounted || (!canCreate && !canSeeTeam)) return;
-    loadRefs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, canCreate, canSeeTeam]);
-
-  useEffect(() => {
-    if (!mounted) return;
-    refreshActive(status, q);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, status]);
-
-  useEffect(() => {
-    if (!mounted) return;
-
-    const token = getAccessToken();
-    if (!token) return;
-
-    const apiBase = getApiBase();
-    const socketUrl =
-      apiBase || (typeof window !== "undefined" ? window.location.origin : "");
-
-    const socket = io(socketUrl, {
-      transports: ["websocket"],
-      auth: { token },
-    });
-
-    socketRef.current = socket;
-
-    const handleTaskRealtime = async (payload: RealtimeNotification) => {
-      const isTaskEvent =
-        payload?.type === "TASK_ASSIGNED" ||
-        payload?.type === "TASK_UPDATED" ||
-        payload?.entityType === "CrmTask";
-
-      if (!isTaskEvent) return;
-
-      await Promise.all([
-        loadMyTasks(status, q),
-        canSeeTeam ? loadTeamTasks(status, q, userFilterId) : Promise.resolve(),
-      ]);
-    };
-
-    socket.on("notification:new", handleTaskRealtime);
-
-    return () => {
-      socket.off("notification:new", handleTaskRealtime);
-      socket.disconnect();
-      socketRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, canSeeTeam, status, q, userFilterId]);
-
-  const activeTasks = useMemo(() => {
-    const source = tab === "team" && canSeeTeam ? teamTasks : myTasks;
-    const qq = q.trim().toLowerCase();
-
-    return source.filter((task) => {
-      if (!qq) return true;
-
-      const hay = [
-        task.title,
-        task.description,
-        task.lead?.fullName,
-        task.lead?.phone,
-        task.customer?.fullName,
-        task.customer?.companyName,
-        task.agency?.name,
-        task.assignedTo?.name,
-        task.createdBy?.name,
-        task.status,
-        task.priority,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return hay.includes(qq);
-    });
-  }, [tab, canSeeTeam, myTasks, teamTasks, q]);
-
-  const counts = useMemo(() => {
-    const source = tab === "team" && canSeeTeam ? teamTasks : myTasks;
-
-    return {
-      all: source.length,
-      todo: source.filter((x) => x.status === "TODO").length,
-      inProgress: source.filter((x) => x.status === "IN_PROGRESS").length,
-      done: source.filter((x) => x.status === "DONE").length,
-      cancelled: source.filter((x) => x.status === "CANCELLED").length,
-      overdue: source.filter((x) => isOverdue(x)).length,
-    };
-  }, [tab, canSeeTeam, myTasks, teamTasks]);
-
-  const assignableUsers = useMemo(() => {
-    const map = new Map<string, UserRow>();
-
-    [...managerUsers, ...salesUsers, ...callcenterUsers].forEach((user) => {
-      if (user?.id) map.set(user.id, user);
-    });
-
-    return Array.from(map.values()).sort((a, b) =>
-      (a.name || "").localeCompare(b.name || ""),
-    );
-  }, [managerUsers, salesUsers, callcenterUsers]);
-
-  if (!mounted) {
-    return <div>{t("common.loading")}</div>;
+  async function bulkSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setBulkError("");
+    try {
+      await authedFetch("/tasks/bulk", {
+        method: "POST",
+        body: JSON.stringify({
+          items: items
+            .filter((i) => selected.has(i.id))
+            .map(({ id, version }) => ({ id, version })),
+          ...(bulkStatus ? { status: bulkStatus } : {}),
+          ...(bulkPriority ? { priority: bulkPriority } : {}),
+          ...(bulkAssignee
+            ? {
+                assignedToId:
+                  bulkAssignee === "unassigned" ? null : bulkAssignee,
+              }
+            : {}),
+        }),
+      });
+      setBulkForm(false);
+      setNotice(c.saved);
+      await load();
+    } catch (e) {
+      setBulkError(errorText(e, c));
+    } finally {
+      setBusy(false);
+    }
   }
-
+  async function exportCsv() {
+    setBusy(true);
+    setError("");
+    try {
+      const rows: WorkItem[] = [];
+      let count = 1;
+      while (rows.length < count) {
+        const page = await authedFetch(
+          `/tasks?${params}&skip=${rows.length}&take=200`,
+        );
+        count = page.total;
+        if (!page.items.length) break;
+        rows.push(...page.items);
+      }
+      const cell = (value: unknown) => {
+        let text = String(value ?? "");
+        if (/^[=+@\-\t\r]/.test(text)) text = "'" + text;
+        return '"' + text.replaceAll('"', '""') + '"';
+      };
+      const csv = [
+        [
+          c.key,
+          c.titleField,
+          c.project,
+          c.assignee,
+          c.status,
+          c.priority,
+          c.start,
+          c.due,
+          c.estimated,
+          c.logged,
+        ],
+        ...rows.map((i) => [
+          shortId(i),
+          i.title,
+          i.project?.name || c.personal,
+          i.assignedTo?.name || c.unassigned,
+          c.statuses[i.status],
+          c.priorities[i.priority],
+          i.startAt,
+          i.dueAt,
+          i.estimateMinutes,
+          i.spentMinutes,
+        ]),
+      ]
+        .map((r) => r.map(cell).join(","))
+        .join("\r\n");
+      const url = URL.createObjectURL(
+        new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download =
+        "DND-work-" + new Date().toISOString().slice(0, 10) + ".csv";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      setError(errorText(e, c));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const chosen = items.filter((i) => selected.has(i.id));
+  const oneProject = new Set(chosen.map((i) => i.projectId)).size <= 1;
+  const bulkProject = chosen[0]?.project;
+  const bulkPeople = workspace.users.filter(
+    (u) =>
+      !bulkProject ||
+      u.id === bulkProject.ownerId ||
+      bulkProject.members.some((m) => m.userId === u.id && m.role !== "VIEWER"),
+  );
   return (
-    <div style={{ display: "grid", gap: 14 }}>
-      <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-            {safeTranslate(
-              t,
-              "tasks.label",
-              locale === "tr" ? "Görev Yönetimi" : "Task Management",
-            )}
-          </div>
-
-          <div style={{ fontSize: 28, fontWeight: 900 }}>
-            {safeTranslate(t, "tasks.title", locale === "tr" ? "Görevler" : "Tasks")}
-          </div>
-
-          <div className="muted" style={{ fontSize: 13 }}>
-            {safeTranslate(
-              t,
-              "tasks.subtitle",
-              locale === "tr"
-                ? "Lead, müşteri, ajans ve ekip üyeleriyle ilişkili görevleri yönetin."
-                : "Manage tasks related to leads, customers, agencies, and team members.",
-            )}
+    <div className={s.page}>
+      <header className={s.header}>
+        <div className={s.brand}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/dndblack.png" alt="DND" width={70} height={40} />
+          <div>
+            <span className={s.eyebrow}>{c.company}</span>
+            <div className={s.helpHeading}>
+              <h1>{c.title}</h1>
+              <WorkInfo topic="overview" />
+            </div>
           </div>
         </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {canSeeTeam ? (
-            <>
-              <button
-                className={tab === "my" ? "primary" : ""}
-                onClick={() => {
-                  setTab("my");
-                  setSelected(null);
-                }}
-              >
-                {safeTranslate(t, "tasks.tabs.my", locale === "tr" ? "Görevlerim" : "My Tasks")}
-              </button>
-
-              <button
-                className={tab === "team" ? "primary" : ""}
-                onClick={() => {
-                  setTab("team");
-                  setSelected(null);
-                }}
-              >
-                {safeTranslate(t, "tasks.tabs.team", locale === "tr" ? "Tüm Görevler" : "All Tasks")}
-              </button>
-            </>
-          ) : null}
-
-          {canCreate ? (
-            <button className="primary" onClick={() => setShowCreate((v) => !v)}>
-              {showCreate
-                ? safeTranslate(t, "common.close", locale === "tr" ? "Kapat" : "Close")
-                : safeTranslate(t, "tasks.newTask", locale === "tr" ? "Yeni Görev" : "New Task")}
-            </button>
-          ) : null}
-
-          <button onClick={() => refreshActive(status, q)} disabled={loadingMy || loadingTeam}>
-            {loadingMy || loadingTeam ? t("common.loading") : t("common.refresh")}
+        <div className={s.actions}>
+          <button
+            className={s.iconButton}
+            title={c.refresh}
+            aria-label={c.refresh}
+            disabled={loading || busy}
+            onClick={() => {
+              void load();
+              void loadWorkspace().catch((e) => setError(errorText(e, c)));
+            }}
+          >
+            <RefreshCw size={17} />
+          </button>
+          <button
+            className={s.iconButton}
+            title={c.export}
+            aria-label={c.export}
+            disabled={busy || loading}
+            onClick={() => void exportCsv()}
+          >
+            <Download size={17} />
+          </button>
+          <WorkInfo topic="export" />
+          <button
+            className={s.primary}
+            disabled={!canCreate || busy}
+            onClick={() => setTaskForm(true)}
+          >
+            <Plus size={17} />
+            {c.newTask}
           </button>
         </div>
-      </div>
-
-      {showCreate && canCreate ? (
-        <div className="card" style={{ display: "grid", gap: 12 }}>
-          <div style={{ fontWeight: 900 }}>
-            {safeTranslate(
-              t,
-              "tasks.createTitle",
-              locale === "tr" ? "Yeni Görev Oluştur" : "Create New Task",
-            )}
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 10,
-            }}
-          >
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={safeTranslate(
-                t,
-                "tasks.fields.title",
-                locale === "tr" ? "Görev başlığı" : "Task title",
-              )}
-            />
-
-            <select
-              value={assignedToId}
-              onChange={(e) => setAssignedToId(e.target.value)}
-              disabled={loadingRefs || isSales}
-            >
-              <option value="">
-                {safeTranslate(
-                  t,
-                  "tasks.fields.selectAssignee",
-                  locale === "tr" ? "Atanacak kişi seç" : "Select assignee",
-                )}
-              </option>
-
-              {assignableUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} {u.role ? `(${u.role})` : ""}
-                </option>
-              ))}
-            </select>
-
-            <select value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)}>
-              <option value="LOW">{priorityLabel("LOW")}</option>
-              <option value="MEDIUM">{priorityLabel("MEDIUM")}</option>
-              <option value="HIGH">{priorityLabel("HIGH")}</option>
-            </select>
-
-            <input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
-
-            <select value={leadId} onChange={(e) => setLeadId(e.target.value)} disabled={loadingRefs}>
-              <option value="">
-                {safeTranslate(t, "tasks.fields.selectLead", locale === "tr" ? "Lead seç" : "Select lead")}
-              </option>
-              {leads.map((lead) => (
-                <option key={lead.id} value={lead.id}>
-                  {lead.fullName}
-                </option>
-              ))}
-            </select>
-
-            <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} disabled={loadingRefs}>
-              <option value="">
-                {safeTranslate(t, "tasks.fields.selectCustomer", locale === "tr" ? "Müşteri seç" : "Select customer")}
-              </option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.fullName}
-                </option>
-              ))}
-            </select>
-
-            <select value={agencyId} onChange={(e) => setAgencyId(e.target.value)} disabled={loadingRefs}>
-              <option value="">
-                {safeTranslate(t, "tasks.fields.selectAgency", locale === "tr" ? "Ajans seç" : "Select agency")}
-              </option>
-              {agencies.map((agency) => (
-                <option key={agency.id} value={agency.id}>
-                  {agency.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={safeTranslate(
-              t,
-              "tasks.fields.description",
-              locale === "tr" ? "Açıklama" : "Description",
-            )}
-          />
-
-          <div
-            style={{
-              border: "1px solid var(--stroke)",
-              borderRadius: 12,
-              padding: 12,
-              background: "var(--surface-2)",
-              fontSize: 13,
-              color: "var(--text-secondary)",
-            }}
-          >
-            {safeTranslate(
-              t,
-              "tasks.createHint",
-              locale === "tr"
-                ? "Aynı görevi lead + müşteri + ajans ile birlikte ilişkilendirebilirsiniz. Görev manager, sales veya call center kullanıcısına atanabilir."
-                : "You can link the same task to a lead, customer, and agency together. A task can be assigned to a manager, sales, or call center user.",
-            )}
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-            <button onClick={() => setShowCreate(false)}>
-              {safeTranslate(t, "common.cancel", locale === "tr" ? "Vazgeç" : "Cancel")}
-            </button>
-
+      </header>
+      <div className={s.scopeBar}>
+        <div className={s.scopeLinks} role="group" aria-label={c.title}>
+          {[
+            { id: "my", label: c.my, Icon: UserRound },
+            { id: "all", label: c.all, Icon: Users },
+            { id: "created", label: c.created, Icon: Inbox },
+            { id: "watching", label: c.watching, Icon: Eye },
+            { id: "personal", label: c.personal, Icon: List },
+          ].map(({ id, label, Icon }) => (
             <button
-              className="primary"
-              onClick={createTask}
-              disabled={creating || !title.trim() || !assignedToId}
-            >
-              {creating
-                ? safeTranslate(t, "tasks.creating", locale === "tr" ? "Oluşturuluyor..." : "Creating...")
-                : safeTranslate(t, "tasks.createTask", locale === "tr" ? "Görev Oluştur" : "Create Task")}
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {err ? (
-        <div
-          className="card"
-          style={{
-            border: "1px solid rgba(239,68,68,.35)",
-            background: "rgba(239,68,68,.08)",
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {err}
-        </div>
-      ) : null}
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-          gap: 14,
-        }}
-      >
-        <div className="card">
-          <div className="muted">{safeTranslate(t, "tasks.stats.total", locale === "tr" ? "Toplam" : "Total")}</div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.all}</div>
-        </div>
-
-        <div className="card">
-          <div className="muted">{statusLabel("TODO")}</div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.todo}</div>
-        </div>
-
-        <div className="card">
-          <div className="muted">{statusLabel("IN_PROGRESS")}</div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.inProgress}</div>
-        </div>
-
-        <div className="card">
-          <div className="muted">{statusLabel("DONE")}</div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.done}</div>
-        </div>
-
-        <div className="card">
-          <div className="muted">{statusLabel("CANCELLED")}</div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.cancelled}</div>
-        </div>
-
-        <div className="card">
-          <div className="muted">
-            {safeTranslate(t, "tasks.stats.overdue", locale === "tr" ? "Geciken" : "Overdue")}
-          </div>
-          <div style={{ fontSize: 28, fontWeight: 900 }}>{counts.overdue}</div>
-        </div>
-      </div>
-
-      <div className="card" style={{ display: "grid", gap: 10 }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              tab === "team" && canSeeTeam ? "1fr 200px 220px auto" : "1fr 200px auto",
-            gap: 10,
-          }}
-        >
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") refreshActive(status, q);
-            }}
-            placeholder={safeTranslate(
-              t,
-              "tasks.searchPlaceholder",
-              locale === "tr"
-                ? "Görev, lead, müşteri, ajans veya kişi ara..."
-                : "Search task, lead, customer, agency, or person...",
-            )}
-          />
-
-          <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="ALL">
-              {safeTranslate(t, "tasks.filters.allStatuses", locale === "tr" ? "Tüm Durumlar" : "All Statuses")}
-            </option>
-            <option value="TODO">{statusLabel("TODO")}</option>
-            <option value="IN_PROGRESS">{statusLabel("IN_PROGRESS")}</option>
-            <option value="DONE">{statusLabel("DONE")}</option>
-            <option value="CANCELLED">{statusLabel("CANCELLED")}</option>
-          </select>
-
-          {tab === "team" && canSeeTeam ? (
-            <select
-              value={userFilterId}
-              onChange={(e) => {
-                const next = e.target.value;
-                setUserFilterId(next);
-                loadTeamTasks(status, q, next);
+              key={id}
+              aria-pressed={section === id}
+              onClick={() => {
+                setSection(id);
+                setNotice("");
               }}
-              disabled={loadingRefs}
             >
-              <option value="">{locale === "tr" ? "Tüm kullanıcılar" : "All users"}</option>
-
-              {assignableUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} {u.role ? `(${u.role})` : ""}
-                </option>
-              ))}
+              <Icon size={16} />
+              <span>{label}</span>
+            </button>
+          ))}
+          <WorkInfo topic="scopes" />
+        </div>
+        <div className={s.projectTools}>
+          <WorkInfo topic="projects" />
+          <div className={s.projectSelect}>
+            <FolderKanban size={17} aria-hidden="true" />
+            <select
+              aria-label={c.project}
+              value={project?.id || ""}
+              disabled={!workspace.projects.length}
+              onChange={(event) => {
+                const next = workspace.projects.find(
+                  (p) => p.id === event.target.value,
+                );
+                setSection(next?.id || "all");
+                setNotice("");
+                setArchived(!!next?.archivedAt);
+              }}
+            >
+              <option value="">
+                {workspace.projects.length ? c.projects : c.emptyProject}
+              </option>
+              {workspace.projects
+                .filter((p) => !p.archivedAt || archived || p.id === section)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.key} · {p.name}
+                    {p.archivedAt ? " · " + c.archived : ""}
+                  </option>
+                ))}
             </select>
-          ) : null}
-
-          <button onClick={() => refreshActive(status, q)} disabled={loadingMy || loadingTeam}>
-            {safeTranslate(t, "tasks.searchAndRefresh", locale === "tr" ? "Ara / Yenile" : "Search / Refresh")}
+          </div>
+          <button
+            className={s.iconButton}
+            disabled={!workspace.me || workspace.me.role === "PREVIEW" || busy}
+            title={c.newProject}
+            aria-label={c.newProject}
+            onClick={() => setProjectForm("new")}
+          >
+            <Plus size={16} />
           </button>
         </div>
       </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: selected ? "1.45fr .85fr" : "1fr",
-          gap: 14,
-          alignItems: "start",
-        }}
-      >
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <table>
-            <thead>
-              <tr>
-                <th>{safeTranslate(t, "tasks.table.task", locale === "tr" ? "GÖREV" : "TASK")}</th>
-                <th>{safeTranslate(t, "tasks.table.related", locale === "tr" ? "İLİŞKİ" : "RELATED")}</th>
-                {tab === "team" && canSeeTeam ? (
-                  <th>{safeTranslate(t, "tasks.table.assignedTo", locale === "tr" ? "ATANAN" : "ASSIGNED TO")}</th>
-                ) : null}
-                <th>{safeTranslate(t, "tasks.table.priority", locale === "tr" ? "ÖNCELİK" : "PRIORITY")}</th>
-                <th>{safeTranslate(t, "tasks.table.status", locale === "tr" ? "DURUM" : "STATUS")}</th>
-                <th>{safeTranslate(t, "tasks.table.dueAt", locale === "tr" ? "TERMİN" : "DUE")}</th>
-                <th>{safeTranslate(t, "tasks.table.actions", locale === "tr" ? "İŞLEM" : "ACTIONS")}</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {activeTasks.map((task) => {
-                const saving = savingId === task.id;
-                const deleting = deletingId === task.id;
-                const overdue = isOverdue(task);
-
-                return (
-                  <tr key={task.id}>
-                    <td>
-                      <div style={{ display: "grid", gap: 4 }}>
-                        <Link
-                          href={`/tasks/${task.id}`}
-                          style={{
-                            fontWeight: 900,
-                            color: "var(--text-primary)",
-                            textDecoration: "none",
-                          }}
-                        >
-                          {task.title}
-                        </Link>
-
-                        <button
-                          onClick={() => setSelected(task)}
-                          style={{
-                            border: 0,
-                            padding: 0,
-                            background: "transparent",
-                            textAlign: "left",
-                            color: "var(--text-secondary)",
-                            fontSize: 12,
-                            cursor: "pointer",
-                          }}
-                        >
-                          {task.description || "-"}
-                        </button>
-                      </div>
-                    </td>
-
-                    <td>
-                      <div style={{ display: "grid", gap: 4, fontSize: 12 }}>
-                        {task.lead ? <Link href={`/leads/${task.lead.id}`}>{task.lead.fullName}</Link> : null}
-                        {task.customer ? <Link href={`/customers/${task.customer.id}`}>{task.customer.fullName}</Link> : null}
-                        {task.agency ? <Link href={`/agencies/${task.agency.id}`}>{task.agency.name}</Link> : null}
-                        {!task.lead && !task.customer && !task.agency ? "-" : null}
-                      </div>
-                    </td>
-
-                    {tab === "team" && canSeeTeam ? <td>{task.assignedTo?.name || "-"}</td> : null}
-
-                    <td>
-                      <span className={`badge ${priorityBadgeClass(task.priority)}`}>
-                        {priorityLabel(task.priority)}
-                      </span>
-                    </td>
-
-                    <td>
-                      <span className={`badge ${statusBadgeClass(task.status)}`}>
-                        {statusLabel(task.status)}
-                      </span>
-                    </td>
-
-                    <td>
-                      <div
-                        style={{
-                          color: overdue ? "#dc2626" : "inherit",
-                          fontWeight: overdue ? 800 : 500,
-                        }}
-                      >
-                        {formatDateTime(task.dueAt)}
-                      </div>
-                    </td>
-
-                    <td>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {task.status === "TODO" || task.status === "IN_PROGRESS" ? (
-                          <button
-                            className="primary"
-                            onClick={() => markDone(task.id)}
-                            disabled={saving || deleting}
-                          >
-                            {saving
-                              ? safeTranslate(t, "tasks.actions.processing", locale === "tr" ? "İşleniyor..." : "Processing...")
-                              : safeTranslate(t, "tasks.actions.done", locale === "tr" ? "Tamamla" : "Done")}
-                          </button>
-                        ) : null}
-
-                        {canDelete && task.status !== "DONE" && task.status !== "CANCELLED" ? (
-                          <button onClick={() => cancelTask(task.id)} disabled={saving || deleting}>
-                            {safeTranslate(t, "tasks.actions.cancel", locale === "tr" ? "İptal Et" : "Cancel")}
-                          </button>
-                        ) : null}
-
-                        {canDelete ? (
-                          <button
-                            className="danger"
-                            onClick={() => deleteTask(task.id)}
-                            disabled={saving || deleting}
-                          >
-                            {deleting
-                              ? locale === "tr"
-                                ? "Siliniyor..."
-                                : "Deleting..."
-                              : locale === "tr"
-                                ? "Sil"
-                                : "Delete"}
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {activeTasks.length === 0 ? (
-            <div style={{ padding: 14, color: "var(--text-secondary)" }}>
-              {safeTranslate(t, "tasks.noTasks", locale === "tr" ? "Görev bulunamadı." : "No tasks found.")}
-            </div>
-          ) : null}
-        </div>
-
-        {selected ? (
-          <div className="card" style={{ display: "grid", gap: 12, padding: 18 }}>
-            <div className="flex-between" style={{ gap: 10 }}>
-              <div style={{ display: "grid", gap: 4 }}>
-                <div style={{ fontWeight: 900, fontSize: 18 }}>{selected.title}</div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {safeTranslate(t, "tasks.detail.taskInfo", locale === "tr" ? "Görev Detayı" : "Task Detail")}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: 8 }}>
-                <Link href={`/tasks/${selected.id}`}>
-                  <button>
-                    {safeTranslate(t, "tasks.detail.openPage", locale === "tr" ? "Sayfayı Aç" : "Open Page")}
-                  </button>
-                </Link>
-
-                <button onClick={() => setSelected(null)}>
-                  {safeTranslate(t, "common.close", locale === "tr" ? "Kapat" : "Close")}
-                </button>
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <span className={`badge ${statusBadgeClass(selected.status)}`}>
-                {statusLabel(selected.status)}
-              </span>
-
-              <span className={`badge ${priorityBadgeClass(selected.priority)}`}>
-                {priorityLabel(selected.priority)}
-              </span>
-
-              {isOverdue(selected) ? (
-                <span className="badge danger">
-                  {safeTranslate(t, "tasks.badges.overdue", locale === "tr" ? "Gecikti" : "Overdue")}
+      <div className={s.workspace}>
+        <div className={s.main}>
+          <div className={s.workspaceHeader}>
+            <div>
+              {project && (
+                <span className={s.eyebrow}>
+                  {project.key}
+                  {project.department ? " · " + project.department.name : ""}
                 </span>
-              ) : null}
+              )}
+              <h2>{title}</h2>
+              {project?.description && (
+                <p className={s.muted}>{project.description}</p>
+              )}
             </div>
-
-            <div
-              style={{
-                border: "1px solid var(--stroke)",
-                borderRadius: 12,
-                padding: 12,
-                background: "var(--surface-2)",
-                display: "grid",
-                gap: 8,
-                fontSize: 13,
-              }}
+            {project && (
+              <div className={s.actions}>
+                {!project.canEdit && (
+                  <span className={s.tag}>
+                    {project.archivedAt ? c.archivedProject : c.readOnly}
+                  </span>
+                )}
+                {project.canManage && (
+                  <>
+                    <button
+                      className={s.iconButton}
+                      disabled={busy || !!project.archivedAt}
+                      title={c.settings}
+                      aria-label={c.settings}
+                      onClick={() => setProjectForm("edit")}
+                    >
+                      <Settings2 size={17} />
+                    </button>
+                    <button
+                      className={s.iconButton}
+                      disabled={busy}
+                      title={project.archivedAt ? c.restore : c.archive}
+                      aria-label={project.archivedAt ? c.restore : c.archive}
+                      onClick={() => void archiveProject()}
+                    >
+                      <Archive size={17} />
+                    </button>
+                    <WorkInfo topic="archive" />
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          <div className={s.metrics}>
+            {[
+              {
+                label: c.open,
+                value:
+                  report.total -
+                  report.status
+                    .filter((r) => ["DONE", "CANCELLED"].includes(r.status))
+                    .reduce((n, r) => n + r._count, 0),
+                Icon: FolderKanban,
+                tone: "teal",
+                topic: "open" as const,
+              },
+              {
+                label: c.overdue,
+                value: report.overdue,
+                Icon: Clock3,
+                tone: "red",
+                topic: "overdue" as const,
+              },
+              {
+                label: c.inReview,
+                value:
+                  report.status.find((r) => r.status === "IN_REVIEW")?._count ||
+                  0,
+                Icon: Eye,
+                tone: "amber",
+                topic: "review" as const,
+              },
+              {
+                label: c.completed,
+                value:
+                  report.status.find((r) => r.status === "DONE")?._count || 0,
+                Icon: CheckCircle2,
+                tone: "green",
+                topic: "completed" as const,
+              },
+            ].map(({ label, value, Icon, tone, topic }) => (
+              <div key={label} className={s.metric} data-tone={tone}>
+                <Icon size={20} />
+                <div>
+                  <strong>{loading ? "…" : value}</strong>
+                  <span>{label}</span>
+                </div>
+                <WorkInfo topic={topic} corner />
+              </div>
+            ))}
+          </div>
+          <div className={s.viewBar}>
+            <div className={s.tabs} role="tablist" aria-label={c.title}>
+              {(
+                [
+                  { id: "board", label: c.board, Icon: LayoutGrid },
+                  { id: "list", label: c.list, Icon: List },
+                  { id: "calendar", label: c.calendar, Icon: CalendarDays },
+                  { id: "timeline", label: c.timeline, Icon: GanttChart },
+                  { id: "reports", label: c.reports, Icon: BarChart3 },
+                ] as const
+              ).map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  role="tab"
+                  aria-selected={view === id}
+                  onClick={() => setView(id)}
+                >
+                  <Icon size={16} />
+                  {label}
+                </button>
+              ))}
+            </div>
+            <WorkInfo topic={view} />
+          </div>
+          <div className={s.toolbar}>
+            <div className={s.search}>
+              <Search size={16} />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={c.search}
+                aria-label={c.search}
+              />
+            </div>
+            <WorkInfo topic="filters" />
+            <button
+              className={`${s.iconButton} ${s.mobileFilters}`}
+              title={c.filters}
+              aria-label={c.filters}
+              aria-expanded={filtersOpen}
+              onClick={() => setFiltersOpen(!filtersOpen)}
             >
-              <div>
-                <b>{safeTranslate(t, "tasks.detail.dueAt", locale === "tr" ? "Termin" : "Due")}:</b>{" "}
-                {formatDateTime(selected.dueAt)}
-              </div>
-
-              <div>
-                <b>{safeTranslate(t, "tasks.detail.assignedTo", locale === "tr" ? "Atanan" : "Assigned to")}:</b>{" "}
-                {selected.assignedTo?.name || "-"}
-              </div>
-
-              <div>
-                <b>{safeTranslate(t, "tasks.detail.createdBy", locale === "tr" ? "Oluşturan" : "Created by")}:</b>{" "}
-                {selected.createdBy?.name || "-"}
-              </div>
-
-              {selected.lead ? (
-                <div>
-                  <b>{safeTranslate(t, "tasks.detail.lead", "Lead")}:</b>{" "}
-                  <Link href={`/leads/${selected.lead.id}`}>{selected.lead.fullName}</Link>
-                </div>
-              ) : null}
-
-              {selected.customer ? (
-                <div>
-                  <b>{safeTranslate(t, "tasks.detail.customer", locale === "tr" ? "Müşteri" : "Customer")}:</b>{" "}
-                  <Link href={`/customers/${selected.customer.id}`}>{selected.customer.fullName}</Link>
-                </div>
-              ) : null}
-
-              {selected.agency ? (
-                <div>
-                  <b>{safeTranslate(t, "tasks.detail.agency", locale === "tr" ? "Ajans" : "Agency")}:</b>{" "}
-                  <Link href={`/agencies/${selected.agency.id}`}>{selected.agency.name}</Link>
-                </div>
-              ) : null}
-            </div>
-
-            {selected.description ? (
-              <div
-                style={{
-                  border: "1px solid var(--stroke)",
-                  borderRadius: 12,
-                  padding: 12,
-                  background: "var(--surface)",
-                  whiteSpace: "pre-wrap",
-                  lineHeight: 1.6,
-                  fontSize: 13,
-                }}
+              <Funnel size={17} />
+            </button>
+            <div className={s.filters} data-open={filtersOpen}>
+              <select
+                aria-label={c.status}
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
               >
-                {selected.description}
-              </div>
-            ) : null}
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {selected.status === "TODO" || selected.status === "IN_PROGRESS" ? (
+                <option value="">{c.allStatuses}</option>
+                {statuses.map((v) => (
+                  <option key={v} value={v}>
+                    {c.statuses[v]}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label={c.assignee}
+                value={assignee}
+                onChange={(e) => setAssignee(e.target.value)}
+              >
+                <option value="">{c.allPeople}</option>
+                <option value="unassigned">{c.unassigned}</option>
+                {workspace.users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label={c.priority}
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+              >
+                <option value="">{c.allPriorities}</option>
+                {priorities.map((v) => (
+                  <option value={v} key={v}>
+                    {c.priorities[v]}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label={c.range}
+                value={range}
+                onChange={(e) => setRange(e.target.value)}
+              >
+                <option value="">{c.allDates}</option>
+                <option value="today">{c.today}</option>
+                <option value="week">{c.week}</option>
+                <option value="overdue">{c.overdue}</option>
+              </select>
+              <select
+                aria-label={c.department}
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+              >
+                <option value="">{c.allDepartments}</option>
+                {workspace.departments.map((d) => (
+                  <option value={d.id} key={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              <label className={s.checkLabel}>
+                <input
+                  type="checkbox"
+                  checked={archived}
+                  onChange={(e) => setArchived(e.target.checked)}
+                />
+                {c.archived}
+              </label>
+              {filtered && (
                 <button
-                  className="primary"
-                  onClick={() => markDone(selected.id)}
-                  disabled={savingId === selected.id || deletingId === selected.id}
+                  className={s.iconButton}
+                  aria-label={c.clear}
+                  title={c.clear}
+                  onClick={() => {
+                    setQuery("");
+                    setStatus("");
+                    setPriority("");
+                    setAssignee("");
+                    setDepartment("");
+                    setRange("");
+                    setArchived(false);
+                  }}
                 >
-                  {savingId === selected.id
-                    ? safeTranslate(t, "tasks.actions.processing", locale === "tr" ? "İşleniyor..." : "Processing...")
-                    : safeTranslate(t, "tasks.actions.done", locale === "tr" ? "Tamamla" : "Done")}
+                  <X size={16} />
                 </button>
-              ) : null}
-
-              {canDelete && selected.status !== "DONE" && selected.status !== "CANCELLED" ? (
-                <button
-                  onClick={() => cancelTask(selected.id)}
-                  disabled={savingId === selected.id || deletingId === selected.id}
-                >
-                  {safeTranslate(t, "tasks.actions.cancel", locale === "tr" ? "İptal Et" : "Cancel")}
-                </button>
-              ) : null}
-
-              {canDelete ? (
-                <button
-                  className="danger"
-                  onClick={() => deleteTask(selected.id)}
-                  disabled={savingId === selected.id || deletingId === selected.id}
-                >
-                  {deletingId === selected.id
-                    ? locale === "tr"
-                      ? "Siliniyor..."
-                      : "Deleting..."
-                    : locale === "tr"
-                      ? "Sil"
-                      : "Delete"}
-                </button>
-              ) : null}
+              )}
             </div>
           </div>
-        ) : null}
+          {error && (
+            <div className={s.error} role="alert">
+              {error}
+            </div>
+          )}
+          {notice && (
+            <div className={s.notice} role="status">
+              {notice}
+            </div>
+          )}
+          <div className={s.resultLine}>
+            <span aria-live="polite">
+              {loading ? c.loading : `${items.length} / ${total} ${c.results}`}
+            </span>
+            {selected.size > 0 && (
+              <div className={s.actions}>
+                <span>
+                  {selected.size} {c.selected}
+                </span>
+                <button
+                  className={s.button}
+                  disabled={!oneProject || busy}
+                  title={!oneProject ? c.sameProject : c.bulk}
+                  onClick={() => {
+                    setBulkStatus("");
+                    setBulkPriority("");
+                    setBulkAssignee("");
+                    setBulkError("");
+                    setBulkForm(true);
+                  }}
+                >
+                  <Settings2 size={15} />
+                  {c.bulk}
+                </button>
+                <WorkInfo topic="bulk" />
+                <button
+                  className={s.tinyButton}
+                  title={c.clear}
+                  onClick={() => setSelected(new Set())}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            )}
+          </div>
+          {view === "board" && (
+            <Board
+              items={items}
+              copy={c}
+              locale={locale}
+              disabled={busy || loading}
+              onMove={(item, status) => void move(item, status)}
+            />
+          )}
+          {view === "list" && (
+            <div className={s.tableScroll}>
+              <table className={s.table}>
+                <thead>
+                  <tr>
+                    <th>
+                      <input
+                        type="checkbox"
+                        aria-label={c.selectAll}
+                        checked={
+                          !!items.filter((i) => i.canEdit).length &&
+                          items
+                            .filter((i) => i.canEdit)
+                            .slice(0, 50)
+                            .every((i) => selected.has(i.id))
+                        }
+                        onChange={(e) =>
+                          setSelected(
+                            e.target.checked
+                              ? new Set(
+                                  items
+                                    .filter((i) => i.canEdit)
+                                    .slice(0, 50)
+                                    .map((i) => i.id),
+                                )
+                              : new Set(),
+                          )
+                        }
+                      />
+                    </th>
+                    <th>{c.task}</th>
+                    <th>{c.status}</th>
+                    <th>{c.assignee}</th>
+                    <th>{c.priority}</th>
+                    <th>{c.due}</th>
+                    <th>{c.progress}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`${c.selectItem}: ${item.title}`}
+                          checked={selected.has(item.id)}
+                          disabled={
+                            !item.canEdit ||
+                            busy ||
+                            (selected.size >= 50 && !selected.has(item.id))
+                          }
+                          onChange={() => select(item.id)}
+                        />
+                      </td>
+                      <td>
+                        <Link
+                          className={s.tableTitle}
+                          href={"/tasks/" + item.id}
+                        >
+                          {item.title}
+                        </Link>
+                        <small>
+                          {shortId(item)} · {c.kinds[item.kind]}
+                        </small>
+                      </td>
+                      <td>
+                        <select
+                          aria-label={`${c.status}: ${item.title}`}
+                          disabled={!item.canEdit || busy || loading}
+                          value={item.status}
+                          onChange={(e) =>
+                            void move(item, e.target.value as Status)
+                          }
+                        >
+                          {statuses.map((v) => (
+                            <option value={v} key={v}>
+                              {c.statuses[v]}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>{item.assignedTo?.name || c.unassigned}</td>
+                      <td>
+                        <span
+                          className={s.priority}
+                          data-priority={item.priority}
+                        >
+                          {c.priorities[item.priority]}
+                        </span>
+                      </td>
+                      <td>
+                        <time data-overdue={overdue(item)}>
+                          {dateTime(item.dueAt, locale)}
+                        </time>
+                      </td>
+                      <td>
+                        {item.checklist.length
+                          ? `${item.checklist.filter((i) => i.done).length}/${item.checklist.length}`
+                          : "–"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {!items.length && !loading && (
+                <div className={s.empty}>{c.empty}</div>
+              )}
+            </div>
+          )}
+          {(view === "calendar" || view === "timeline") && (
+            <Schedule
+              items={items}
+              locale={locale}
+              copy={c}
+              timeline={view === "timeline"}
+            />
+          )}
+          {view === "reports" && (
+            <Reports
+              report={report}
+              workspace={workspace}
+              copy={c}
+              locale={locale}
+            />
+          )}
+          {items.length < total && view !== "reports" && (
+            <div className={s.loadMore}>
+              <button
+                className={s.button}
+                disabled={loading}
+                onClick={() => void load(items.length)}
+              >
+                {c.loadMore}
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
+      {taskForm && (
+        <TaskForm
+          copy={c}
+          workspace={workspace}
+          projectId={project?.id}
+          onClose={() => setTaskForm(false)}
+          onSaved={(id) => router.push("/tasks/" + id)}
+        />
+      )}
+      {projectForm && (
+        <ProjectForm
+          copy={c}
+          workspace={workspace}
+          project={projectForm === "edit" ? project : undefined}
+          onClose={() => setProjectForm(null)}
+          onSaved={(id) => {
+            setProjectForm(null);
+            setSection(id);
+            setArchived(false);
+            void loadWorkspace().catch((e) => setError(errorText(e, c)));
+          }}
+        />
+      )}
+      {bulkForm && (
+        <Modal
+          title={`${c.bulk} · ${selected.size}`}
+          help={<WorkInfo topic="bulk" />}
+          closeLabel={c.close}
+          onClose={() => {
+            if (!busy) setBulkForm(false);
+          }}
+        >
+          <form className={s.form} onSubmit={bulkSubmit}>
+            <fieldset disabled={busy}>
+              {bulkError && (
+                <div className={s.error} role="alert">
+                  {bulkError}
+                </div>
+              )}
+              <label className={s.field}>
+                {c.status}
+                <select
+                  aria-label={c.status}
+                  value={bulkStatus}
+                  onChange={(e) => setBulkStatus(e.target.value)}
+                >
+                  <option value="">{c.unchanged}</option>
+                  {statuses.map((v) => (
+                    <option value={v} key={v}>
+                      {c.statuses[v]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={s.field}>
+                {c.priority}
+                <select
+                  aria-label={c.priority}
+                  value={bulkPriority}
+                  onChange={(e) => setBulkPriority(e.target.value)}
+                >
+                  <option value="">{c.unchanged}</option>
+                  {priorities.map((v) => (
+                    <option value={v} key={v}>
+                      {c.priorities[v]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={s.field}>
+                {c.assignee}
+                <select
+                  aria-label={c.assignee}
+                  value={bulkAssignee}
+                  onChange={(e) => setBulkAssignee(e.target.value)}
+                >
+                  <option value="">{c.unchanged}</option>
+                  <option value="unassigned">{c.unassigned}</option>
+                  {bulkPeople.map((p) => (
+                    <option value={p.id} key={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <footer className={s.formFooter}>
+                <button
+                  type="submit"
+                  className={s.primary}
+                  disabled={!bulkStatus && !bulkPriority && !bulkAssignee}
+                >
+                  {busy ? c.saving : c.apply}
+                </button>
+              </footer>
+            </fieldset>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
