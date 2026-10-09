@@ -64,7 +64,7 @@ function fixture(currency = "GBP") {
     selectedPaymentKind: "sale", selectedProjectGroup: "", selectedRepresentative: "", selectedAuthorizationState: "blank",
     startMonth: "2026-11", months: 6, nextMonth: "2026-11", periods: months, historicalPeriods: [],
     currencies: [{ value: currency, label: currency || "Unknown", recordCount: 1 }],
-    projectGroups: ["LA_JOYA", "LA_JOYA_PERLA", "LA_JOYA_PERLA_II", "LAGOON_VERDE", "GECITKALE_1_ETAP", "UNKNOWN"].map((value) => ({ value, label: value, caseCount: 0 })), representatives: [],
+    projectGroups: ["LA_JOYA", "LA_JOYA_PERLA", "LA_JOYA_PERLA_II", "LAGOON_VERDE", "GECITKALE_1_ETAP", "NEOCITY", "UNKNOWN"].map((value) => ({ value, label: value, caseCount: 0 })), representatives: [],
     byCurrency: [{ currency, summary: { ...totals }, overdue: zero(), nextMonth: { ...totals }, undated: zero(), beforeWindow: zero(), afterWindow: zero(),
       monthly: months.map((month) => ({ month, ...(month === "2026-11" ? totals : zero()) })), historical: [] }],
     detail: { month: "2026-11", rows: [{ invoiceOk: { status: "matched", values: ["DND"], hasBlank: false }, key: "synthetic", customerName: "Test", unitName: "Unit", currency, projectGroup: "LA_JOYA", representatives: [], totals: { ...totals } }], page: 1, pageSize: 25, total: 1, totalPages: 1 },

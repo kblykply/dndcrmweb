@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import AppShell from "../_ui/AppShell";
 import { navigationForRole } from "../_ui/navigation";
-import { getUser } from "@/lib/auth";
+import { authedFetch } from "@/lib/authedFetch";
+import { AUTH_SESSION_CHANGED_EVENT, getAccessToken, updateSessionUser, getUser } from "@/lib/auth";
 
 function inArea(pathname: string, path: string) {
   return pathname === path || pathname.startsWith(path + "/");
@@ -18,6 +19,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMe(getUser());
+    const syncUser = () => setMe(getUser());
+    window.addEventListener(AUTH_SESSION_CHANGED_EVENT, syncUser);
+    window.addEventListener("storage", syncUser);
+    let active = true;
+    if (getAccessToken()) void authedFetch("/auth/me").then((user) => {
+      if (active && user?.id && user?.role) updateSessionUser(user);
+    }).catch(() => undefined);
 
     function resolveTheme() {
       const attr = document.documentElement.getAttribute("data-theme");
@@ -53,6 +61,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (media.addEventListener) media.addEventListener("change", onMediaChange);
     else media.addListener(onMediaChange);
     return () => {
+      active = false;
+      window.removeEventListener(AUTH_SESSION_CHANGED_EVENT, syncUser);
+      window.removeEventListener("storage", syncUser);
       observer.disconnect();
       if (media.removeEventListener)
         media.removeEventListener("change", onMediaChange);
@@ -93,13 +104,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     window.location.replace("/finance");
   }, [me?.role, pathname]);
 
+  const callcenterAllowed = navigationForRole("CALLCENTER").flatMap((group) => group.items).some((item) => inArea(pathname, item.href)) || /^\/meetings\/[^/]+$/.test(pathname);
+  useEffect(() => {
+    if (me?.role === "CALLCENTER" && !callcenterAllowed) window.location.replace("/leads");
+  }, [me?.role, callcenterAllowed]);
+
   return (
     <AppShell
       logoSrc={theme === "dark" ? "/dndwhite.png" : "/dndblack.png"}
       userId={me?.id}
       navigation={navigationForRole(me?.role)}
     >
-      {children}
+      {me?.role === "CALLCENTER" && !callcenterAllowed ? null : <Fragment key={`${me?.id}:${me?.role}`}>{children}</Fragment>}
     </AppShell>
   );
 }

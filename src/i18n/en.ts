@@ -26,6 +26,7 @@ create:  "Create",
   open:  "Open",
   },
   nav: {
+    callFollowups: "Call Follow-ups",
     mainNavigation: "Main navigation",
     searchModules: "Search modules",
     clearSearch: "Clear module search",

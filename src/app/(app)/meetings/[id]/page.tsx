@@ -193,7 +193,7 @@ export default function MeetingDetailPage() {
   const role = me?.role as string | undefined;
 
   function canModify() {
-    if (!meeting || !me) return false;
+    if (!meeting || !me || role === "CALLCENTER") return false;
     if (role === "ADMIN" || role === "MANAGER") return true;
     return meeting.createdBy?.id === me.id;
   }
@@ -443,13 +443,13 @@ export default function MeetingDetailPage() {
     return (
       <div style={{ display: "grid", gap: 4 }}>
         {meeting.agency ? (
-          <Link href={`/agencies/${meeting.agency.id}`}>{meeting.agency.name}</Link>
+          role === "CALLCENTER" ? <span>{meeting.agency.name}</span> : <Link href={`/agencies/${meeting.agency.id}`}>{meeting.agency.name}</Link>
         ) : (
           <span>-</span>
         )}
 
         {meeting.customer ? (
-          <Link href={`/customers/${meeting.customer.id}`} className="muted">
+          role === "CALLCENTER" ? <span className="muted">{meeting.customer.fullName}</span> : <Link href={`/customers/${meeting.customer.id}`} className="muted">
             {meeting.customer.fullName}
           </Link>
         ) : (
@@ -525,8 +525,8 @@ export default function MeetingDetailPage() {
     <div style={{ display: "grid", gap: 14 }}>
       <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 4 }}>
-          <Link href="/meetings" style={{ fontWeight: 800 }}>
-            ← {locale === "tr" ? "Toplantılara Dön" : "Back to Meetings"}
+          <Link href={role === "CALLCENTER" ? "/calendar" : "/meetings"} style={{ fontWeight: 800 }}>
+            ← {role === "CALLCENTER" ? (locale === "tr" ? "Takvime Dön" : "Back to Calendar") : (locale === "tr" ? "Toplantılara Dön" : "Back to Meetings")}
           </Link>
 
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -952,7 +952,7 @@ export default function MeetingDetailPage() {
               </div>
             </div>
 
-            <Link href="/meetings">
+            <Link href={role === "CALLCENTER" ? "/calendar" : "/meetings"}>
               <button style={{ width: "100%" }}>
                 {locale === "tr" ? "Toplantılara Dön" : "Back to Meetings"}
               </button>

@@ -32,6 +32,7 @@ refreshing: "Yenileniyor...",
 create: "Oluştur" ,
   },
   nav: {
+    callFollowups: "Arama Takipleri",
     mainNavigation: "Ana menü",
     searchModules: "Modül ara",
     clearSearch: "Modül aramasını temizle",

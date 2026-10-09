@@ -79,3 +79,11 @@ export function authedHeaders(): Record<string, string> {
 export function isAuthenticated() {
   return !!getAccessToken();
 }
+
+export function updateSessionUser(user: { id: string; role: string; [key: string]: unknown }) {
+  if (typeof window === "undefined") return;
+  const previous = getUser();
+  localStorage.setItem("user", JSON.stringify({ ...previous, ...user }));
+  if (previous?.id !== user.id || previous?.role !== user.role) sessionVersion += 1;
+  sessionChanged();
+}

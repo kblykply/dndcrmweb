@@ -93,7 +93,7 @@ export default function TasksPage() {
     : "";
   const canCreate =
     !!workspace.me &&
-    workspace.me.role !== "PREVIEW" &&
+    workspace.me.role !== "PREVIEW" && workspace.me.role !== "CALLCENTER" &&
     (!project || project.canEdit);
   const filtered = !!(
     query ||
@@ -382,7 +382,7 @@ export default function TasksPage() {
             { id: "created", label: c.created, Icon: Inbox },
             { id: "watching", label: c.watching, Icon: Eye },
             { id: "personal", label: c.personal, Icon: List },
-          ].map(({ id, label, Icon }) => (
+          ].filter(({ id }) => workspace.me?.role !== "CALLCENTER" || id === "my").map(({ id, label, Icon }) => (
             <button
               key={id}
               aria-pressed={section === id}
@@ -429,7 +429,7 @@ export default function TasksPage() {
           </div>
           <button
             className={s.iconButton}
-            disabled={!workspace.me || workspace.me.role === "PREVIEW" || busy}
+            disabled={!workspace.me || ["PREVIEW", "CALLCENTER"].includes(workspace.me.role) || busy}
             title={c.newProject}
             aria-label={c.newProject}
             onClick={() => setProjectForm("new")}

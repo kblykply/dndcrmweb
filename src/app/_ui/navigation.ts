@@ -18,7 +18,8 @@ export type NavigationGroup = {
 const crm = ["ADMIN", "MANAGER", "SALES", "CALLCENTER", "PREVIEW"];
 const managers = ["ADMIN", "MANAGER", "PREVIEW"];
 const admins = ["ADMIN", "PREVIEW"];
-const customerRoles = [...crm, "AFTERSALES"];
+const salesCrm = crm.filter((role) => role !== "CALLCENTER");
+const customerRoles = [...salesCrm, "AFTERSALES"];
 const profileRoles = ["ADMIN", "MANAGER", "SALES", "AFTERSALES", "PREVIEW"];
 
 // Navigation visibility mirrors the existing layout. API permissions remain authoritative.
@@ -80,7 +81,7 @@ export const navigationGroups: readonly NavigationGroup[] = [
         href: "/meetings",
         label: "nav.meetings",
         icon: "meetings",
-        roles: crm,
+        roles: salesCrm,
         keywords: ["meeting", "toplantı"],
       },
     ],
@@ -99,6 +100,14 @@ export const navigationGroups: readonly NavigationGroup[] = [
         keywords: ["lead", "potansiyel müşteri", "satış fırsatı"],
       },
       {
+        id: "call-followups",
+        href: "/leads/followups",
+        label: "nav.callFollowups",
+        icon: "leads",
+        roles: crm,
+        keywords: ["arama takipleri", "call follow-ups", "followup", "geri arama"],
+      },
+      {
         id: "customers",
         href: "/customers",
         label: "nav.customers",
@@ -111,7 +120,7 @@ export const navigationGroups: readonly NavigationGroup[] = [
         href: "/agencies",
         label: "nav.agencies",
         icon: "agencies",
-        roles: crm,
+        roles: salesCrm,
         keywords: ["agent", "agency", "acenta", "acente", "ajans"],
       },
       {
@@ -151,7 +160,7 @@ export const navigationGroups: readonly NavigationGroup[] = [
         href: "/customers/nationality-report",
         label: "nav.nationalityReport",
         icon: "globe",
-        roles: crm,
+        roles: salesCrm,
         keywords: ["nationality", "uyruk", "milliyet", "harita", "map"],
       },
       {
@@ -159,7 +168,7 @@ export const navigationGroups: readonly NavigationGroup[] = [
         href: "/customers/demographics-report",
         label: "nav.demographicsReport",
         icon: "chart",
-        roles: crm,
+        roles: salesCrm,
         keywords: ["demographic", "müşteri raporu", "customer report"],
       },
     ],

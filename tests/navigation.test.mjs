@@ -39,7 +39,7 @@ const all = items(navigationGroups).map((item) => item.id);
 
 test("six groups contain unique, translated links to existing modules", () => {
   assert.equal(navigationGroups.length, 6);
-  assert.equal(all.length, 29);
+  assert.equal(all.length, 30);
   assert.equal(new Set(all).size, all.length);
   assert.equal(
     new Set(items(navigationGroups).map((item) => item.href)).size,
@@ -81,6 +81,7 @@ test("grouping preserves the old role matrix, excluding the dead help link", () 
       (id) => !["payment-tracking", "collection-report", "digital-map", "digital-team", "it-support"].includes(id),
     ),
     SALES: [
+      "call-followups",
       "it-support",
       "profile",
       "tasks",
@@ -100,16 +101,11 @@ test("grouping preserves the old role matrix, excluding the dead help link", () 
       "pdca",
     ],
     CALLCENTER: [
+      "call-followups",
       "it-support",
       "tasks",
       "calendar",
-      "meetings",
       "leads",
-      "customers",
-      "agencies",
-      "nationality",
-      "demographics",
-      "units",
       "rent-projection",
       "organization",
       "pdca",

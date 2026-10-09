@@ -71,7 +71,7 @@ test("fully closed portfolio scope round trips separately from selected-balance 
   }
 });
 
-test("project groups reuse the five registered projects and preserve selection in returnTo", () => {
+test("project groups reuse all registered projects and preserve selection in returnTo", () => {
   const { paymentProjectGroups, paymentProjectGroupLabel } = load("project-groups");
   const { PROJECTS, PROJECT_META } = load("@/lib/projects");
   assert.deepEqual(paymentProjectGroups, [...PROJECTS, "UNKNOWN"]);
@@ -88,7 +88,7 @@ test("project groups reuse the five registered projects and preserve selection i
     assert.equal(back.scope, "closed");
     if (PROJECT_META[projectGroup]) assert.equal(paymentProjectGroupLabel(projectGroup, true), PROJECT_META[projectGroup].label);
   }
-  assert.equal(keys.size, 7, "Every project scope has a separate list cache key");
+  assert.equal(keys.size, paymentProjectGroups.length + 1, "Every project scope has a separate list cache key");
   assert.equal(paymentProjectGroupLabel("UNKNOWN", true), "Diğer / eşleşmeyen");
   assert.equal(readFilters(new URLSearchParams("projectGroup=SOPOT")).projectGroup, "");
 });
