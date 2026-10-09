@@ -148,8 +148,14 @@ export default function LeadDetailPage() {
 
   async function loadUsers() {
     try {
-      const mgrs = await authedFetch("/users?role=MANAGER");
-      setManagers(Array.isArray(mgrs) ? mgrs : []);
+      const [mgrs, admins] = await Promise.all([
+        authedFetch("/users?role=MANAGER"),
+        authedFetch("/users?role=ADMIN"),
+      ]);
+      setManagers(
+        [...(Array.isArray(mgrs) ? mgrs : []), ...(Array.isArray(admins) ? admins : [])]
+          .sort((a: UserLite, b: UserLite) => (a.name || a.email).localeCompare(b.name || b.email)),
+      );
       const reps = await authedFetch("/users?role=SALES");
       setSales(Array.isArray(reps) ? reps : []);
     } catch {
