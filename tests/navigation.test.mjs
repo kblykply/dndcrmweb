@@ -39,7 +39,7 @@ const all = items(navigationGroups).map((item) => item.id);
 
 test("six groups contain unique, translated links to existing modules", () => {
   assert.equal(navigationGroups.length, 6);
-  assert.equal(all.length, 30);
+  assert.equal(all.length, 31);
   assert.equal(new Set(all).size, all.length);
   assert.equal(
     new Set(items(navigationGroups).map((item) => item.href)).size,
@@ -75,10 +75,19 @@ test("grouping preserves the old role matrix, excluding the dead help link", () 
           "digital-team",
           "payment-tracking",
           "collection-report",
+          "collection-table",
         ].includes(id),
     ),
     PREVIEW: all.filter(
-      (id) => !["payment-tracking", "collection-report", "digital-map", "digital-team", "it-support"].includes(id),
+      (id) =>
+        ![
+          "payment-tracking",
+          "collection-report",
+          "collection-table",
+          "digital-map",
+          "digital-team",
+          "it-support",
+        ].includes(id),
     ),
     SALES: [
       "call-followups",
@@ -124,6 +133,7 @@ test("grouping preserves the old role matrix, excluding the dead help link", () 
     ACCOUNTING: [
       "payment-tracking",
       "collection-report",
+      "collection-table",
       "it-support",
       "tasks",
       "organization",
@@ -183,22 +193,59 @@ test("Digital Map is searchable only for administrators and hidden from all othe
   for (const role of ["ADMIN"]) {
     assert(ids(navigationForRole(role)).includes("digital-map"), role);
     for (const query of ["dijital harita", "digital map"])
-      assert(ids(searchNavigation(navigationForRole(role), query, labels)).includes("digital-map"), `${role}: ${query}`);
+      assert(
+        ids(searchNavigation(navigationForRole(role), query, labels)).includes(
+          "digital-map",
+        ),
+        `${role}: ${query}`,
+      );
   }
-  for (const role of ["MANAGER", "PREVIEW", "SALES", "CALLCENTER", "AFTERSALES", "ACCOUNTING"]) {
+  for (const role of [
+    "MANAGER",
+    "PREVIEW",
+    "SALES",
+    "CALLCENTER",
+    "AFTERSALES",
+    "ACCOUNTING",
+  ]) {
     assert(!ids(navigationForRole(role)).includes("digital-map"), role);
-    assert.deepEqual(searchNavigation(navigationForRole(role), "digital map", labels), [], role);
+    assert.deepEqual(
+      searchNavigation(navigationForRole(role), "digital map", labels),
+      [],
+      role,
+    );
   }
-  assert.equal(activeNavigationItem(navigationGroups, "/digital-map")?.id, "digital-map");
+  assert.equal(
+    activeNavigationItem(navigationGroups, "/digital-map")?.id,
+    "digital-map",
+  );
 });
 
 test("Digital Team and deep project routes are visible only to ADMIN", () => {
-  assert(ids(searchNavigation(navigationForRole("ADMIN"), "dijital ekip", labels)).includes("digital-team"));
-  assert(ids(searchNavigation(navigationForRole("ADMIN"), "digital team", labels)).includes("digital-team"));
-  for (const role of ["MANAGER", "PREVIEW", "SALES", "CALLCENTER", "AFTERSALES", "ACCOUNTING"]) {
+  assert(
+    ids(
+      searchNavigation(navigationForRole("ADMIN"), "dijital ekip", labels),
+    ).includes("digital-team"),
+  );
+  assert(
+    ids(
+      searchNavigation(navigationForRole("ADMIN"), "digital team", labels),
+    ).includes("digital-team"),
+  );
+  for (const role of [
+    "MANAGER",
+    "PREVIEW",
+    "SALES",
+    "CALLCENTER",
+    "AFTERSALES",
+    "ACCOUNTING",
+  ]) {
     assert(!ids(navigationForRole(role)).includes("digital-team"), role);
   }
-  assert.equal(activeNavigationItem(navigationGroups, "/digital-team/project-id")?.id, "digital-team");
+  assert.equal(
+    activeNavigationItem(navigationGroups, "/digital-team/project-id")?.id,
+    "digital-team",
+  );
 });
 
 test("direct name matches precede aliases, without mutating the catalog", () => {
@@ -257,12 +304,26 @@ test("the wheel retains its separate-tab launch", () => {
   assert.equal(items(navigationGroups).filter((item) => item.newTab).length, 1);
 });
 
-
 test("IT Support is available to every real employee role, never preview", () => {
-  for (const role of ["ADMIN", "MANAGER", "SALES", "CALLCENTER", "AFTERSALES", "ACCOUNTING"]) {
+  for (const role of [
+    "ADMIN",
+    "MANAGER",
+    "SALES",
+    "CALLCENTER",
+    "AFTERSALES",
+    "ACCOUNTING",
+  ]) {
     assert(ids(navigationForRole(role)).includes("it-support"), role);
-    assert(ids(searchNavigation(navigationForRole(role), "ticket", labels)).includes("it-support"), role);
+    assert(
+      ids(searchNavigation(navigationForRole(role), "ticket", labels)).includes(
+        "it-support",
+      ),
+      role,
+    );
   }
   assert(!ids(navigationForRole("PREVIEW")).includes("it-support"));
-  assert.equal(activeNavigationItem(navigationGroups, "/it-support/ticket-id")?.id, "it-support");
+  assert.equal(
+    activeNavigationItem(navigationGroups, "/it-support/ticket-id")?.id,
+    "it-support",
+  );
 });

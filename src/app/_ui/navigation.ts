@@ -297,6 +297,14 @@ export const navigationGroups: readonly NavigationGroup[] = [
         roles: ["ADMIN", "ACCOUNTING"],
         keywords: ["tahsilat raporu", "aylık vade", "gelecek ay", "potansiyel tahsilat", "collection report", "monthly receivables"],
       },
+      {
+        id: "collection-table",
+        href: "/finance/collection-table",
+        label: "nav.collectionTable",
+        icon: "chart",
+        roles: ["ADMIN", "ACCOUNTING"],
+        keywords: ["tahsilat tablosu", "aylık tablo", "collection table"],
+      },
     ],
   },
   {

@@ -72,6 +72,7 @@ meetings: "Meetings",
     finance: "Finance",
     paymentTracking: "Payment Tracking",
     collectionReport: "Collection Report",
+    collectionTable: "Collection Table",
 
       
   },

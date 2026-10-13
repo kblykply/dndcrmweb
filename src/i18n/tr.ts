@@ -79,6 +79,7 @@ meetings: "Toplantılar",
     finance: "Finans",
     paymentTracking: "Ödeme Takip",
     collectionReport: "Tahsilat Raporu",
+    collectionTable: "Tahsilat Tablosu",
 
   },
 
