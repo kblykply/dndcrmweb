@@ -270,3 +270,9 @@
     max-width: calc(100vw - 50px);
   }
 }
+
+.overdue {
+  color: #b91c1c;
+  background: #fff1f2;
+  font-weight: 600;
+}
