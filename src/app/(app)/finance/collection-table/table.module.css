@@ -372,3 +372,64 @@
   --ct-danger-bg: #3c202c;
   --ct-track: #426459;
 }
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border: 1px solid var(--ct-line);
+  border-radius: 10px;
+  background: var(--ct-paper);
+  color: var(--ct-ink);
+  cursor: pointer;
+}
+.iconButton > svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.iconButton:hover,
+.iconButton[aria-expanded="true"],
+.iconButton[data-active="true"] {
+  color: var(--ct-teal);
+  border-color: var(--ct-teal);
+  background: var(--ct-hover);
+}
+.headerActions > .button {
+  min-height: 48px;
+  padding: 10px 15px;
+  font-size: 14px;
+  border-radius: 10px;
+}
+.quickSearch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+  max-width: 720px;
+}
+.quickSearch input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 13px;
+  border: 1px solid var(--ct-line);
+  border-radius: 8px;
+  background: var(--ct-paper);
+  color: var(--ct-ink);
+  font-size: 15px;
+}
+.quickSearch input::placeholder {
+  color: var(--ct-muted);
+}
+.quickSearch input:focus-visible {
+  outline: 2px solid var(--ct-teal);
+  outline-offset: 2px;
+}

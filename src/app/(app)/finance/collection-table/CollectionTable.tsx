@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import { authedFetch } from "@/lib/authedFetch";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 import {
@@ -92,7 +92,7 @@ export default function CollectionTable() {
   const text = (a: string, b: string) => (tr ? a : b);
   const access = useTrackingAccess();
   const [currency, setCurrency] = useState("__ALL__"),
-    [search] = useState(""),
+    [search, setSearch] = useState(""),
     [status] = useState("all");
   const [sort, setSort] = useState<Sort>("dueDate"),
     [direction, setDirection] = useState("asc"),
@@ -102,6 +102,7 @@ export default function CollectionTable() {
     [error, setError] = useState("");
   const [loading, setLoading] = useState(true),
     [expanded, setExpanded] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [year, setYear] = useState("");
   const [month, setMonth] = useState("");
   const showRows = !!month || year === "undated";
@@ -235,15 +236,71 @@ export default function CollectionTable() {
         <div>
           <h1>{text("Tahsilat Tablosu", "Collection Table")}</h1>
         </div>
-        <button
-          className={s.button}
-          disabled={loading}
-          onClick={() => setVersion((v) => v + 1)}
-        >
-          <RefreshCw size={16} />
-          {text("Yenile", "Refresh")}
-        </button>
+        <div className={s.headerActions}>
+          <button
+            type="button"
+            className={s.iconButton}
+            aria-label={text(
+              "Müşteri veya daire ara",
+              "Search customer or unit",
+            )}
+            title={
+              search
+                ? `${text("Arama", "Search")}: ${search}`
+                : text("Ara", "Search")
+            }
+            aria-expanded={searchOpen}
+            aria-controls="collection-quick-search"
+            data-active={!!search}
+            onClick={() => setSearchOpen((value) => !value)}
+          >
+            <Search size={24} aria-hidden="true" />
+          </button>
+          <button
+            className={s.button}
+            disabled={loading}
+            onClick={() => setVersion((v) => v + 1)}
+          >
+            <RefreshCw size={16} />
+            {text("Yenile", "Refresh")}
+          </button>
+        </div>
       </header>
+      {searchOpen && (
+        <div
+          id="collection-quick-search"
+          className={s.quickSearch}
+          role="search"
+        >
+          <input
+            autoFocus
+            type="search"
+            aria-label={text("Müşteri veya daire", "Customer or unit")}
+            placeholder={text(
+              "Müşteri veya daire ara…",
+              "Search customer or unit…",
+            )}
+            value={search}
+            maxLength={200}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+          />
+          {search && (
+            <button
+              type="button"
+              className={s.button}
+              onClick={() => {
+                setSearch("");
+                setPage(1);
+              }}
+            >
+              {text("Temizle", "Clear")}
+            </button>
+          )}
+        </div>
+      )}
       <nav
         className={s.breadcrumb}
         aria-label={text("Tablo ayrıntı seviyesi", "Table detail level")}

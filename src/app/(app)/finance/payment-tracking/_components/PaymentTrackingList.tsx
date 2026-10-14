@@ -14,6 +14,7 @@ import {
   Filter,
   FileText,
   RefreshCw,
+  Search,
   Wallet,
 } from "lucide-react";
 import { authedFetch } from "@/lib/authedFetch";
@@ -76,9 +77,9 @@ export default function PaymentTrackingList() {
   const t = (a: string, b: string) => (tr ? a : b);
   const access = useTrackingAccess();
   const [ready, setReady] = useState(false);
-  const [activePanel, setActivePanel] = useState<"filters" | "summary" | null>(
-    null,
-  );
+  const [activePanel, setActivePanel] = useState<
+    "search" | "filters" | "summary" | null
+  >(null);
   const [requestVersion, setRequestVersion] = useState(0);
   const applied = useRef<Filters>(defaults);
   const [filters, setFilters] = useState<Filters>(defaults);
@@ -450,6 +451,24 @@ export default function PaymentTrackingList() {
           <button
             type="button"
             className={s.iconButton}
+            aria-label={t("Müşteri veya daire ara", "Search customer or unit")}
+            title={
+              filters.q
+                ? `${t("Arama", "Search")}: ${filters.q}`
+                : t("Ara", "Search")
+            }
+            aria-expanded={activePanel === "search"}
+            aria-controls="payment-quick-search"
+            data-active={!!filters.q}
+            onClick={() =>
+              setActivePanel((value) => (value === "search" ? null : "search"))
+            }
+          >
+            <Search size={24} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={s.iconButton}
             aria-label={t("Arama ve filtreler", "Search and filters")}
             title={t("Arama ve filtreler", "Search and filters")}
             aria-expanded={activePanel === "filters"}
@@ -521,6 +540,43 @@ export default function PaymentTrackingList() {
             </p>
           )}
         </>
+      )}
+      {activePanel === "search" && (
+        <form
+          id="payment-quick-search"
+          className={s.quickSearch}
+          role="search"
+          onSubmit={(event) => {
+            event.preventDefault();
+            apply({ ...draft, page: 1 });
+          }}
+        >
+          <input
+            autoFocus
+            type="search"
+            aria-label={t("Müşteri veya daire", "Customer or unit")}
+            placeholder={t(
+              "Müşteri veya daire ara…",
+              "Search customer or unit…",
+            )}
+            maxLength={200}
+            value={draft.q}
+            onChange={(event) => setDraft({ ...draft, q: event.target.value })}
+          />
+          <button className={s.primary} disabled={loading}>
+            {t("Ara", "Search")}
+          </button>
+          {filters.q && (
+            <button
+              type="button"
+              className={s.button}
+              disabled={loading}
+              onClick={() => apply({ ...filters, q: "", page: 1 })}
+            >
+              {t("Temizle", "Clear")}
+            </button>
+          )}
+        </form>
       )}
       <div id="payment-search-panel" hidden={activePanel !== "filters"}>
         <PaymentListFilters
