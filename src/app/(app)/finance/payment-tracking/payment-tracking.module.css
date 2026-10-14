@@ -442,8 +442,16 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
-.kindButton:disabled { opacity: .65; cursor: wait; }
-.filteredScope { margin: 8px 0 0; color: var(--accent); font-size: 13px; font-weight: 700; }
+.kindButton:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+.filteredScope {
+  margin: 8px 0 0;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
 .field {
   display: flex;
   flex-direction: column;
@@ -921,7 +929,7 @@
   max-width: 100%;
 }
 .portfolioCaseLink[aria-disabled="true"] {
-  opacity: .6;
+  opacity: 0.6;
   cursor: wait;
 }
 .actionCurrencyScope {
@@ -1001,14 +1009,21 @@
   background: var(--paper);
   min-width: 0;
 }
-.currencyOverdueCard h3 { margin: 0 0 10px; font-size: 13px; }
+.currencyOverdueCard h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
 .currencyOverdueAmount {
   display: block;
   font-size: clamp(21px, 2vw, 28px);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
-.currencyOverdueCard p { margin: 10px 0 0; color: var(--muted); font-size: 12px; }
+.currencyOverdueCard p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
 
 /* The list starts with the work itself; secondary panels open on demand. */
 .listPage {
@@ -1148,7 +1163,288 @@
     gap: 10px 20px;
   }
 }
-.reviewNotice { border: 1px solid #c49a4a; border-radius: 10px; padding: 13px 16px; background: #fff8e9; color: #6c501b; font-size: 13px; line-height: 1.6; }
-.reviewNotice > summary { cursor: pointer; font-weight: 600; }
-.reviewNotice p { margin: 10px 0 0; }
-:global(html[data-theme="dark"]) .reviewNotice { background: #30291d; color: #ebc58a; border-color: #80663e; }
+.reviewNotice {
+  border: 1px solid #c49a4a;
+  border-radius: 10px;
+  padding: 13px 16px;
+  background: #fff8e9;
+  color: #6c501b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.reviewNotice > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.reviewNotice p {
+  margin: 10px 0 0;
+}
+:global(html[data-theme="dark"]) .reviewNotice {
+  background: #30291d;
+  color: #ebc58a;
+  border-color: #80663e;
+}
+/* Focused follow-up workspace: show balances and the next action first. */
+.disclosure {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  overflow: hidden;
+}
+.disclosure > summary {
+  padding: 13px 15px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  list-style-position: inside;
+}
+.disclosure > summary:hover {
+  background: var(--accent-soft);
+}
+.disclosure[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.disclosure > .panel {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+}
+.inlineDetails {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 10px;
+}
+.inlineDetails > summary {
+  cursor: pointer;
+  padding: 4px 0;
+  list-style-position: inside;
+}
+.inlineDetails[open] > summary {
+  margin-bottom: 8px;
+}
+.simpleDetail {
+  gap: 14px;
+  padding: 18px 20px 26px;
+  max-width: 1580px;
+}
+.simpleDetail .header h1 {
+  font-size: 24px;
+  margin: 6px 0;
+  letter-spacing: -0.6px;
+}
+.simpleDetail .header {
+  gap: 14px;
+}
+.simpleDetail .identity {
+  gap: 5px;
+  margin-top: 8px;
+}
+.simpleDetail .panel {
+  padding: 16px;
+}
+.simpleDetail .panelHead {
+  margin-bottom: 12px;
+}
+.simpleDetail .panelHead h2 {
+  font-size: 15px;
+}
+.simpleDetail .detailGrid {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 14px;
+}
+.simpleDetail .stack {
+  gap: 12px;
+}
+.simpleDetail .facts {
+  gap: 14px;
+}
+.simpleDetail .facts dt {
+  margin-bottom: 4px;
+}
+.simpleDetail .facts .big {
+  font-size: 26px;
+}
+.simpleDetail .actionCurrencyScope {
+  padding: 10px 12px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+.simpleDetail .primary,
+.simpleDetail .button {
+  min-height: 36px;
+}
+.simpleDetail .table th,
+.simpleDetail .table td {
+  padding: 10px;
+}
+.simpleDetail .sourceTags {
+  margin-top: 8px;
+}
+.simpleDetail .inlineDetails .actions {
+  gap: 8px;
+}
+.listPage .table th,
+.listPage .table td {
+  padding: 12px 14px;
+}
+.listPage .table {
+  min-width: 740px;
+}
+.listPage .panelHead p {
+  margin-top: 4px;
+}
+.listPage .managementPanel > summary {
+  font-size: 12px;
+  padding: 10px 14px;
+}
+.listPage .panel {
+  border-radius: 10px;
+}
+@media (max-width: 900px) {
+  .simpleDetail .detailGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .simpleDetail .header {
+    flex-direction: column;
+  }
+  .simpleDetail .header > .actions {
+    width: 100%;
+  }
+  .simpleDetail .header > .actions .primary {
+    flex: 1;
+  }
+  .simpleDetail {
+    padding: 12px;
+  }
+  .simpleDetail .facts .big {
+    font-size: 23px;
+  }
+}
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+.iconButton:hover,
+.iconButton[aria-expanded="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.listPage > [hidden] {
+  display: none;
+}
+
+/* Readable controls with comfortable pointer and touch targets. */
+.listHeader {
+  align-items: center;
+  gap: 16px;
+}
+.listHeader > .actions {
+  gap: 10px;
+}
+.listPage .header .button,
+.simpleDetail .button,
+.simpleDetail .primary {
+  min-height: 44px;
+  padding: 10px 15px;
+  font-size: 14px;
+  gap: 9px;
+  border-radius: 10px;
+}
+.listPage .header .button {
+  min-height: 48px;
+}
+.page .iconButton > svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  stroke-width: 2;
+}
+.simpleDetail :is(.button, .primary) > svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.listPage .header .button > svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.listPage .sortButton {
+  font-size: 13px;
+  gap: 7px;
+  min-height: 28px;
+}
+.listPage .sortButton > svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.listPage .badge,
+.simpleDetail .badge {
+  font-size: 12px;
+  padding: 5px 9px;
+}
+.listPage .panelHead h2 > svg,
+.simpleDetail .panelHead h2 > svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.simpleDetail .disclosure > summary {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  list-style: none;
+}
+.simpleDetail .disclosure > summary::before {
+  content: "›";
+  display: inline-block;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.simpleDetail .disclosure[open] > summary::before {
+  transform: rotate(90deg);
+}
+@media (max-width: 600px) {
+  .listHeader {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .listHeader > .actions {
+    display: grid;
+    grid-template-columns: 48px 48px minmax(0, 1fr) minmax(0, 1fr);
+    width: 100%;
+    gap: 7px;
+  }
+  .listPage .header .button {
+    padding: 8px;
+    font-size: 13px;
+    gap: 5px;
+  }
+  .simpleDetail .header > .actions {
+    gap: 8px;
+  }
+  .simpleDetail .header > .actions .button {
+    padding: 10px 12px;
+  }
+  .simpleDetail .header > .actions .primary {
+    min-height: 46px;
+  }
+}

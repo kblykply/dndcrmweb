@@ -52,14 +52,20 @@ import { paymentProjectGroupLabel } from "../_lib/project-groups";
 import s from "../payment-tracking.module.css";
 
 function requirePortfolio(data: DetailData, tr: boolean) {
-  if (typeof data.portfolio?.fullyPaid !== "boolean" ||
-      !Array.isArray(data.portfolio?.cases) ||
-      !data.portfolio.cases.some((item) => item.key === data.item.key) ||
-      !Array.isArray(data.portfolio?.installments) ||
-      data.portfolio.installments.some((row) => typeof row.caseKey !== "string" || !("currency" in row))) {
-    throw new Error(tr
-      ? "Müşteri ve dairenin tüm ödemeleri doğrulanamadı. Dosyayı yeniden yükleyin."
-      : "All payments for this customer and unit could not be verified. Reload the case.");
+  if (
+    typeof data.portfolio?.fullyPaid !== "boolean" ||
+    !Array.isArray(data.portfolio?.cases) ||
+    !data.portfolio.cases.some((item) => item.key === data.item.key) ||
+    !Array.isArray(data.portfolio?.installments) ||
+    data.portfolio.installments.some(
+      (row) => typeof row.caseKey !== "string" || !("currency" in row),
+    )
+  ) {
+    throw new Error(
+      tr
+        ? "Müşteri ve dairenin tüm ödemeleri doğrulanamadı. Dosyayı yeniden yükleyin."
+        : "All payments for this customer and unit could not be verified. Reload the case.",
+    );
   }
 }
 
@@ -206,7 +212,11 @@ export default function PaymentTrackingDetail({
   useSourceExpiry(data?.source, () => {
     invalidatePaymentListCache();
     setData(null);
-    setError(language.current ? "Kaynak verisi güncelliğini kaybetti. Tutarları görmek için yenileyin." : "Source data has expired. Refresh to view amounts.");
+    setError(
+      language.current
+        ? "Kaynak verisi güncelliğini kaybetti. Tutarları görmek için yenileyin."
+        : "Source data has expired. Refresh to view amounts.",
+    );
   });
   async function act(action: Omit<PaymentTrackingAction, "expectedVersion">) {
     if (
@@ -254,7 +264,10 @@ export default function PaymentTrackingDetail({
     } catch (cause) {
       if (!controller.signal.aborted) {
         const issue = problem(cause, tr);
-        if (issue.discardSource) { invalidatePaymentListCache(); setData(null); }
+        if (issue.discardSource) {
+          invalidatePaymentListCache();
+          setData(null);
+        }
         setError(issue.message);
         setConflict(issue.conflict);
       }
@@ -328,8 +341,14 @@ export default function PaymentTrackingDetail({
   const currency = currencyName(item.identity.currency, tr);
   const sourceOverdue = item.overdueAmount != null && item.overdueAmount > 0;
   const installments = data.portfolio.installments
-    .filter((row) => installmentCurrency === "all" || (row.currency ?? "__NULL__") === installmentCurrency)
-    .filter((row) => installmentKind === "all" || row.paymentKind === installmentKind)
+    .filter(
+      (row) =>
+        installmentCurrency === "all" ||
+        (row.currency ?? "__NULL__") === installmentCurrency,
+    )
+    .filter(
+      (row) => installmentKind === "all" || row.paymentKind === installmentKind,
+    )
     .filter(
       (row) =>
         installmentScope === "all" ||
@@ -366,7 +385,10 @@ export default function PaymentTrackingDetail({
       contact: t("Görüşme kaydı", "Contact recorded"),
     })[type] || type;
   return (
-    <div className={s.page} aria-busy={loading || !!saving}>
+    <div
+      className={`${s.page} ${s.simpleDetail}`}
+      aria-busy={loading || !!saving}
+    >
       <header className={s.header}>
         <div>
           <Link
@@ -376,10 +398,7 @@ export default function PaymentTrackingDetail({
             <ArrowLeft size={15} />
             {t("Takip dosyaları", "Payment cases")}
           </Link>
-          <div className={s.eyebrow}>
-            <CalendarClock size={16} />
-            {t("Ödeme takip dosyası", "Payment follow-up case")}
-          </div>
+
           <h1>
             {item.customerName ||
               item.identity.customerCode ||
@@ -390,7 +409,9 @@ export default function PaymentTrackingDetail({
               <Building2 size={13} />
               {item.unitName || item.identity.unitCode || "—"}
             </span>
-            <span className={s.badge}>{t("Seçili takip", "Selected follow-up")} · {currency}</span>
+            <span className={s.badge}>
+              {t("Seçili takip", "Selected follow-up")} · {currency}
+            </span>
             <span
               className={`${s.badge} ${item.trackingStatus === "deferred" ? s.badgeAmber : item.trackingStatus === "overdue" ? s.badgeDanger : ""}`}
             >
@@ -400,25 +421,36 @@ export default function PaymentTrackingDetail({
                   ? t("Seçili bakiye ödendi", "Selected balance paid")
                   : statusLabel(item.trackingStatus, tr)}
             </span>
-            <span className={s.badge}>{paymentProjectGroupLabel(item.projectGroup, tr)}</span>
+            <span className={s.badge}>
+              {paymentProjectGroupLabel(item.projectGroup, tr)}
+            </span>
           </div>
-          <p>
-            {item.identity.customerCode} · {item.identity.unitCode}
-          </p>
-          <dl className={s.sourceTags}>
-            <div>
-              <dt>{t("Yetki Kodu", "Authorization code")}</dt>
-              <dd>{authorizationLabel(item.authorization, tr)}</dd>
-            </div>
-            <div>
-              <dt>{t("Temsilci", "Representative")}</dt>
-              <dd>{item.representatives?.join(" · ") || "—"}</dd>
-            </div>
-            <div>
-              <dt>{t("Broker", "Broker")}</dt>
-              <dd>{item.brokers?.join(" · ") || "—"}</dd>
-            </div>
-          </dl>
+          <details className={s.inlineDetails}>
+            <summary>{t("Müşteri bilgileri", "Customer information")}</summary>{" "}
+            <p>
+              {item.identity.customerCode} · {item.identity.unitCode}
+            </p>
+            <dl className={s.sourceTags}>
+              <div>
+                <dt>{t("Yetki Kodu", "Authorization code")}</dt>
+                <dd>{authorizationLabel(item.authorization, tr)}</dd>
+              </div>
+              <div>
+                <dt>{t("Temsilci", "Representative")}</dt>
+                <dd>{item.representatives?.join(" · ") || "—"}</dd>
+              </div>
+              <div>
+                <dt>{t("Broker", "Broker")}</dt>
+                <dd>{item.brokers?.join(" · ") || "—"}</dd>
+              </div>
+            </dl>
+            {data.source.importedAt && (
+              <p className={s.hint}>
+                {t("Veri güncellemesi", "Data updated")}:{" "}
+                {dateLabel(data.source.importedAt, tr, true)}
+              </p>
+            )}
+          </details>
         </div>
         <div className={s.actions}>
           <button
@@ -447,7 +479,13 @@ export default function PaymentTrackingDetail({
           </button>
         </div>
       </header>
-      <SourceFreshness source={data.source} tr={tr} failed={backgroundError} />
+      {backgroundError || data.source.freshness?.status === "stale" ? (
+        <SourceFreshness
+          source={data.source}
+          tr={tr}
+          failed={backgroundError}
+        />
+      ) : null}
       <SourceReviewNotice cases={data.portfolio.cases} tr={tr} />
       {error && (
         <>
@@ -501,7 +539,19 @@ export default function PaymentTrackingDetail({
           )}
         </div>
       )}
-      <PaymentPortfolioSummary data={data} backQuery={backQuery} busy={loading || !!saving} tr={tr} />
+      {data.portfolio.cases.length > 1 && (
+        <details className={s.disclosure}>
+          <summary>
+            {t("Diğer dövizlerdeki ödemeler", "Payments in other currencies")}
+          </summary>
+          <PaymentPortfolioSummary
+            data={data}
+            backQuery={backQuery}
+            busy={loading || !!saving}
+            tr={tr}
+          />
+        </details>
+      )}
       <div className={s.detailGrid}>
         <div className={s.stack}>
           <section className={s.panel}>
@@ -509,29 +559,18 @@ export default function PaymentTrackingDetail({
               <div>
                 <h2>
                   <Wallet size={18} />
-                  {t("Seçili dövizin takip özeti", "Selected currency follow-up")}
+                  {t("Borç özeti", "Balance summary")}
                 </h2>
-                <p>
-                  {t(
-                    "Bu özet seçili dövizin tüm ödeme türlerini kapsar. Taksit listesinin filtreleri bu toplamı ve takip işlemlerini değiştirmez.",
-                    "This summary includes every payment type in the selected currency. Installment filters do not change these totals or follow-up actions.",
-                  )}{" "}
-                  · {currency}
-                </p>
+                <p>{currency}</p>
               </div>
             </div>
             <dl className={s.facts}>
               <div>
-                <dt>{t("Açık bakiye", "Outstanding balance")}</dt>
+                <dt>{t("Kalan borç", "Outstanding balance")}</dt>
                 <dd className={s.big}>{money(item.outstanding, tr)}</dd>
               </div>
               <div>
-                <dt>
-                  {t(
-                    "Logo vadesine göre gecikmiş bakiye",
-                    "Overdue by Logo due date",
-                  )}
-                </dt>
+                <dt>{t("Gecikmiş borç", "Overdue balance")}</dt>
                 <dd className={`${s.big} ${sourceOverdue ? s.red : ""}`}>
                   {money(item.overdueAmount, tr)}
                 </dd>
@@ -545,8 +584,8 @@ export default function PaymentTrackingDetail({
                 <dd>{money(item.paid, tr)}</dd>
               </div>
               <div>
-                <dt>{t("En eski açık vade", "Oldest open due date")}</dt>
-                <dd>{dateLabel(item.oldestDueDate, tr)}</dd>
+                <dt>{t("Takip tarihi", "Follow-up date")}</dt>
+                <dd>{dateLabel(item.effectiveDueDate, tr)}</dd>
               </div>
               <div>
                 <dt>{t("Kaynak gecikmesi", "Source overdue days")}</dt>
@@ -556,390 +595,437 @@ export default function PaymentTrackingDetail({
                 </dd>
               </div>
             </dl>
-            <div className={s.divider} />
-            <p className={s.hint}>{t("Ödenen / kapatılan tutara iade ve mahsup işlemleri de dahil olabilir; bu tutar tek başına bankaya giren parayı göstermez.", "Paid / settled amounts may include returns and offsets; they do not by themselves show cash received into the bank.")}</p>
-            <p className={s.hint}>
-              {t(
-                "Yerel takip tarihi değişse bile kaynak gecikmesi ve bakiye burada korunur.",
-                "Source overdue amounts and due dates remain visible even when the local follow-up date changes.",
-              )}
-            </p>
+            <details className={s.inlineDetails}>
+              <summary>{t("Tutarlar hakkında", "About these amounts")}</summary>
+              <p className={s.hint}>
+                {t(
+                  "Ödenen tutar iade ve mahsup içerebilir. Takip tarihini değiştirmek borcu veya ödeme vadesini değiştirmez.",
+                  "Paid amounts can include returns and offsets. Changing follow-up dates does not change the debt or payment due date.",
+                )}
+              </p>
+            </details>
           </section>
-          <section className={s.panel}>
-            <div className={s.panelHead}>
-              <div>
-                <h2>
-                  <CalendarDays size={18} />
-                  {t(
-                    "Ödeme planı ve Logo vadeleri",
-                    "Payment plan and Logo due dates",
-                  )}
-                </h2>
-                <p>
-                  {installments.length} / {data.portfolio.installments.length}{" "}
-                  {t("kaynak satırı · tüm dövizler ve ödeme türleri", "source rows · all currencies and payment types")}
-                </p>
+          <details className={s.disclosure}>
+            <summary>{t("Ödeme planı", "Payment schedule")}</summary>{" "}
+            <section className={s.panel}>
+              <div className={s.panelHead}>
+                <div>
+                  <h2>
+                    <CalendarDays size={18} />
+                    {t(
+                      "Ödeme planı ve Logo vadeleri",
+                      "Payment plan and Logo due dates",
+                    )}
+                  </h2>
+                  <p>
+                    {installments.length} / {data.portfolio.installments.length}{" "}
+                    {t(
+                      "kaynak satırı · tüm dövizler ve ödeme türleri",
+                      "source rows · all currencies and payment types",
+                    )}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className={s.actions} style={{ marginBottom: 14 }}>
-              <label className={s.field}>
-                <span>{t("Taksit dövizi", "Installment currency")}</span>
-                <select
-                  aria-label={t("Taksit dövizi", "Installment currency")}
-                  value={installmentCurrency}
-                  onChange={(event) => setInstallmentCurrency(event.target.value)}
-                >
-                  <option value="all">{t("Tüm dövizler", "All currencies")}</option>
-                  {data.portfolio.cases.map((entry) => (
-                    <option key={entry.key} value={entry.identity.currency ?? "__NULL__"}>
-                      {currencyName(entry.identity.currency, tr)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={s.field}>
-                <span>{t("Taksit türü", "Installment type")}</span>
-                <select
-                  aria-label={t("Taksit türü", "Installment type")}
-                  value={installmentKind}
-                  onChange={(event) => setInstallmentKind(event.target.value)}
-                >
-                  {paymentKinds.map((kind) => (
-                    <option key={kind} value={kind}>{paymentKindLabel(kind, tr)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className={s.field}>
-                <span>{t("Taksit durumu", "Installment status")}</span>
-                <select
-                  aria-label={t("Taksit durumu", "Installment status")}
-                  value={installmentScope}
-                  onChange={(event) => setInstallmentScope(event.target.value)}
-                >
-                  <option value="all">{t("Tümü", "All")}</option>
-                  <option value="open">{t("Açık", "Open")}</option>
-                  <option value="overdue">{t("Gecikmiş", "Overdue")}</option>
-                  <option value="paid">{t("Ödenmiş", "Paid")}</option>
-                </select>
-              </label>
-              <label className={s.field}>
-                <span>{t("Taksit sıralaması", "Installment sort")}</span>
-                <select
-                  aria-label={t("Taksit sıralaması", "Installment sort")}
-                  value={installmentSort}
-                  onChange={(event) => setInstallmentSort(event.target.value)}
-                >
-                  <option value="date_asc">
-                    {t("En eski vade önce", "Oldest due date first")}
-                  </option>
-                  <option value="date_desc">
-                    {t("En yeni vade önce", "Newest due date first")}
-                  </option>
-                  <option value="outstanding_desc">
-                    {t("Döviz içinde en yüksek kalan önce", "Highest outstanding within each currency")}
-                  </option>
-                </select>
-              </label>
-            </div>
-            <div className={s.tableWrap}>
-              <table className={s.table} style={{ minWidth: 690 }}>
-                <thead>
-                  <tr>
-                    <th>{t("Asıl vade", "Original due")}</th>
-                    <th>{t("Döviz", "Currency")}</th>
-                    <th>{t("Ödeme türü", "Payment type")}</th>
-                    <th className={s.numeric}>{t("Tutar", "Amount")}</th>
-                    <th className={s.numeric}>{t("Ödenen / kapatılan", "Paid / settled")}</th>
-                    <th className={s.numeric}>{t("Kalan", "Outstanding")}</th>
-                    <th>{t("Durum", "Status")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {installments.map((row) => (
-                    <tr
-                      key={`${row.caseKey}:${row.sequence}`}
-                      className={
-                        row.status === "overdue" ? s.overdueRow : undefined
+              <details className={s.inlineDetails}>
+                <summary>
+                  {t("Ödeme listesini filtrele", "Filter payments")}
+                </summary>{" "}
+                <div className={s.actions} style={{ marginBottom: 14 }}>
+                  <label className={s.field}>
+                    <span>{t("Taksit dövizi", "Installment currency")}</span>
+                    <select
+                      aria-label={t("Taksit dövizi", "Installment currency")}
+                      value={installmentCurrency}
+                      onChange={(event) =>
+                        setInstallmentCurrency(event.target.value)
                       }
                     >
-                      <td>{dateLabel(row.dueDate, tr)}</td>
-                      <td>{currencyName(row.currency, tr)}</td>
-                      <td>{paymentKindLabel(row.paymentKind, tr)}</td>
-                      <td className={s.numeric}>{money(row.amount, tr)}</td>
-                      <td className={s.numeric}>{money(row.paid, tr)}</td>
-                      <td className={s.numeric}>
-                        {money(row.outstanding, tr)}
-                      </td>
-                      <td>
-                        <span
-                          className={`${s.badge} ${row.status === "overdue" ? s.badgeDanger : ""}`}
+                      <option value="all">
+                        {t("Tüm dövizler", "All currencies")}
+                      </option>
+                      {data.portfolio.cases.map((entry) => (
+                        <option
+                          key={entry.key}
+                          value={entry.identity.currency ?? "__NULL__"}
                         >
-                          {statusLabel(row.status, tr)}
-                          {row.overdueDays > 0
-                            ? ` · ${row.overdueDays} ${t("gün", "days")}`
-                            : ""}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {!installments.length && (
-                <div className={s.empty}>
-                  {t(
-                    "Bu döviz, tür ve durumda taksit bulunmuyor.",
-                    "No installments match this currency, type and status.",
-                  )}
+                          {currencyName(entry.identity.currency, tr)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className={s.field}>
+                    <span>{t("Taksit türü", "Installment type")}</span>
+                    <select
+                      aria-label={t("Taksit türü", "Installment type")}
+                      value={installmentKind}
+                      onChange={(event) =>
+                        setInstallmentKind(event.target.value)
+                      }
+                    >
+                      {paymentKinds.map((kind) => (
+                        <option key={kind} value={kind}>
+                          {paymentKindLabel(kind, tr)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className={s.field}>
+                    <span>{t("Taksit durumu", "Installment status")}</span>
+                    <select
+                      aria-label={t("Taksit durumu", "Installment status")}
+                      value={installmentScope}
+                      onChange={(event) =>
+                        setInstallmentScope(event.target.value)
+                      }
+                    >
+                      <option value="all">{t("Tümü", "All")}</option>
+                      <option value="open">{t("Açık", "Open")}</option>
+                      <option value="overdue">
+                        {t("Gecikmiş", "Overdue")}
+                      </option>
+                      <option value="paid">{t("Ödenmiş", "Paid")}</option>
+                    </select>
+                  </label>
+                  <label className={s.field}>
+                    <span>{t("Taksit sıralaması", "Installment sort")}</span>
+                    <select
+                      aria-label={t("Taksit sıralaması", "Installment sort")}
+                      value={installmentSort}
+                      onChange={(event) =>
+                        setInstallmentSort(event.target.value)
+                      }
+                    >
+                      <option value="date_asc">
+                        {t("En eski vade önce", "Oldest due date first")}
+                      </option>
+                      <option value="date_desc">
+                        {t("En yeni vade önce", "Newest due date first")}
+                      </option>
+                      <option value="outstanding_desc">
+                        {t(
+                          "Döviz içinde en yüksek kalan önce",
+                          "Highest outstanding within each currency",
+                        )}
+                      </option>
+                    </select>
+                  </label>
                 </div>
-              )}
-            </div>
-          </section>
-          <section className={s.panel}>
-            <div className={s.panelHead}>
-              <div>
-                <h2>
-                  <History size={18} />
-                  {t("Dosya geçmişi", "Case history")}
-                </h2>
-                <p>
+              </details>{" "}
+              <div className={s.tableWrap}>
+                <table className={s.table} style={{ minWidth: 690 }}>
+                  <thead>
+                    <tr>
+                      <th>{t("Asıl vade", "Original due")}</th>
+                      <th>{t("Döviz", "Currency")}</th>
+                      <th>{t("Ödeme türü", "Payment type")}</th>
+                      <th className={s.numeric}>{t("Tutar", "Amount")}</th>
+                      <th className={s.numeric}>
+                        {t("Ödenen / kapatılan", "Paid / settled")}
+                      </th>
+                      <th className={s.numeric}>{t("Kalan", "Outstanding")}</th>
+                      <th>{t("Durum", "Status")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {installments.map((row) => (
+                      <tr
+                        key={`${row.caseKey}:${row.sequence}`}
+                        className={
+                          row.status === "overdue" ? s.overdueRow : undefined
+                        }
+                      >
+                        <td>{dateLabel(row.dueDate, tr)}</td>
+                        <td>{currencyName(row.currency, tr)}</td>
+                        <td>{paymentKindLabel(row.paymentKind, tr)}</td>
+                        <td className={s.numeric}>{money(row.amount, tr)}</td>
+                        <td className={s.numeric}>{money(row.paid, tr)}</td>
+                        <td className={s.numeric}>
+                          {money(row.outstanding, tr)}
+                        </td>
+                        <td>
+                          <span
+                            className={`${s.badge} ${row.status === "overdue" ? s.badgeDanger : ""}`}
+                          >
+                            {statusLabel(row.status, tr)}
+                            {row.overdueDays > 0
+                              ? ` · ${row.overdueDays} ${t("gün", "days")}`
+                              : ""}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {!installments.length && (
+                  <div className={s.empty}>
+                    {t(
+                      "Bu döviz, tür ve durumda taksit bulunmuyor.",
+                      "No installments match this currency, type and status.",
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+          </details>
+          <details className={s.disclosure}>
+            <summary>{t("Geçmiş işlemler", "Previous actions")}</summary>{" "}
+            <section className={s.panel}>
+              <div className={s.panelHead}>
+                <div>
+                  <h2>
+                    <History size={18} />
+                    {t("Dosya geçmişi", "Case history")}
+                  </h2>
+                  <p>
+                    {t(
+                      `${currency} dosyasının yerel takip işlemleri ve ekip notları.`,
+                      `Local follow-up actions and team notes for the ${currency} case.`,
+                    )}
+                  </p>
+                </div>
+              </div>
+              {data.history.length ? (
+                <ol className={s.history}>
+                  {data.history.map((event) => (
+                    <li key={event.id}>
+                      <strong>
+                        {eventTitle(event.type)}
+                        {event.channel
+                          ? ` · ${event.channel === "phone" ? t("Telefon", "Phone") : event.channel === "email" ? t("E-posta", "Email") : "WhatsApp"}`
+                          : ""}
+                      </strong>
+                      <p>{event.body}</p>
+                      {(event.previousDate || event.nextDate) && (
+                        <p className={s.hint}>
+                          {dateLabel(event.previousDate, tr)} →{" "}
+                          {dateLabel(event.nextDate, tr)}
+                        </p>
+                      )}
+                      <small>
+                        {event.actorName} ·{" "}
+                        {dateLabel(event.createdAt, tr, true)}
+                      </small>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className={s.hint}>
                   {t(
-                    `${currency} dosyasının yerel takip işlemleri ve ekip notları.`,
-                    `Local follow-up actions and team notes for the ${currency} case.`,
+                    "Henüz takip işlemi kaydedilmemiş.",
+                    "No follow-up actions have been recorded yet.",
                   )}
                 </p>
-              </div>
-            </div>
-            {data.history.length ? (
-              <ol className={s.history}>
-                {data.history.map((event) => (
-                  <li key={event.id}>
-                    <strong>
-                      {eventTitle(event.type)}
-                      {event.channel
-                        ? ` · ${event.channel === "phone" ? t("Telefon", "Phone") : event.channel === "email" ? t("E-posta", "Email") : "WhatsApp"}`
-                        : ""}
-                    </strong>
-                    <p>{event.body}</p>
-                    {(event.previousDate || event.nextDate) && (
-                      <p className={s.hint}>
-                        {dateLabel(event.previousDate, tr)} →{" "}
-                        {dateLabel(event.nextDate, tr)}
-                      </p>
-                    )}
-                    <small>
-                      {event.actorName} · {dateLabel(event.createdAt, tr, true)}
-                    </small>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className={s.hint}>
-                {t(
-                  "Henüz takip işlemi kaydedilmemiş.",
-                  "No follow-up actions have been recorded yet.",
-                )}
-              </p>
-            )}
-            {data.historyHasMore && (
-              <p className={s.hint}>
-                {t(
-                  `En son ${data.history.length} kayıt gösteriliyor. Daha eski kayıtlar saklanır.`,
-                  `Showing the latest ${data.history.length} entries. Earlier history is retained.`,
-                )}
-              </p>
-            )}
-          </section>
+              )}
+              {data.historyHasMore && (
+                <p className={s.hint}>
+                  {t(
+                    `En son ${data.history.length} kayıt gösteriliyor. Daha eski kayıtlar saklanır.`,
+                    `Showing the latest ${data.history.length} entries. Earlier history is retained.`,
+                  )}
+                </p>
+              )}
+            </section>
+          </details>
         </div>
         <aside
           className={s.stack}
           aria-label={t("Takip işlemleri", "Follow-up actions")}
         >
-          <div className={s.actionCurrencyScope} role="note">
-            <strong>{t("Seçili takip dövizi", "Selected follow-up currency")}: {currency}</strong>
-            <p>{t(
-              "Bu alandaki işlemler yalnız bu döviz dosyasına kaydedilir. Diğer dövizlerdeki ödemeler değişmez.",
-              "Actions in this area are saved only to this currency case. Payments in other currencies remain unchanged.",
-            )}</p>
+          <div className={s.actionCurrencyScope}>
+            {currency} · {t("Takip işlemleri", "Follow-up actions")}
           </div>
-          <section className={s.panel}>
-            <div className={s.panelHead}>
-              <div>
-                <h2>
-                  <CalendarClock size={18} />
-                  {t("Yerel takip tarihi", "Local follow-up date")}
-                </h2>
-                <p>
-                  {t(
-                    "Takip işlemleri bu müşteri/daire/döviz dosyasının tüm ödemelerine uygulanır; taksit türü seçimi işlemin kapsamını daraltmaz.",
-                    "Follow-up actions apply to every payment in this customer/unit/currency case; the installment type selection does not narrow the action.",
-                  )}
-                </p>
+          <details className={s.disclosure}>
+            <summary>
+              {t("Takip tarihini değiştir", "Change follow-up date")}
+            </summary>{" "}
+            <section className={s.panel}>
+              <div className={s.panelHead}>
+                <div>
+                  <h2>
+                    <CalendarClock size={18} />
+                    {t("Yerel takip tarihi", "Local follow-up date")}
+                  </h2>
+                  <p>
+                    {t(
+                      "Bu döviz dosyasının takip tarihini değiştirir.",
+                      "Changes the follow-up date for this currency case.",
+                    )}
+                  </p>
+                </div>
               </div>
-            </div>
-            <dl className={s.facts}>
-              <div className={s.wide}>
-                <dt>
-                  {tracking?.trackingDate
-                    ? t("Ertelenen takip tarihi", "Deferred follow-up date")
-                    : t("Geçerli takip tarihi", "Current follow-up date")}
-                </dt>
-                <dd className={tracking?.trackingDate ? s.amber : undefined}>
-                  {dateLabel(item.effectiveDueDate, tr)}
-                </dd>
-              </div>
-            </dl>
-            <div className={s.divider} />
-            <form
-              className={s.form}
-              onSubmit={(event) => {
-                event.preventDefault();
-                changeDate();
-              }}
-            >
-              <label className={s.field}>
-                <span>{t("Tarih işlemi", "Date action")}</span>
-                <select
-                  aria-label={t("Tarih işlemi", "Date action")}
-                  value={mode}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    setMode(event.target.value as "defer" | "reset")
-                  }
-                >
-                  <option value="defer">
-                    {t("Takibi ertele", "Defer follow-up")}
-                  </option>
-                  <option value="reset" disabled={!tracking?.trackingDate}>
-                    {t("Asıl vadeye dön", "Restore original due date")}
-                  </option>
-                </select>
-              </label>
-              {mode === "defer" && (
+              <dl className={s.facts}>
+                <div className={s.wide}>
+                  <dt>
+                    {tracking?.trackingDate
+                      ? t("Ertelenen takip tarihi", "Deferred follow-up date")
+                      : t("Geçerli takip tarihi", "Current follow-up date")}
+                  </dt>
+                  <dd className={tracking?.trackingDate ? s.amber : undefined}>
+                    {dateLabel(item.effectiveDueDate, tr)}
+                  </dd>
+                </div>
+              </dl>
+              <div className={s.divider} />
+              <form
+                className={s.form}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  changeDate();
+                }}
+              >
                 <label className={s.field}>
-                  <span>{t("Yeni takip tarihi", "New follow-up date")}</span>
-                  <input
-                    type="date"
-                    required
+                  <span>{t("Tarih işlemi", "Date action")}</span>
+                  <select
+                    aria-label={t("Tarih işlemi", "Date action")}
+                    value={mode}
                     disabled={disabled}
-                    aria-label={t("Yeni takip tarihi", "New follow-up date")}
-                    value={followDate}
-                    onChange={(event) => setFollowDate(event.target.value)}
+                    onChange={(event) =>
+                      setMode(event.target.value as "defer" | "reset")
+                    }
+                  >
+                    <option value="defer">
+                      {t("Takibi ertele", "Defer follow-up")}
+                    </option>
+                    <option value="reset" disabled={!tracking?.trackingDate}>
+                      {t("Ertelemeyi kaldır", "Remove deferral")}
+                    </option>
+                  </select>
+                </label>
+                {mode === "defer" && (
+                  <label className={s.field}>
+                    <span>{t("Yeni takip tarihi", "New follow-up date")}</span>
+                    <input
+                      type="date"
+                      required
+                      disabled={disabled}
+                      aria-label={t("Yeni takip tarihi", "New follow-up date")}
+                      value={followDate}
+                      onChange={(event) => setFollowDate(event.target.value)}
+                    />
+                  </label>
+                )}
+                <label className={s.field}>
+                  <span>{t("Gerekçe · zorunlu", "Reason · required")}</span>
+                  <textarea
+                    rows={3}
+                    required
+                    maxLength={2000}
+                    aria-label={t("Gerekçe · zorunlu", "Reason · required")}
+                    value={reason}
+                    disabled={!!saving || loading}
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder={t(
+                      "Neden ertelendi veya asıl vadeye dönüldü?",
+                      "Why defer or restore the original due date?",
+                    )}
                   />
                 </label>
-              )}
-              <label className={s.field}>
-                <span>{t("Gerekçe · zorunlu", "Reason · required")}</span>
-                <textarea
-                  rows={3}
-                  required
-                  maxLength={2000}
-                  aria-label={t("Gerekçe · zorunlu", "Reason · required")}
-                  value={reason}
-                  disabled={!!saving || loading}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder={t(
-                    "Neden ertelendi veya asıl vadeye dönüldü?",
-                    "Why defer or restore the original due date?",
+                <p className={s.hint}>
+                  {t(
+                    "Bu işlem Logo kaynağındaki vadeyi, ödeme planını veya borcu değiştirmez.",
+                    "This does not modify due dates, payment schedules or balances in the Logo source.",
                   )}
-                />
-              </label>
-              <p className={s.hint}>
-                {t(
-                  "Bu işlem Logo kaynağındaki vadeyi, ödeme planını veya borcu değiştirmez.",
-                  "This does not modify due dates, payment schedules or balances in the Logo source.",
-                )}
-              </p>
-              <button
-                className={s.primary}
-                disabled={
-                  disabled ||
-                  !reason.trim() ||
-                  (mode === "defer" && !followDate) ||
-                  (mode === "reset" && !tracking?.trackingDate)
-                }
-              >
-                {mode === "defer" ? (
-                  <Clock3 size={15} />
-                ) : (
-                  <RotateCcw size={15} />
-                )}
-                {saving === mode
-                  ? t("Kaydediliyor…", "Saving…")
-                  : mode === "defer"
-                    ? t("Takibi ertele", "Defer follow-up")
-                    : t("Asıl vadeye dön", "Restore original due date")}
-              </button>
-            </form>
-          </section>
-          <section className={s.panel}>
-            <div className={s.panelHead}>
-              <h2>
-                <UserRound size={18} />
-                {t("Sorumlu ve öncelik", "Owner and priority")}
-              </h2>
-            </div>
-            <form
-              className={s.form}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void act({
-                  type: "assign",
-                  assigneeId: assignee || null,
-                  body: "",
-                });
-              }}
-            >
-              <p className={s.hint}>
-                {t("Mevcut sorumlu", "Current owner")}:{" "}
-                <strong>
-                  {tracking?.assigneeName || t("Atanmamış", "Unassigned")}
-                </strong>
-              </p>
-              <label className={s.field}>
-                <span>{t("Dosya sorumlusu", "Case owner")}</span>
-                <select
-                  aria-label={t("Dosya sorumlusu", "Case owner")}
-                  value={assignee}
-                  disabled={disabled}
-                  onChange={(event) => setAssignee(event.target.value)}
+                </p>
+                <button
+                  className={s.primary}
+                  disabled={
+                    disabled ||
+                    !reason.trim() ||
+                    (mode === "defer" && !followDate) ||
+                    (mode === "reset" && !tracking?.trackingDate)
+                  }
                 >
-                  <option value="">{t("Atanmamış", "Unassigned")}</option>
-                  {data.assignees.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  {mode === "defer" ? (
+                    <Clock3 size={15} />
+                  ) : (
+                    <RotateCcw size={15} />
+                  )}
+                  {saving === mode
+                    ? t("Kaydediliyor…", "Saving…")
+                    : mode === "defer"
+                      ? t("Takibi ertele", "Defer follow-up")
+                      : t("Ertelemeyi kaldır", "Remove deferral")}
+                </button>
+              </form>
+            </section>
+          </details>
+          <details className={s.disclosure}>
+            <summary>{t("Sorumlu ve öncelik", "Owner and priority")}</summary>{" "}
+            <section className={s.panel}>
+              <div className={s.panelHead}>
+                <h2>
+                  <UserRound size={18} />
+                  {t("Sorumlu ve öncelik", "Owner and priority")}
+                </h2>
+              </div>
+              <form
+                className={s.form}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void act({
+                    type: "assign",
+                    assigneeId: assignee || null,
+                    body: "",
+                  });
+                }}
+              >
+                <p className={s.hint}>
+                  {t("Mevcut sorumlu", "Current owner")}:{" "}
+                  <strong>
+                    {tracking?.assigneeName || t("Atanmamış", "Unassigned")}
+                  </strong>
+                </p>
+                <label className={s.field}>
+                  <span>{t("Dosya sorumlusu", "Case owner")}</span>
+                  <select
+                    aria-label={t("Dosya sorumlusu", "Case owner")}
+                    value={assignee}
+                    disabled={disabled}
+                    onChange={(event) => setAssignee(event.target.value)}
+                  >
+                    <option value="">{t("Atanmamış", "Unassigned")}</option>
+                    {data.assignees.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className={s.button}
+                  disabled={
+                    disabled || assignee === (tracking?.assigneeId || "")
+                  }
+                >
+                  {t("Sorumluyu kaydet", "Save owner")}
+                </button>
+              </form>
+              <div className={s.divider} />
               <button
                 className={s.button}
-                disabled={disabled || assignee === (tracking?.assigneeId || "")}
+                disabled={disabled}
+                aria-pressed={tracking?.priority === "high"}
+                onClick={() =>
+                  void act({
+                    type: "priority",
+                    priority: tracking?.priority === "high" ? "normal" : "high",
+                    body: "",
+                  })
+                }
               >
-                {t("Sorumluyu kaydet", "Save owner")}
+                <Flag size={15} />
+                {tracking?.priority === "high"
+                  ? t(
+                      "Yüksek öncelik · normale dön",
+                      "High priority · set normal",
+                    )
+                  : t(
+                      "Yüksek öncelik olarak işaretle",
+                      "Mark as high priority",
+                    )}
               </button>
-            </form>
-            <div className={s.divider} />
-            <button
-              className={s.button}
-              disabled={disabled}
-              aria-pressed={tracking?.priority === "high"}
-              onClick={() =>
-                void act({
-                  type: "priority",
-                  priority: tracking?.priority === "high" ? "normal" : "high",
-                  body: "",
-                })
-              }
-            >
-              <Flag size={15} />
-              {tracking?.priority === "high"
-                ? t(
-                    "Yüksek öncelik · normale dön",
-                    "High priority · set normal",
-                  )
-                : t("Yüksek öncelik olarak işaretle", "Mark as high priority")}
-            </button>
-          </section>
+            </section>
+          </details>
           <section className={s.panel}>
             <div className={s.panelHead}>
               <h2>
@@ -971,78 +1057,75 @@ export default function PaymentTrackingDetail({
               </button>
             </form>
           </section>
-          <section className={s.panel}>
-            <div className={s.panelHead}>
-              <h2>
-                <MessageCircle size={18} />
-                {t("Görüşme kaydı", "Contact record")}
-              </h2>
-            </div>
-            <p className={s.hint}>
-              {t(
-                "Gerçekleşen görüşmeyi kendi beyanınızla kaydedin. Taslak açmak otomatik görüşme kaydı oluşturmaz.",
-                "Record a contact that took place. Opening a draft does not automatically create a contact record.",
-              )}
-            </p>
-            <form
-              className={s.form}
-              style={{ marginTop: 14 }}
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (contactNote.trim())
-                  void act({
-                    type: "contact",
-                    channel: contactChannel,
-                    body: contactNote.trim(),
-                  });
-              }}
-            >
-              <label className={s.field}>
-                <span>{t("Görüşme kanalı", "Contact channel")}</span>
-                <select
-                  aria-label={t("Görüşme kanalı", "Contact channel")}
-                  value={contactChannel}
-                  onChange={(event) =>
-                    setContactChannel(
-                      event.target.value as "phone" | "email" | "whatsapp",
-                    )
-                  }
-                  disabled={disabled}
-                >
-                  <option value="phone">{t("Telefon", "Phone")}</option>
-                  <option value="email">{t("E-posta", "Email")}</option>
-                  <option value="whatsapp">WhatsApp</option>
-                </select>
-              </label>
-              <label className={s.field}>
-                <span>{t("Görüşme özeti", "Contact summary")}</span>
-                <textarea
-                  required
-                  maxLength={2000}
-                  rows={3}
-                  aria-label={t("Görüşme özeti", "Contact summary")}
-                  value={contactNote}
-                  onChange={(event) => setContactNote(event.target.value)}
-                  disabled={!!saving || loading}
-                />
-              </label>
-              <button
-                className={s.button}
-                disabled={disabled || !contactNote.trim()}
+          <details className={s.disclosure}>
+            <summary>{t("Görüşme kaydet", "Record a contact")}</summary>{" "}
+            <section className={s.panel}>
+              <div className={s.panelHead}>
+                <h2>
+                  <MessageCircle size={18} />
+                  {t("Görüşme kaydı", "Contact record")}
+                </h2>
+              </div>
+              <p className={s.hint}>
+                {t(
+                  "Gerçekleşen görüşmeyi kendi beyanınızla kaydedin. Taslak açmak otomatik görüşme kaydı oluşturmaz.",
+                  "Record a contact that took place. Opening a draft does not automatically create a contact record.",
+                )}
+              </p>
+              <form
+                className={s.form}
+                style={{ marginTop: 14 }}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (contactNote.trim())
+                    void act({
+                      type: "contact",
+                      channel: contactChannel,
+                      body: contactNote.trim(),
+                    });
+                }}
               >
-                {t("Görüşmeyi kaydet", "Record contact")}
-              </button>
-            </form>
-          </section>
+                <label className={s.field}>
+                  <span>{t("Görüşme kanalı", "Contact channel")}</span>
+                  <select
+                    aria-label={t("Görüşme kanalı", "Contact channel")}
+                    value={contactChannel}
+                    onChange={(event) =>
+                      setContactChannel(
+                        event.target.value as "phone" | "email" | "whatsapp",
+                      )
+                    }
+                    disabled={disabled}
+                  >
+                    <option value="phone">{t("Telefon", "Phone")}</option>
+                    <option value="email">{t("E-posta", "Email")}</option>
+                    <option value="whatsapp">WhatsApp</option>
+                  </select>
+                </label>
+                <label className={s.field}>
+                  <span>{t("Görüşme özeti", "Contact summary")}</span>
+                  <textarea
+                    required
+                    maxLength={2000}
+                    rows={3}
+                    aria-label={t("Görüşme özeti", "Contact summary")}
+                    value={contactNote}
+                    onChange={(event) => setContactNote(event.target.value)}
+                    disabled={!!saving || loading}
+                  />
+                </label>
+                <button
+                  className={s.button}
+                  disabled={disabled || !contactNote.trim()}
+                >
+                  {t("Görüşmeyi kaydet", "Record contact")}
+                </button>
+              </form>
+            </section>
+          </details>
         </aside>
       </div>
-      <footer className={s.footer}>
-        <span>{data.source.database} · {data.source.view}</span>
-        <span>
-          {t("Kaynak okuması", "Source read")}:{" "}
-          {dateLabel(data.source.generatedAt, tr, true)}
-        </span>
-      </footer>
+
       {compose && (
         <ComposeDialog
           channel={compose}

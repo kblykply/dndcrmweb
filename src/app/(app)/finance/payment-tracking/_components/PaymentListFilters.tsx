@@ -23,7 +23,10 @@ import { currencyName, dateLabel } from "../_lib/utils";
 import { invoiceOkLabel } from "../_lib/invoice-ok";
 import { ALL_CURRENCIES, currencyToken } from "../_lib/list-currencies";
 import { paymentKinds, paymentKindLabel } from "../_lib/payment-kinds";
-import { paymentProjectGroups, paymentProjectGroupLabel } from "../_lib/project-groups";
+import {
+  paymentProjectGroups,
+  paymentProjectGroupLabel,
+} from "../_lib/project-groups";
 import {
   ActiveFilterChips,
   AdvancedFilterPanel,
@@ -104,7 +107,13 @@ export default function PaymentListFilters({
       value: item.code,
       label: item.name || item.code,
     })),
-    invoiceOk: [{ value: "all", label: t("Tümü", "All") }, ...(data?.invoiceOkOptions || []).map((option) => ({ ...option, label: invoiceOkLabel(option.value, tr) }))],
+    invoiceOk: [
+      { value: "all", label: t("Tümü", "All") },
+      ...(data?.invoiceOkOptions || []).map((option) => ({
+        ...option,
+        label: invoiceOkLabel(option.value, tr),
+      })),
+    ],
     authorizationCode: data?.filterOptions?.authorizationCodes || [],
     representative: data?.filterOptions?.representatives || [],
     broker: data?.filterOptions?.brokers || [],
@@ -185,25 +194,46 @@ export default function PaymentListFilters({
           }
           onChange={(event) => {
             if (key === "projectGroup") {
-              onApply({ ...draft, projectGroup: event.target.value, project: "", page: 1 });
+              onApply({
+                ...draft,
+                projectGroup: event.target.value,
+                project: "",
+                page: 1,
+              });
               return;
             }
             if (key === "representative") {
-              onApply({ ...draft, representative: event.target.value, page: 1 });
+              onApply({
+                ...draft,
+                representative: event.target.value,
+                page: 1,
+              });
               return;
             }
-            onDraft(key === "authorizationState"
-              ? changeFilterAuthorizationState(draft, event.target.value)
-              : { ...draft, [key]: event.target.value });
+            onDraft(
+              key === "authorizationState"
+                ? changeFilterAuthorizationState(draft, event.target.value)
+                : { ...draft, [key]: event.target.value },
+            );
           }}
         >
           {allLabel && <option value="">{allLabel}</option>}
           {value && !choices.some((item) => item.value === value) && (
-            <option value={value}>{key === "invoiceOk" ? invoiceOkLabel(value, tr) : value}</option>
+            <option value={value}>
+              {key === "invoiceOk" ? invoiceOkLabel(value, tr) : value}
+            </option>
           )}
           {choices.map((item) => (
-            <option key={item.value} value={item.value} disabled={unavailable &&
-              (key === "authorizationState" ? item.value !== "all" : key === "representative" || key === "broker")}>
+            <option
+              key={item.value}
+              value={item.value}
+              disabled={
+                unavailable &&
+                (key === "authorizationState"
+                  ? item.value !== "all"
+                  : key === "representative" || key === "broker")
+              }
+            >
               {item.label}
             </option>
           ))}
@@ -225,20 +255,31 @@ export default function PaymentListFilters({
         <select
           aria-label={labels.authorizationCode}
           value={value}
-          onChange={(event) => onDraft(changeFilterAuthorizationCode(draft, event.target.value))}
+          onChange={(event) =>
+            onDraft(changeFilterAuthorizationCode(draft, event.target.value))
+          }
         >
           <option value="">
             {t("Tüm yetki kodları", "All authorization codes")}
           </option>
-          <option value="blank" disabled={unavailable}>{blankAuthorizationLabel}</option>
+          <option value="blank" disabled={unavailable}>
+            {blankAuthorizationLabel}
+          </option>
           {draft.authorizationCode &&
             !choices.some((item) => item.value === draft.authorizationCode) && (
-              <option value={`code:${draft.authorizationCode}`} disabled={unavailable}>
+              <option
+                value={`code:${draft.authorizationCode}`}
+                disabled={unavailable}
+              >
                 {draft.authorizationCode}
               </option>
             )}
           {choices.map((item) => (
-            <option key={item.value} value={`code:${item.value}`} disabled={unavailable}>
+            <option
+              key={item.value}
+              value={`code:${item.value}`}
+              disabled={unavailable}
+            >
               {item.label}
             </option>
           ))}
@@ -249,7 +290,13 @@ export default function PaymentListFilters({
   const chips: AppliedFilterChip[] = [];
   for (const [rawKey, label] of Object.entries(labels)) {
     const key = rawKey as TextFilterKey;
-    if (filters[key] !== (key === "authorizationState" || key === "invoiceOk" ? "all" : defaults[key]) && filters[key] !== "") {
+    if (
+      filters[key] !==
+        (key === "authorizationState" || key === "invoiceOk"
+          ? "all"
+          : defaults[key]) &&
+      filters[key] !== ""
+    ) {
       chips.push({
         key,
         label:
@@ -258,7 +305,9 @@ export default function PaymentListFilters({
             : label,
         value:
           options[key]?.find((item) => item.value === filters[key])?.label ||
-          (key === "invoiceOk" ? invoiceOkLabel(filters[key], tr) : filters[key]),
+          (key === "invoiceOk"
+            ? invoiceOkLabel(filters[key], tr)
+            : filters[key]),
       });
     }
   }
@@ -272,7 +321,14 @@ export default function PaymentListFilters({
       value: `${value(filters[range.from])} – ${value(filters[range.to])}`,
     });
   }
-  const quickKeys = ["projectGroup", "representative", "q", "scope", "authorizationCode", "invoiceOk"];
+  const quickKeys = [
+    "projectGroup",
+    "representative",
+    "q",
+    "scope",
+    "authorizationCode",
+    "invoiceOk",
+  ];
   const advancedCount = chips.filter(
     (chip) =>
       !quickKeys.includes(chip.key) &&
@@ -281,25 +337,67 @@ export default function PaymentListFilters({
         filters.authorizationState === "blank"
       ),
   ).length;
-  const reset = () => onApply({ ...defaults, invoiceOk: "all", authorizationState: "all", currency: draft.currency });
-  const appliedCurrency = filters.currency || (data?.currencyMode === "all"
-    ? ALL_CURRENCIES : data ? currencyToken(data.selectedCurrency) : "");
+  const reset = () =>
+    onApply({
+      ...defaults,
+      invoiceOk: "all",
+      authorizationState: "all",
+      currency: draft.currency,
+    });
+  const appliedCurrency =
+    filters.currency ||
+    (data?.currencyMode === "all"
+      ? ALL_CURRENCIES
+      : data
+        ? currencyToken(data.selectedCurrency)
+        : "");
   const scopeParts = [
     paymentKindLabel(filters.paymentKind, tr),
-    appliedCurrency === ALL_CURRENCIES ? t("Tüm dövizler", "All currencies") :
-      appliedCurrency ? currencyName(appliedCurrency === "__NULL__" ? null : appliedCurrency, tr) : "",
-    filters.projectGroup ? options.projectGroup?.find((option) => option.value === filters.projectGroup)?.label || filters.projectGroup : "",
-    filters.authorizationState === "blank" ? t("Yetki kodu boş", "Blank authorization code") :
-      filters.authorizationCode ? `${t("Yetki", "Code")}: ${filters.authorizationCode}` :
-      filters.authorizationState !== "all" ? options.authorizationState?.find((option) => option.value === filters.authorizationState)?.label : "",
-    filters.invoiceOk !== "all" ? `${t("Fatura OK", "Invoice OK")}: ${invoiceOkLabel(filters.invoiceOk, tr)}` : "",
-    filters.representative ? options.representative?.find((option) => option.value === filters.representative)?.label || filters.representative : "",
+    appliedCurrency === ALL_CURRENCIES
+      ? t("Tüm dövizler", "All currencies")
+      : appliedCurrency
+        ? currencyName(
+            appliedCurrency === "__NULL__" ? null : appliedCurrency,
+            tr,
+          )
+        : "",
+    filters.projectGroup
+      ? options.projectGroup?.find(
+          (option) => option.value === filters.projectGroup,
+        )?.label || filters.projectGroup
+      : "",
+    filters.authorizationState === "blank"
+      ? t("Yetki kodu boş", "Blank authorization code")
+      : filters.authorizationCode
+        ? `${t("Yetki", "Code")}: ${filters.authorizationCode}`
+        : filters.authorizationState !== "all"
+          ? options.authorizationState?.find(
+              (option) => option.value === filters.authorizationState,
+            )?.label
+          : "",
+    filters.invoiceOk !== "all"
+      ? `${t("Fatura OK", "Invoice OK")}: ${invoiceOkLabel(filters.invoiceOk, tr)}`
+      : "",
+    filters.representative
+      ? options.representative?.find(
+          (option) => option.value === filters.representative,
+        )?.label || filters.representative
+      : "",
     filters.scope !== defaults.scope ? scopeLabel(filters.scope) : "",
   ].filter(Boolean);
-  const extraFilterCount = chips.filter((chip) =>
-    (chip.key === "authorizationState" && !!filters.authorizationCode) || ![
-    "q", "projectGroup", "authorizationCode", "authorizationState", "representative", "scope", "invoiceOk",
-  ].includes(chip.key)).length;
+  const extraFilterCount = chips.filter(
+    (chip) =>
+      (chip.key === "authorizationState" && !!filters.authorizationCode) ||
+      ![
+        "q",
+        "projectGroup",
+        "authorizationCode",
+        "authorizationState",
+        "representative",
+        "scope",
+        "invoiceOk",
+      ].includes(chip.key),
+  ).length;
   return (
     <section
       className={`${s.panel} ${compact.panel}`}
@@ -318,17 +416,42 @@ export default function PaymentListFilters({
       >
         <div className={compact.toolbar}>
           <label className={`${s.field} ${compact.search}`}>
-            <span className={compact.srOnly}>{t("Müşteri / daire ara", "Search customer / unit")}</span>
+            <span className={compact.srOnly}>
+              {t("Müşteri / daire ara", "Search customer / unit")}
+            </span>
             <input
               aria-label={t("Müşteri / daire ara", "Search customer / unit")}
               value={draft.q}
               maxLength={200}
               onChange={(event) => onDraft({ ...draft, q: event.target.value })}
-              placeholder={t("İsim, cari kodu veya daire…", "Name, customer code or unit…")}
+              placeholder={t(
+                "İsim, cari kodu veya daire…",
+                "Name, customer code or unit…",
+              )}
             />
           </label>
+          <label className={s.field}>
+            <span className={compact.srOnly}>
+              {t("Takip durumu", "Follow-up status")}
+            </span>
+            <select
+              aria-label={t("Liste durumu", "List status")}
+              value={draft.scope}
+              disabled={loading}
+              onChange={(event) =>
+                onApply({ ...draft, scope: event.target.value, page: 1 })
+              }
+            >
+              {scopes.map((value) => (
+                <option key={value} value={value}>
+                  {scopeLabel(value)}
+                </option>
+              ))}
+            </select>
+          </label>
           <button type="submit" className={s.primary} disabled={loading}>
-            <Search size={15} aria-hidden="true" />{t("Ara", "Search")}
+            <Search size={15} aria-hidden="true" />
+            {t("Ara", "Search")}
           </button>
           <button
             type="button"
@@ -339,25 +462,40 @@ export default function PaymentListFilters({
           >
             <SlidersHorizontal size={15} aria-hidden="true" />
             {t("Filtreler", "Filters")}
-            <ChevronDown size={15} aria-hidden="true" className={compact.chevron} />
+            <ChevronDown
+              size={15}
+              aria-hidden="true"
+              className={compact.chevron}
+            />
           </button>
         </div>
         {!expanded && (
-          <div className={compact.scope} aria-label={t("Uygulanan kapsam", "Applied scope")}>
+          <div
+            className={compact.scope}
+            aria-label={t("Uygulanan kapsam", "Applied scope")}
+          >
             <span>{scopeParts.join(" · ")}</span>
             {extraFilterCount > 0 && (
-              <span className={compact.badge}>+{extraFilterCount} {t("filtre", "filters")}</span>
+              <span className={compact.badge}>
+                +{extraFilterCount} {t("filtre", "filters")}
+              </span>
             )}
           </div>
         )}
         {!expanded && errorKeys && (
-          <p className={s.notice} role="alert">{t(
-            "Bazı filtreler geçersiz. Düzeltmek için Filtreler'i açın.",
-            "Some filters are invalid. Open Filters to correct them.",
-          )}</p>
+          <p className={s.notice} role="alert">
+            {t(
+              "Bazı filtreler geçersiz. Düzeltmek için Filtreler'i açın.",
+              "Some filters are invalid. Open Filters to correct them.",
+            )}
+          </p>
         )}
         <div id={controlsId} className={compact.controls} hidden={!expanded}>
-          <div className={s.kindChoices} role="group" aria-label={t("Ödeme türü", "Payment type")}>
+          <div
+            className={s.kindChoices}
+            role="group"
+            aria-label={t("Ödeme türü", "Payment type")}
+          >
             {paymentKinds.map((kind) => (
               <button
                 key={kind}
@@ -365,7 +503,9 @@ export default function PaymentListFilters({
                 className={s.kindButton}
                 aria-pressed={filters.paymentKind === kind}
                 disabled={loading}
-                onClick={() => onApply({ ...draft, paymentKind: kind, project: "", page: 1 })}
+                onClick={() =>
+                  onApply({ ...draft, paymentKind: kind, project: "", page: 1 })
+                }
               >
                 {paymentKindLabel(kind, tr)}
               </button>
@@ -373,7 +513,10 @@ export default function PaymentListFilters({
           </div>
           <div className={s.filters}>
             {select("projectGroup", t("Tüm projeler", "All projects"))}
-            {select("representative", t("Tüm satış temsilcileri", "All sales representatives"))}
+            {select(
+              "representative",
+              t("Tüm satış temsilcileri", "All sales representatives"),
+            )}
             <label className={s.field}>
               <span>{t("Para birimi", "Currency")}</span>
               <select
@@ -385,16 +528,33 @@ export default function PaymentListFilters({
                   onApply(changeFilterCurrency(draft, event.target.value));
                 }}
               >
-                {!draft.currency && <option value="" disabled>{t("Yükleniyor…", "Loading…")}</option>}
-                <option value={ALL_CURRENCIES}>{t("Tüm para birimleri", "All currencies")}</option>
+                {!draft.currency && (
+                  <option value="" disabled>
+                    {t("Yükleniyor…", "Loading…")}
+                  </option>
+                )}
+                <option value={ALL_CURRENCIES}>
+                  {t("Tüm para birimleri", "All currencies")}
+                </option>
                 {(data?.currencies || []).map((entry) => (
-                  <option key={currencyToken(entry.value)} value={currencyToken(entry.value)}>
+                  <option
+                    key={currencyToken(entry.value)}
+                    value={currencyToken(entry.value)}
+                  >
                     {currencyName(entry.value, tr)}
                   </option>
                 ))}
-                {draft.currency && draft.currency !== ALL_CURRENCIES &&
-                  !data?.currencies.some((entry) => currencyToken(entry.value) === draft.currency) && (
-                    <option value={draft.currency}>{currencyName(draft.currency === "__NULL__" ? null : draft.currency, tr)}</option>
+                {draft.currency &&
+                  draft.currency !== ALL_CURRENCIES &&
+                  !data?.currencies.some(
+                    (entry) => currencyToken(entry.value) === draft.currency,
+                  ) && (
+                    <option value={draft.currency}>
+                      {currencyName(
+                        draft.currency === "__NULL__" ? null : draft.currency,
+                        tr,
+                      )}
+                    </option>
                   )}
               </select>
             </label>
@@ -403,32 +563,51 @@ export default function PaymentListFilters({
             {select("invoiceOk")}
             {select("scope")}
           </div>
-          <p className={s.hint}>{t("Birden fazla Fatura OK değeri bulunan dosyalar Karma seçeneğinde gösterilir.", "Cases with more than one Invoice OK value appear under Mixed.")}</p>
+          <p className={s.hint}>
+            {t(
+              "Birden fazla Fatura OK değeri bulunan dosyalar Karma seçeneğinde gösterilir.",
+              "Cases with more than one Invoice OK value appear under Mixed.",
+            )}
+          </p>
           {amountsCleared && (
-            <p className={s.hint} role="status">{t(
-              "Para birimi değiştiği için tutar aralıkları temizlendi. Gün, tarih ve diğer filtreler korundu.",
-              "Amount ranges were cleared because the currency changed. Day, date and other filters were preserved.",
-            )}</p>
+            <p className={s.hint} role="status">
+              {t(
+                "Para birimi değiştiği için tutar aralıkları temizlendi. Gün, tarih ve diğer filtreler korundu.",
+                "Amount ranges were cleared because the currency changed. Day, date and other filters were preserved.",
+              )}
+            </p>
           )}
           {draft.currency === ALL_CURRENCIES && hasAmountFilter(draft) && (
             <div className={s.notice}>
-              <p>{t(
-                "Tutar aralıkları için tek bir para birimi seçin veya bu aralıkları temizleyin.",
-                "Choose one currency for amount ranges, or clear these ranges.",
-              )}</p>
-              <button type="button" className={s.button} onClick={() => onApply(changeFilterCurrency(draft, ALL_CURRENCIES))}>
+              <p>
+                {t(
+                  "Tutar aralıkları için tek bir para birimi seçin veya bu aralıkları temizleyin.",
+                  "Choose one currency for amount ranges, or clear these ranges.",
+                )}
+              </p>
+              <button
+                type="button"
+                className={s.button}
+                onClick={() =>
+                  onApply(changeFilterCurrency(draft, ALL_CURRENCIES))
+                }
+              >
                 {t("Tutar aralıklarını temizle", "Clear amount ranges")}
               </button>
             </div>
           )}
-          {errors.authorization && <p className={s.notice} role="alert">{errors.authorization}</p>}
+          {errors.authorization && (
+            <p className={s.notice} role="alert">
+              {errors.authorization}
+            </p>
+          )}
           {unavailable && (
             <p className={s.notice} role="status">
               {t(
                 "Yetki kodu kaynağı şu anda okunamıyor. Kod filtreleri kullanılamıyor; ödeme dosyaları kaynakta bulunan bilgileriyle gösterilir.",
                 "The authorization-code source is unavailable. Code filters are disabled; payment cases retain the available source information.",
               )}
-              </p>
+            </p>
           )}
           <AdvancedFilterPanel
             tr={tr}
@@ -448,19 +627,23 @@ export default function PaymentListFilters({
               {select("unit", t("Tüm daireler", "All units"))}
               {select("paymentState")}
             </FilterGroup>
-            <FilterGroup
-              title={t("Vadeler ve tutarlar", "Dates and balances")}
-            >
-              {draft.currency === ALL_CURRENCIES && <p className={s.hint}>{t(
-                "Tutar aralığı için tek bir para birimi seçin.",
-                "Select one currency to use amount ranges.",
-              )}</p>}
+            <FilterGroup title={t("Vadeler ve tutarlar", "Dates and balances")}>
+              {draft.currency === ALL_CURRENCIES && (
+                <p className={s.hint}>
+                  {t(
+                    "Tutar aralığı için tek bir para birimi seçin.",
+                    "Select one currency to use amount ranges.",
+                  )}
+                </p>
+              )}
               {rangeDefinitions.map((range) => (
                 <FilterRangeFields
                   key={range.key}
                   label={range.label[tr ? 0 : 1]}
                   kind={range.kind}
-                  disabled={draft.currency === ALL_CURRENCIES && range.kind === "amount"}
+                  disabled={
+                    draft.currency === ALL_CURRENCIES && range.kind === "amount"
+                  }
                   tr={tr}
                   from={draft[range.from]}
                   to={draft[range.to]}
@@ -495,22 +678,32 @@ export default function PaymentListFilters({
           <details className={compact.help}>
             <summary>{t("Filtre yardımı", "Filter help")}</summary>
             <div>
-              <p>{t(
-                "Yetki kodu, temsilci ve fatura tarihi dosya bazında seçilir; vade ve tutarlar seçili ödeme türüne aittir.",
-                "Authorization code, representative and invoice date select whole cases; due dates and amounts cover the selected payment type.",
-              )}</p>
-              <p>{t(
-                "Yerel takip tarihi tüm müşteri/daire/döviz dosyasında ortaktır. Tarihi geçmiş olsa bile yerel tarih kaydı var kabul edilir.",
-                "The local follow-up date is shared by the whole customer/unit/currency case. A local date counts as present even if it is in the past.",
-              )}</p>
-              <p>{t(
-                "Ödeme durumu ve kaynak gecikmesi yerel ertelemeden bağımsızdır.",
-                "Payment status and source overdue amounts are independent of local deferral.",
-              )}</p>
-              {draft.currency === ALL_CURRENCIES && <p>{t(
-                "Tutarlar döviz bazında ayrı gösterilir. Tutarlar önce dövize göre gruplanır, sonra kendi dövizi içinde sıralanır. Gün ve tarih aralıkları tüm dövizlerde kullanılabilir.",
-                "Amounts are shown separately and grouped by currency, then sorted within each currency. Day and date ranges work across all currencies.",
-              )}</p>}
+              <p>
+                {t(
+                  "Yetki kodu, temsilci ve fatura tarihi dosya bazında seçilir; vade ve tutarlar seçili ödeme türüne aittir.",
+                  "Authorization code, representative and invoice date select whole cases; due dates and amounts cover the selected payment type.",
+                )}
+              </p>
+              <p>
+                {t(
+                  "Yerel takip tarihi tüm müşteri/daire/döviz dosyasında ortaktır. Tarihi geçmiş olsa bile yerel tarih kaydı var kabul edilir.",
+                  "The local follow-up date is shared by the whole customer/unit/currency case. A local date counts as present even if it is in the past.",
+                )}
+              </p>
+              <p>
+                {t(
+                  "Ödeme durumu ve kaynak gecikmesi yerel ertelemeden bağımsızdır.",
+                  "Payment status and source overdue amounts are independent of local deferral.",
+                )}
+              </p>
+              {draft.currency === ALL_CURRENCIES && (
+                <p>
+                  {t(
+                    "Tutarlar döviz bazında ayrı gösterilir. Tutarlar önce dövize göre gruplanır, sonra kendi dövizi içinde sıralanır. Gün ve tarih aralıkları tüm dövizlerde kullanılabilir.",
+                    "Amounts are shown separately and grouped by currency, then sorted within each currency. Day and date ranges work across all currencies.",
+                  )}
+                </p>
+              )}
             </div>
           </details>
           <div className={s.filterActions}>

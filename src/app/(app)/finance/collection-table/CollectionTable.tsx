@@ -8,7 +8,7 @@ import {
   Access,
   useTrackingAccess,
 } from "../payment-tracking/_components/TrackingShell";
-import SourceFreshness from "../payment-tracking/_components/SourceFreshness";
+
 import { requireSourceAudit } from "../payment-tracking/_lib/source-integrity";
 import {
   currencyName,
@@ -25,18 +25,43 @@ import type {
   PaymentSourceSnapshot,
 } from "../payment-tracking/_lib/types";
 import s from "./table.module.css";
+import CaseStatement from "./CaseStatement";
+import CollectionRate from "./CollectionRate";
 
 type Row = PaymentInstallment & {
   id: string;
   caseKey: string;
   customerCode: string | null;
   customerName: string;
+  representatives: string[];
+  brokers: string[];
   unitCode: string | null;
   unitName: string;
   currency: string | null;
   projectGroup: PaymentProjectGroup;
 };
+type PeriodTotals = {
+  count: number;
+  amount: number | null;
+  paid: number | null;
+  outstanding: number | null;
+};
+type YearGroup = PeriodTotals & {
+  currency: string | null;
+  year: string;
+  months: (PeriodTotals & { month: string })[];
+};
 type Data = {
+  previousMonthEnd: string;
+  overview: {
+    currency: string | null;
+    overall: PeriodTotals;
+    throughPreviousMonth: PeriodTotals;
+    undated: PeriodTotals;
+  }[];
+  year: string;
+  month: string;
+  years: YearGroup[];
   source: Omit<PaymentSourceSnapshot, "cases">;
   currency: string;
   search: string;
@@ -66,9 +91,9 @@ export default function CollectionTable() {
     tr = locale === "tr";
   const text = (a: string, b: string) => (tr ? a : b);
   const access = useTrackingAccess();
-  const [currency, setCurrency] = useState("GBP"),
-    [search, setSearch] = useState(""),
-    [status, setStatus] = useState("all");
+  const [currency, setCurrency] = useState("__ALL__"),
+    [search] = useState(""),
+    [status] = useState("all");
   const [sort, setSort] = useState<Sort>("dueDate"),
     [direction, setDirection] = useState("asc"),
     [page, setPage] = useState(1);
@@ -77,6 +102,9 @@ export default function CollectionTable() {
     [error, setError] = useState("");
   const [loading, setLoading] = useState(true),
     [expanded, setExpanded] = useState<string | null>(null);
+  const [year, setYear] = useState("");
+  const [month, setMonth] = useState("");
+  const showRows = !!month || year === "undated";
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setClock(Date.now()), 15_000);
@@ -85,60 +113,95 @@ export default function CollectionTable() {
   useEffect(() => {
     if (access !== "allowed") return;
     const controller = new AbortController();
-    const timer = setTimeout(
-      () => {
+    let busy = false;
+    const read = (background = false) => {
+      if (busy || controller.signal.aborted) return;
+      busy = true;
+      if (!background) {
         setLoading(true);
         setError("");
         setData(null);
         setExpanded(null);
-        const params = new URLSearchParams({
-          currency,
-          search,
-          status,
-          sort,
-          direction,
-          page: String(page),
-        });
-        authedFetch(`/payment-installment-table?${params}`, {
-          signal: controller.signal,
+      }
+      const params = new URLSearchParams({
+        currency,
+        year,
+        month,
+        search,
+        status,
+        sort,
+        direction,
+        page: String(page),
+      });
+      authedFetch(`/payment-installment-table?${params}`, {
+        signal: controller.signal,
+      })
+        .then((result: Data) => {
+          if (controller.signal.aborted) return;
+          requireSourceAudit(result.source, tr);
+          if (
+            result.currency !== currency ||
+            result.year !== year ||
+            result.month !== month ||
+            !Array.isArray(result.years) ||
+            !Array.isArray(result.overview) ||
+            result.search !== search.trim().toLocaleLowerCase("tr-TR") ||
+            result.status !== status ||
+            result.sort !== sort ||
+            result.direction !== direction ||
+            !Array.isArray(result.rows)
+          )
+            throw new Error(
+              tr
+                ? "Tablo kapsamı doğrulanamadı."
+                : "Table scope could not be verified.",
+            );
+          setClock(Date.now());
+          setData(result);
+          setError("");
         })
-          .then((result: Data) => {
-            if (controller.signal.aborted) return;
-            requireSourceAudit(result.source, tr);
-            if (
-              result.currency !== currency ||
-              result.search !== search.trim().toLocaleLowerCase("tr-TR") ||
-              result.status !== status ||
-              result.sort !== sort ||
-              result.direction !== direction ||
-              !Array.isArray(result.rows)
-            )
-              throw new Error(
-                tr
-                  ? "Tablo kapsamı doğrulanamadı."
-                  : "Table scope could not be verified.",
-              );
-            setData(result);
-          })
-          .catch((cause) => {
-            if (!controller.signal.aborted)
-              setError(problem(cause, tr).message);
-          })
-          .finally(() => {
-            if (!controller.signal.aborted) setLoading(false);
-          });
-      },
-      search ? 250 : 0,
-    );
+        .catch((cause) => {
+          if (controller.signal.aborted) return;
+          const failure = problem(cause, tr);
+          if (failure.discardSource) setData(null);
+          setError(failure.message);
+        })
+        .finally(() => {
+          busy = false;
+          if (!controller.signal.aborted) setLoading(false);
+        });
+    };
+    const timer = setTimeout(() => read(), search ? 250 : 0);
+    const refresh = () => {
+      if (document.visibilityState === "visible") read(true);
+    };
+    const interval = setInterval(refresh, 60_000);
+    document.addEventListener("visibilitychange", refresh);
     return () => {
       clearTimeout(timer);
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", refresh);
       controller.abort();
     };
-  }, [access, currency, search, status, sort, direction, page, version, tr]);
+  }, [
+    access,
+    currency,
+    search,
+    status,
+    sort,
+    direction,
+    page,
+    version,
+    tr,
+    year,
+    month,
+  ]);
   if (access !== "allowed") return <Access access={access} tr={tr} />;
   const usable =
     !!data &&
     data.currency === currency &&
+    data.year === year &&
+    data.month === month &&
     data.search === search.trim().toLocaleLowerCase("tr-TR") &&
     data.status === status &&
     data.sort === sort &&
@@ -170,14 +233,7 @@ export default function CollectionTable() {
     <section className={s.page}>
       <header className={s.heading}>
         <div>
-          <span className={s.eyebrow}>{text("Finans", "Finance")}</span>
           <h1>{text("Tahsilat Tablosu", "Collection Table")}</h1>
-          <p>
-            {text(
-              "Her ödeme/vade ayrı satır. Başlıklardan sıralayın, müşteri veya daire arayın.",
-              "One row per installment. Sort by column headers, search customers or units.",
-            )}
-          </p>
         </div>
         <button
           className={s.button}
@@ -188,70 +244,50 @@ export default function CollectionTable() {
           {text("Yenile", "Refresh")}
         </button>
       </header>
-      <div className={s.toolbar}>
-        <label>
-          {text("Ara", "Search")}
-          <input
-            type="search"
-            placeholder={text("Müşteri veya daire…", "Customer or unit…")}
-            maxLength={200}
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-          />
-        </label>
-        <label>
-          {text("Döviz", "Currency")}
-          <select
-            value={currency}
-            onChange={(event) => {
-              setCurrency(event.target.value);
-              setPage(1);
-            }}
-          >
-            {[
-              ...new Set([
-                currency,
-                ...(data?.currencies || []).map((value) => value ?? "__NULL__"),
-              ]),
-            ].map((value) => (
-              <option key={value} value={value}>
-                {currencyName(value === "__NULL__" ? null : value, tr)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div
-          className={s.segment}
-          aria-label={text("Ödeme durumu", "Payment status")}
+      <nav
+        className={s.breadcrumb}
+        aria-label={text("Tablo ayrıntı seviyesi", "Table detail level")}
+      >
+        <button
+          className={s.button}
+          onClick={() => {
+            setCurrency("__ALL__");
+            setYear("");
+            setMonth("");
+            setPage(1);
+          }}
         >
-          {[
-            ["all", text("Tümü", "All")],
-            ["open", text("Kalan", "Open")],
-            ["overdue", text("Gecikmiş", "Overdue")],
-            ["paid", text("Ödenmiş", "Paid")],
-          ].map(([value, label]) => (
+          {text("Tüm yıllar", "All years")}
+        </button>
+        {year && (
+          <>
+            <span>›</span>
             <button
-              key={value}
-              aria-pressed={status === value}
+              className={s.button}
               onClick={() => {
-                setStatus(value);
+                setMonth("");
                 setPage(1);
               }}
             >
-              {label}
+              {year === "undated"
+                ? text("Vadesi belirtilmemiş", "Undated")
+                : year}
             </button>
-          ))}
-        </div>
-      </div>
-      <p className={s.note}>
-        {text(
-          "Normal satış · Fatura OK: DND · Yetki kodu boş. Ödenen tutarlar Logo'da vadeye dağıtılan ödemelerdir. Eksik tutarlar — ile gösterilir ve toplamı hesaplanmaz.",
-          "Normal sales · Invoice OK: DND · Blank authorization code. Paid amounts are payments allocated to due dates in Logo. Missing amounts display as — and their total is not calculated.",
+          </>
         )}
-      </p>
+        {month && (
+          <>
+            <span>›</span>
+            <strong>
+              {new Intl.DateTimeFormat(tr ? "tr-TR" : "en-GB", {
+                month: "long",
+                year: "numeric",
+                timeZone: "UTC",
+              }).format(new Date(`${month}-01T12:00:00Z`))}
+            </strong>
+          </>
+        )}
+      </nav>
       {error && (
         <p className={s.error} role="alert">
           {error}
@@ -270,7 +306,6 @@ export default function CollectionTable() {
         </p>
       ) : (
         <>
-          <SourceFreshness source={data.source} tr={tr} />
           <div
             className={s.scroll}
             tabIndex={0}
@@ -279,29 +314,177 @@ export default function CollectionTable() {
             <table className={s.table}>
               <caption className={s.sr}>
                 {text("Her ödeme/vade ayrı satır", "One row per installment")} ·{" "}
-                {currencyName(currency === "__NULL__" ? null : currency, tr)}
+                {currency === "__ALL__"
+                  ? text("Tüm dövizler", "All currencies")
+                  : currencyName(currency === "__NULL__" ? null : currency, tr)}
               </caption>
               <thead>
                 <tr>
-                  {heading("customerName", text("Müşteri", "Customer"))}
-                  <th scope="col">{text("Proje", "Project")}</th>
-                  {heading("unitCode", text("Daire", "Unit"))}
-                  {heading("dueDate", text("Vade", "Due date"))}
-                  {heading("amount", text("Planlanan", "Scheduled"))}
-                  {heading("paid", text("Ödenen", "Paid"))}
-                  {heading("outstanding", text("Kalan", "Outstanding"))}
-                  <th scope="col">{text("Durum", "Status")}</th>
+                  {showRows ? (
+                    <>
+                      {heading("customerName", text("Müşteri", "Customer"))}
+                      <th scope="col">{text("Proje", "Project")}</th>
+                      {heading("unitCode", text("Daire", "Unit"))}
+                      {heading("dueDate", text("Vade", "Due date"))}
+                    </>
+                  ) : (
+                    <th scope="col" colSpan={1}>
+                      {year ? text("Ay", "Month") : text("Dönem", "Period")}
+                    </th>
+                  )}
+                  {showRows ? (
+                    heading("amount", text("Planlanan", "Scheduled"))
+                  ) : (
+                    <th scope="col">{text("Planlanan", "Scheduled")}</th>
+                  )}
+                  {showRows ? (
+                    heading("paid", text("Ödenen", "Paid"))
+                  ) : (
+                    <th scope="col">{text("Ödenen", "Paid")}</th>
+                  )}
+                  {showRows ? (
+                    heading("outstanding", text("Kalan", "Outstanding"))
+                  ) : (
+                    <th scope="col">{text("Kalan", "Outstanding")}</th>
+                  )}
+                  <th scope="col">{text("Tahsilat %", "Collection %")}</th>
                 </tr>
               </thead>
               <tbody>
-                {!data.rows.length && (
+                {!year &&
+                  data.overview.map((summary) => (
+                    <Fragment key={summary.currency ?? "__NULL__"}>
+                      <tr className={s.overview}>
+                        <th scope="row">
+                          {text("Genel toplam", "Overall")} ·{" "}
+                          {currencyName(summary.currency, tr)}
+                        </th>
+                        <td>{money(summary.overall.amount, tr)}</td>
+                        <td>{money(summary.overall.paid, tr)}</td>
+                        <td>{money(summary.overall.outstanding, tr)}</td>
+                        <td>
+                          <CollectionRate
+                            amount={summary.overall.amount}
+                            paid={summary.overall.paid}
+                            tr={tr}
+                          />
+                        </td>
+                      </tr>
+                      <tr className={s.pastOverview}>
+                        <th scope="row">
+                          {text("Geçmiş vadeler", "Past due dates")} ·{" "}
+                          {currencyName(summary.currency, tr)}
+                          <small>
+                            {dateLabel(data.previousMonthEnd, tr)}{" "}
+                            {text(
+                              "dahil · bu ay hariç",
+                              "inclusive · excluding this month",
+                            )}
+                          </small>
+                        </th>
+                        <td>
+                          {money(summary.throughPreviousMonth.amount, tr)}
+                        </td>
+                        <td>{money(summary.throughPreviousMonth.paid, tr)}</td>
+                        <td className={s.overdue}>
+                          {money(summary.throughPreviousMonth.outstanding, tr)}
+                        </td>
+                        <td>
+                          <CollectionRate
+                            amount={summary.throughPreviousMonth.amount}
+                            paid={summary.throughPreviousMonth.paid}
+                            tr={tr}
+                          />
+                        </td>
+                      </tr>
+                    </Fragment>
+                  ))}
+                {!year && data.overview.length > 0 && (
+                  <tr className={s.sectionRow}>
+                    <th colSpan={5}>{text("Yıllar", "Years")}</th>
+                  </tr>
+                )}
+                {!data.total && (
                   <tr>
-                    <td colSpan={8} className={s.status}>
+                    <td colSpan={showRows ? 8 : 5} className={s.status}>
                       {text("Kayıt bulunamadı.", "No records found.")}
                     </td>
                   </tr>
                 )}
-                {data.rows.map((row) => (
+                {!showRows &&
+                  (year
+                    ? data.years.find((group) => group.year === year)?.months ||
+                      []
+                    : data.years
+                  ).map((group) => {
+                    const key = "year" in group ? group.year : group.month;
+                    const label =
+                      key === "undated"
+                        ? text("Vadesi belirtilmemiş", "Undated")
+                        : "year" in group
+                          ? key
+                          : new Intl.DateTimeFormat(tr ? "tr-TR" : "en-GB", {
+                              month: "long",
+                              timeZone: "UTC",
+                            }).format(new Date(`${key}-01T12:00:00Z`));
+                    const drill = () => {
+                      if ("year" in group) {
+                        setYear(key);
+                        setCurrency(group.currency ?? "__NULL__");
+                        setMonth("");
+                      } else setMonth(key);
+                      setPage(1);
+                    };
+                    return (
+                      <tr
+                        key={`${key}:${"currency" in group ? group.currency : currency}`}
+                        className={s.project}
+                      >
+                        <th scope="row" colSpan={1}>
+                          <button
+                            onClick={drill}
+                            aria-label={`${label}, ${text("detayları aç", "open details")}`}
+                          >
+                            ▸ {label} ·{" "}
+                            {currencyName(
+                              "currency" in group
+                                ? group.currency
+                                : currency === "__NULL__"
+                                  ? null
+                                  : currency,
+                              tr,
+                            )}
+                          </button>
+                          <small>
+                            {group.count} {text("ödeme/vade", "installments")}
+                          </small>
+                        </th>
+                        <td>
+                          <button onClick={drill}>
+                            {money(group.amount, tr)}
+                          </button>
+                        </td>
+                        <td>
+                          <button onClick={drill}>
+                            {money(group.paid, tr)}
+                          </button>
+                        </td>
+                        <td>
+                          <button onClick={drill}>
+                            {money(group.outstanding, tr)}
+                          </button>
+                        </td>
+                        <td>
+                          <CollectionRate
+                            amount={group.amount}
+                            paid={group.paid}
+                            tr={tr}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                {(showRows ? data.rows : []).map((row) => (
                   <Fragment key={row.id}>
                     <tr className={s.customer}>
                       <th scope="row">
@@ -315,6 +498,7 @@ export default function CollectionTable() {
                         >
                           {row.customerName}
                         </button>
+                        <small>{row.representatives?.join(", ") || "—"}</small>
                       </th>
                       <td>{paymentProjectGroupLabel(row.projectGroup, tr)}</td>
                       <td>{row.unitCode || row.unitName || "—"}</td>
@@ -323,15 +507,19 @@ export default function CollectionTable() {
                       <td>{money(row.paid, tr)}</td>
                       <td className={row.status === "overdue" ? s.overdue : ""}>
                         {money(row.outstanding, tr)}
+                        {row.status === "overdue" && (
+                          <small>
+                            {row.overdueDays}{" "}
+                            {text("gün gecikmiş", "days overdue")}
+                          </small>
+                        )}
                       </td>
                       <td>
-                        {row.status === "overdue"
-                          ? `${row.overdueDays} ${text("gün gecikmiş", "days overdue")}`
-                          : row.status === "paid"
-                            ? text("Ödendi", "Paid")
-                            : row.status === "unknown"
-                              ? text("Bilgi eksik", "Incomplete")
-                              : text("Bekleyen", "Pending")}
+                        <CollectionRate
+                          amount={row.amount}
+                          paid={row.paid}
+                          tr={tr}
+                        />
                       </td>
                     </tr>
                     {expanded === row.id && (
@@ -341,6 +529,7 @@ export default function CollectionTable() {
                             <span>
                               {row.customerCode || "—"} ·{" "}
                               {row.unitName || row.unitCode || "—"} ·{" "}
+                              {row.brokers?.join(", ") || "—"} ·{" "}
                               {text("Ödeme satırı", "Installment")}{" "}
                               {row.sequence}
                             </span>
@@ -354,45 +543,62 @@ export default function CollectionTable() {
                         </td>
                       </tr>
                     )}
+                    {expanded === row.id && (
+                      <CaseStatement
+                        caseKey={row.caseKey}
+                        importedAt={data.source.importedAt}
+                        tr={tr}
+                      />
+                    )}
                   </Fragment>
                 ))}
               </tbody>
-              <tfoot>
-                <tr>
-                  <th scope="row">
-                    {text("Filtrelenen tüm satırlar", "All filtered rows")}
-                  </th>
-                  <td colSpan={3}>
-                    {data.total} {text("ödeme/vade", "installments")}
-                  </td>
-                  <td>{money(data.totals.amount, tr)}</td>
-                  <td>{money(data.totals.paid, tr)}</td>
-                  <td>{money(data.totals.outstanding, tr)}</td>
-                  <td />
-                </tr>
-              </tfoot>
+              {currency !== "__ALL__" && (
+                <tfoot>
+                  <tr>
+                    <th scope="row">{text("Toplam", "Total")}</th>
+                    {showRows && (
+                      <td colSpan={3}>
+                        {data.total} {text("ödeme/vade", "installments")}
+                      </td>
+                    )}
+                    <td>{money(data.totals.amount, tr)}</td>
+                    <td>{money(data.totals.paid, tr)}</td>
+                    <td>{money(data.totals.outstanding, tr)}</td>
+                    <td>
+                      <CollectionRate
+                        amount={data.totals.amount}
+                        paid={data.totals.paid}
+                        tr={tr}
+                      />
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
-          <div className={s.pagination}>
-            <span>
-              {data.total} {text("satır", "rows")} · {data.page}/
-              {data.totalPages}
-            </span>
-            <button
-              className={s.button}
-              disabled={data.page <= 1}
-              onClick={() => setPage(data.page - 1)}
-            >
-              {text("Önceki", "Previous")}
-            </button>
-            <button
-              className={s.button}
-              disabled={data.page >= data.totalPages}
-              onClick={() => setPage(data.page + 1)}
-            >
-              {text("Sonraki", "Next")}
-            </button>
-          </div>
+          {showRows && (
+            <div className={s.pagination}>
+              <span>
+                {data.total} {text("satır", "rows")} · {data.page}/
+                {data.totalPages}
+              </span>
+              <button
+                className={s.button}
+                disabled={data.page <= 1}
+                onClick={() => setPage(data.page - 1)}
+              >
+                {text("Önceki", "Previous")}
+              </button>
+              <button
+                className={s.button}
+                disabled={data.page >= data.totalPages}
+                onClick={() => setPage(data.page + 1)}
+              >
+                {text("Sonraki", "Next")}
+              </button>
+            </div>
+          )}
         </>
       )}
     </section>

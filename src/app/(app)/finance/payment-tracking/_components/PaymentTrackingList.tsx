@@ -8,11 +8,11 @@ import {
   ArrowUpDown,
   CalendarClock,
   CalendarDays,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Filter,
+  FileText,
   RefreshCw,
   Wallet,
 } from "lucide-react";
@@ -20,9 +20,11 @@ import { authedFetch } from "@/lib/authedFetch";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 import type { PaymentTrackingList as ListData } from "../_lib/types";
 import { paymentKindLabel } from "../_lib/payment-kinds";
-import { hasProjectGroupContract, paymentProjectGroupLabel } from "../_lib/project-groups";
 import {
-  authorizationLabel,
+  hasProjectGroupContract,
+  paymentProjectGroupLabel,
+} from "../_lib/project-groups";
+import {
   currencyName,
   dateLabel,
   money,
@@ -61,8 +63,12 @@ import {
   type Filters,
 } from "../_lib/list-filters";
 
-import { hasInvoiceOkContract, invoiceOkText, invoiceOkDetails } from "../_lib/invoice-ok";
-import { currencyToken, hasCurrencyContract, selectedCurrencyToken } from "../_lib/list-currencies";
+import { hasInvoiceOkContract } from "../_lib/invoice-ok";
+import {
+  currencyToken,
+  hasCurrencyContract,
+  selectedCurrencyToken,
+} from "../_lib/list-currencies";
 
 export default function PaymentTrackingList() {
   const { locale } = useLanguage(),
@@ -70,12 +76,17 @@ export default function PaymentTrackingList() {
   const t = (a: string, b: string) => (tr ? a : b);
   const access = useTrackingAccess();
   const [ready, setReady] = useState(false);
+  const [activePanel, setActivePanel] = useState<"filters" | "summary" | null>(
+    null,
+  );
   const [requestVersion, setRequestVersion] = useState(0);
   const applied = useRef<Filters>(defaults);
   const [filters, setFilters] = useState<Filters>(defaults);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [data, setData] = useState<ListData | null>(null);
-  const confirmed = useRef<{ session: string | null; value: ListData } | null>(null);
+  const confirmed = useRef<{ session: string | null; value: ListData } | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [backgroundError, setBackgroundError] = useState(false);
@@ -125,9 +136,10 @@ export default function PaymentTrackingList() {
       if (refresh) invalidatePaymentListCache();
       const cacheKey = query(normalizeFilters(scope)).toString();
       const cacheTicket = paymentListCacheTicket();
-      const cached = !refresh && !background
-        ? readPaymentListCache(cacheKey, cacheTicket)
-        : null;
+      const cached =
+        !refresh && !background
+          ? readPaymentListCache(cacheKey, cacheTicket)
+          : null;
       const abort = () => controller.abort();
       signal?.addEventListener("abort", abort, { once: true });
       if (!background) {
@@ -155,40 +167,63 @@ export default function PaymentTrackingList() {
         if (id !== state.id || controller.signal.aborted) return;
         requireSourceAudit(next.source, language.current);
         const responseTicket = paymentListCacheTicket();
-        if (cacheTicket.identity !== responseTicket.identity || !responseTicket.session) {
+        if (
+          cacheTicket.identity !== responseTicket.identity ||
+          !responseTicket.session
+        ) {
           confirmed.current = null;
           setData(null);
-          setError(language.current
-            ? "Oturum değişti. Güncel oturumla verileri yeniden yükleyin."
-            : "Your session changed. Reload the data with the current session.");
+          setError(
+            language.current
+              ? "Oturum değişti. Güncel oturumla verileri yeniden yükleyin."
+              : "Your session changed. Reload the data with the current session.",
+          );
           return;
         }
-        if (typeof next.summary?.closedCount !== "number" ||
-            typeof next.filteredSummary?.closedCount !== "number" ||
-            next.rows.some((row) => typeof row.fullyPaid !== "boolean")) {
-          throw new Error(language.current
-            ? "Dosyaların ödeme durumu doğrulanamadı. Sonuçları yeniden yükleyin."
-            : "The cases' payment status could not be verified. Reload the results.");
+        if (
+          typeof next.summary?.closedCount !== "number" ||
+          typeof next.filteredSummary?.closedCount !== "number" ||
+          next.rows.some((row) => typeof row.fullyPaid !== "boolean")
+        ) {
+          throw new Error(
+            language.current
+              ? "Dosyaların ödeme durumu doğrulanamadı. Sonuçları yeniden yükleyin."
+              : "The cases' payment status could not be verified. Reload the results.",
+          );
         }
-        if (!hasProjectGroupContract(next) || next.selectedProjectGroup !== scope.projectGroup) {
-          throw new Error(language.current
-            ? "Proje doğrulanamadı. Sonuçları yeniden yükleyin."
-            : "The project could not be verified. Reload the results.");
+        if (
+          !hasProjectGroupContract(next) ||
+          next.selectedProjectGroup !== scope.projectGroup
+        ) {
+          throw new Error(
+            language.current
+              ? "Proje doğrulanamadı. Sonuçları yeniden yükleyin."
+              : "The project could not be verified. Reload the results.",
+          );
         }
         if (!hasCurrencyContract(next, scope.currency)) {
-          throw new Error(language.current
-            ? "Para birimi kapsamı doğrulanamadı. Sonuçları yeniden yükleyin."
-            : "The currency scope could not be verified. Reload the results.");
+          throw new Error(
+            language.current
+              ? "Para birimi kapsamı doğrulanamadı. Sonuçları yeniden yükleyin."
+              : "The currency scope could not be verified. Reload the results.",
+          );
         }
         if (!hasInvoiceOkContract(next, next.rows, scope.invoiceOk)) {
-          throw new Error(JSON.stringify({ code: "PAYMENT_TRACKING_SOURCE_AUDIT_INVALID", message: language.current
-            ? "Fatura OK kapsamı doğrulanamadı. Sonuçları yeniden yükleyin."
-            : "The Invoice OK scope could not be verified. Reload the results." }));
+          throw new Error(
+            JSON.stringify({
+              code: "PAYMENT_TRACKING_SOURCE_AUDIT_INVALID",
+              message: language.current
+                ? "Fatura OK kapsamı doğrulanamadı. Sonuçları yeniden yükleyin."
+                : "The Invoice OK scope could not be verified. Reload the results.",
+            }),
+          );
         }
         if (next.selectedPaymentKind !== scope.paymentKind) {
-          throw new Error(language.current
-            ? "Ödeme türü doğrulanamadı. Sonuçları yeniden yükleyin."
-            : "The payment type could not be verified. Reload the results.");
+          throw new Error(
+            language.current
+              ? "Ödeme türü doğrulanamadı. Sonuçları yeniden yükleyin."
+              : "The payment type could not be verified. Reload the results.",
+          );
         }
         confirmed.current = { session: responseTicket.session, value: next };
         setData(next);
@@ -231,9 +266,12 @@ export default function PaymentTrackingList() {
             setError(parsed.message);
           } else if (background) setBackgroundError(true);
           else {
-            if (cached) setData(confirmed.current?.session === cacheTicket.session
-              ? confirmed.current.value
-              : null);
+            if (cached)
+              setData(
+                confirmed.current?.session === cacheTicket.session
+                  ? confirmed.current.value
+                  : null,
+              );
             setError(problem(cause, language.current).message);
           }
         }
@@ -251,7 +289,11 @@ export default function PaymentTrackingList() {
     invalidatePaymentListCache();
     confirmed.current = null;
     setData(null);
-    setError(language.current ? "Kaynak verisi güncelliğini kaybetti. Tutarları görmek için yenileyin." : "Source data has expired. Refresh to view amounts.");
+    setError(
+      language.current
+        ? "Kaynak verisi güncelliğini kaybetti. Tutarları görmek için yenileyin."
+        : "Source data has expired. Refresh to view amounts.",
+    );
   });
   useEffect(() => {
     if (!ready || access !== "allowed") return;
@@ -280,8 +322,7 @@ export default function PaymentTrackingList() {
   function apply(next: Filters) {
     const normalized = {
       ...normalizeFilters(next),
-      currency:
-        next.currency || (data ? selectedCurrencyToken(data) : ""),
+      currency: next.currency || (data ? selectedCurrencyToken(data) : ""),
     };
     setDraft(normalized);
     const validation = Object.values(filterErrors(normalized, tr));
@@ -290,11 +331,18 @@ export default function PaymentTrackingList() {
       return;
     }
     if (
-      data && !error && !backgroundError && !loading &&
+      data &&
+      !error &&
+      !backgroundError &&
+      !loading &&
       isPaymentListSourceRecent(data) &&
-      readPaymentListCache(query(normalized).toString(), paymentListCacheTicket()) &&
+      readPaymentListCache(
+        query(normalized).toString(),
+        paymentListCacheTicket(),
+      ) &&
       query(normalized).toString() === query(applied.current).toString()
-    ) return;
+    )
+      return;
     ++request.current.id;
     request.current.controller?.abort();
     applied.current = normalized;
@@ -378,34 +426,84 @@ export default function PaymentTrackingList() {
         <Access access={access} tr={tr} />
       </div>
     );
-  const currencyTitle = data?.currencyMode === "all"
-    ? t("Tüm para birimleri", "All currencies")
-    : currencyName(data?.selectedCurrency, tr);
-  const currencyBalances = data ? (data.currencyMode === "all"
-    ? data.currencyBreakdown
-    : [{ currency: data.selectedCurrency, total: data.total, summary: data.summary, filteredSummary: data.filteredSummary }]) : [];
+  const currencyTitle =
+    data?.currencyMode === "all"
+      ? t("Tüm para birimleri", "All currencies")
+      : currencyName(data?.selectedCurrency, tr);
+  const currencyBalances = data
+    ? data.currencyMode === "all"
+      ? data.currencyBreakdown
+      : [
+          {
+            currency: data.selectedCurrency,
+            total: data.total,
+            summary: data.summary,
+            filteredSummary: data.filteredSummary,
+          },
+        ]
+    : [];
   return (
     <div className={`${s.page} ${s.listPage}`} aria-busy={loading}>
       <header className={`${s.header} ${s.listHeader}`}>
         <h1>{t("Ödeme Takip", "Payment Tracking")}</h1>
         <div className={s.actions}>
-        <Link className={s.button} href="/finance/collection-report" aria-label={t("Tahsilat raporu", "Collection report")}>
-          {t("Rapor", "Report")}
-        </Link>
-        <button
-          className={s.button}
-          disabled={loading}
-          onClick={refreshSource}
-          aria-label={t("Kaynağı yenile", "Refresh source")}
-        >
-          <RefreshCw size={15} className={loading ? s.spin : undefined} />
-          {t("Yenile", "Refresh")}
-        </button>
+          <button
+            type="button"
+            className={s.iconButton}
+            aria-label={t("Arama ve filtreler", "Search and filters")}
+            title={t("Arama ve filtreler", "Search and filters")}
+            aria-expanded={activePanel === "filters"}
+            aria-controls="payment-search-panel"
+            onClick={() =>
+              setActivePanel((value) =>
+                value === "filters" ? null : "filters",
+              )
+            }
+          >
+            <Filter size={24} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className={s.iconButton}
+            aria-label={t("Takip özeti", "Follow-up summary")}
+            title={t("Takip özeti", "Follow-up summary")}
+            aria-expanded={activePanel === "summary"}
+            aria-controls="payment-summary-panel"
+            onClick={() =>
+              setActivePanel((value) =>
+                value === "summary" ? null : "summary",
+              )
+            }
+          >
+            <Wallet size={24} aria-hidden="true" />
+          </button>
+          <Link
+            className={s.button}
+            href="/finance/collection-report"
+            aria-label={t("Tahsilat raporu", "Collection report")}
+          >
+            <FileText size={20} aria-hidden="true" />
+            {t("Rapor", "Report")}
+          </Link>
+          <button
+            className={s.button}
+            disabled={loading}
+            onClick={refreshSource}
+            aria-label={t("Kaynağı yenile", "Refresh source")}
+          >
+            <RefreshCw size={20} className={loading ? s.spin : undefined} />
+            {t("Yenile", "Refresh")}
+          </button>
         </div>
       </header>
-      {data && (backgroundError || ["refreshing", "stale"].includes(data.source.freshness?.status || "")) && (
-        <SourceFreshness source={data.source} tr={tr} failed={backgroundError} />
-      )}
+      {data &&
+        (backgroundError || data.source.freshness?.status === "stale") && (
+          <SourceFreshness
+            source={data.source}
+            tr={tr}
+            failed={backgroundError}
+          />
+        )}
       {error && (
         <>
           <ErrorMessage
@@ -424,159 +522,183 @@ export default function PaymentTrackingList() {
           )}
         </>
       )}
-      <PaymentListFilters
-        data={data}
-        filters={filters}
-        draft={draft}
-        tr={tr}
-        loading={loading}
-        onDraft={setDraft}
-        onApply={apply}
-        scopeLabel={scopeLabel}
-        sortLabel={sortLabel}
-      />
+      <div id="payment-search-panel" hidden={activePanel !== "filters"}>
+        <PaymentListFilters
+          data={data}
+          filters={filters}
+          draft={draft}
+          tr={tr}
+          loading={loading}
+          onDraft={setDraft}
+          onApply={apply}
+          scopeLabel={scopeLabel}
+          sortLabel={sortLabel}
+        />
+      </div>
       {!data && loading ? <Loading tr={tr} /> : null}
       {data && (
         <>
-          <details className={s.managementPanel} data-payment-management>
-            <summary>
-              <Wallet size={16} aria-hidden="true" />
-              <span>{t("Yönetim özeti", "Management summary")}</span>
-              <ChevronDown size={16} className={s.managementChevron} aria-hidden="true" />
-            </summary>
-            <div className={s.managementBody}>
-              {!backgroundError && !["refreshing", "stale"].includes(data.source.freshness?.status || "") && (
-                <SourceFreshness source={data.source} tr={tr} />
-              )}
-          <section className={s.panel}>
-            <div className={s.panelHead}>
-              <div>
-                <h2>
-                  <Wallet size={18} />
-                  {t("Döviz bazında takip özeti", "Follow-up by currency")}
-                </h2>
-
-              </div>
-
-            </div>
-            {(loading || error) && (
-              <p className={s.hint} role="status">
-                {t(
-                  "Güncel sonuçlar bekleniyor; aşağıdaki özet son başarılı sonuçlara aittir.",
-                  "Waiting for current results; the summary below is from the last successful results.",
-                )}
-              </p>
-            )}
-            <div className={s.currencyGrid}>
-              {currencyBalances.map((balance) => (
-              <article className={s.currencyCard} key={currencyToken(balance.currency)} aria-label={t(`${currencyName(balance.currency, tr)} özeti`, `${currencyName(balance.currency, tr)} summary`)}>
-                <h3>
-                  {currencyName(balance.currency, tr)} · {paymentKindLabel(data.selectedPaymentKind, tr)} ·{" "}
-                  {data.selectedProjectGroup ? paymentProjectGroupLabel(data.selectedProjectGroup, tr) : t("Tüm projeler", "All projects")}
-                </h3>
-                <dl>
-                  <dt>{t("Toplam açık bakiye", "Total outstanding")}</dt>
-                  <dd>
-                    <strong>
-                      {money(balance.filteredSummary.outstanding, tr)}
-                    </strong>
-                  </dd>
-                  <dt>
-                    {t(
-                      "Asıl vadeye göre gecikmiş",
-                      "Overdue by original due date",
-                    )}
-                  </dt>
-                  <dd className={s.red}>
-                    {money(balance.filteredSummary.overdueAmount, tr)}
-                  </dd>
-                  <dt>
-                    {t(
-                      "Takip sırasındaki dosyaların açık bakiyesi",
-                      "Open balance of files due for follow-up",
-                    )}
-                  </dt>
-                  <dd>{money(balance.filteredSummary.actionableAmount, tr)}</dd>
-                </dl>
-              </article>
-              ))}
-              <article className={s.currencyCard}>
-                <h3>{t("Takip kapsamı", "Case coverage")}</h3>
-                <dl>
-                  <dt>{t("Açık dosyalar", "Open cases")}</dt>
-                  <dd>{data.filteredSummary.openCount}</dd>
-                  <dt>{t("Sorumlu atanmamış", "Unassigned")}</dt>
-                  <dd>{data.filteredSummary.unassignedCount}</dd>
-                  <dt>{t("Kaynak değerlendirme günü", "Source as-of date")}</dt>
-                  <dd>{dateLabel(data.source.asOf, tr)}</dd>
-                </dl>
-              </article>
-            </div>
-          </section>
-
-          <section
-            className={s.counts}
-            aria-label={t("Takip durumları", "Follow-up statuses")}
+          <div
+            id="payment-summary-panel"
+            hidden={activePanel !== "summary"}
+            data-payment-management
           >
-            {(
-              [
-                ["actionable", data.summary.actionableCount, CalendarClock],
-                ["overdue", data.summary.overdueCount, Clock3],
-                ["deferred", data.summary.deferredCount, CalendarDays],
-                ["today", data.summary.todayCount, CalendarDays],
-              ] as const
-            ).map(([scope, count, Icon]) => (
-              <button
-                key={scope}
-                className={s.kpi}
-                aria-pressed={filters.scope === scope}
-                onClick={() => apply({ ...draft, scope, page: 1 })}
-              >
-                <span>
-                  <Icon size={16} />
-                  {scopeLabel(scope)}
-                </span>
-                <strong
-                  className={
-                    scope === "overdue"
-                      ? s.red
-                      : scope === "deferred"
-                        ? s.amber
-                        : undefined
-                  }
-                >
-                  {count}
-                </strong>
-                <small>{t("Dosyaları görüntüle", "View cases")}</small>
-              </button>
-            ))}
-          </section>
-          <section className={s.closedScope} aria-label={t("Tamamlanan ödemeler", "Completed payments")}>
-            <div className={s.actions}>
-              <button
-                type="button"
-                className={s.button}
-                aria-pressed={filters.scope === "closed"}
-                disabled={loading}
-                onClick={() => apply({ ...draft, scope: "closed", page: 1 })}
-              >
-                {t("Tamamen ödenenler", "Fully paid")} ({data.summary.closedCount})
-              </button>
-              {filters.scope === "closed" && (
-                <button
-                  type="button"
-                  className={s.button}
-                  disabled={loading}
-                  onClick={() => apply({ ...draft, scope: "open", page: 1 })}
-                >
-                  {t("Açık bakiyelilere dön", "Back to open balances")}
-                </button>
-              )}
-            </div>
+            <div className={s.managementBody}>
+              {!backgroundError &&
+                !["refreshing", "stale"].includes(
+                  data.source.freshness?.status || "",
+                ) && <SourceFreshness source={data.source} tr={tr} />}
+              <section className={s.panel}>
+                <div className={s.panelHead}>
+                  <div>
+                    <h2>
+                      <Wallet size={18} />
+                      {t("Döviz bazında takip özeti", "Follow-up by currency")}
+                    </h2>
+                  </div>
+                </div>
+                {(loading || error) && (
+                  <p className={s.hint} role="status">
+                    {t(
+                      "Güncel sonuçlar bekleniyor; aşağıdaki özet son başarılı sonuçlara aittir.",
+                      "Waiting for current results; the summary below is from the last successful results.",
+                    )}
+                  </p>
+                )}
+                <div className={s.currencyGrid}>
+                  {currencyBalances.map((balance) => (
+                    <article
+                      className={s.currencyCard}
+                      key={currencyToken(balance.currency)}
+                      aria-label={t(
+                        `${currencyName(balance.currency, tr)} özeti`,
+                        `${currencyName(balance.currency, tr)} summary`,
+                      )}
+                    >
+                      <h3>
+                        {currencyName(balance.currency, tr)} ·{" "}
+                        {paymentKindLabel(data.selectedPaymentKind, tr)} ·{" "}
+                        {data.selectedProjectGroup
+                          ? paymentProjectGroupLabel(
+                              data.selectedProjectGroup,
+                              tr,
+                            )
+                          : t("Tüm projeler", "All projects")}
+                      </h3>
+                      <dl>
+                        <dt>{t("Toplam açık bakiye", "Total outstanding")}</dt>
+                        <dd>
+                          <strong>
+                            {money(balance.filteredSummary.outstanding, tr)}
+                          </strong>
+                        </dd>
+                        <dt>
+                          {t(
+                            "Asıl vadeye göre gecikmiş",
+                            "Overdue by original due date",
+                          )}
+                        </dt>
+                        <dd className={s.red}>
+                          {money(balance.filteredSummary.overdueAmount, tr)}
+                        </dd>
+                        <dt>
+                          {t(
+                            "Takip sırasındaki dosyaların açık bakiyesi",
+                            "Open balance of files due for follow-up",
+                          )}
+                        </dt>
+                        <dd>
+                          {money(balance.filteredSummary.actionableAmount, tr)}
+                        </dd>
+                      </dl>
+                    </article>
+                  ))}
+                  <article className={s.currencyCard}>
+                    <h3>{t("Takip kapsamı", "Case coverage")}</h3>
+                    <dl>
+                      <dt>{t("Açık dosyalar", "Open cases")}</dt>
+                      <dd>{data.filteredSummary.openCount}</dd>
+                      <dt>{t("Sorumlu atanmamış", "Unassigned")}</dt>
+                      <dd>{data.filteredSummary.unassignedCount}</dd>
+                      <dt>
+                        {t("Kaynak değerlendirme günü", "Source as-of date")}
+                      </dt>
+                      <dd>{dateLabel(data.source.asOf, tr)}</dd>
+                    </dl>
+                  </article>
+                </div>
+              </section>
 
-          </section>
+              <section
+                className={s.counts}
+                aria-label={t("Takip durumları", "Follow-up statuses")}
+              >
+                {(
+                  [
+                    ["actionable", data.summary.actionableCount, CalendarClock],
+                    ["overdue", data.summary.overdueCount, Clock3],
+                    ["deferred", data.summary.deferredCount, CalendarDays],
+                    ["today", data.summary.todayCount, CalendarDays],
+                  ] as const
+                ).map(([scope, count, Icon]) => (
+                  <button
+                    key={scope}
+                    className={s.kpi}
+                    aria-pressed={filters.scope === scope}
+                    onClick={() => apply({ ...draft, scope, page: 1 })}
+                  >
+                    <span>
+                      <Icon size={16} />
+                      {scopeLabel(scope)}
+                    </span>
+                    <strong
+                      className={
+                        scope === "overdue"
+                          ? s.red
+                          : scope === "deferred"
+                            ? s.amber
+                            : undefined
+                      }
+                    >
+                      {count}
+                    </strong>
+                    <small>{t("Dosyaları görüntüle", "View cases")}</small>
+                  </button>
+                ))}
+              </section>
+              <section
+                className={s.closedScope}
+                aria-label={t("Tamamlanan ödemeler", "Completed payments")}
+              >
+                <div className={s.actions}>
+                  <button
+                    type="button"
+                    className={s.button}
+                    aria-pressed={filters.scope === "closed"}
+                    disabled={loading}
+                    onClick={() =>
+                      apply({ ...draft, scope: "closed", page: 1 })
+                    }
+                  >
+                    {t("Tamamen ödenenler", "Fully paid")} (
+                    {data.summary.closedCount})
+                  </button>
+                  {filters.scope === "closed" && (
+                    <button
+                      type="button"
+                      className={s.button}
+                      disabled={loading}
+                      onClick={() =>
+                        apply({ ...draft, scope: "open", page: 1 })
+                      }
+                    >
+                      {t("Açık bakiyelilere dön", "Back to open balances")}
+                    </button>
+                  )}
+                </div>
+              </section>
             </div>
-          </details>
+          </div>
           {data.orphanedTrackingCount > 0 && (
             <div className={s.notice}>
               {data.orphanedTrackingCount}{" "}
@@ -588,14 +710,20 @@ export default function PaymentTrackingList() {
           )}
         </>
       )}
-      {data && (
+      {data && activePanel === "summary" && (
         <FilteredOverdueTotal
           summary={data.filteredSummary}
           total={data.total}
           currency={currencyTitle}
-          breakdown={data.currencyMode === "all" ? data.currencyBreakdown : undefined}
+          breakdown={
+            data.currencyMode === "all" ? data.currencyBreakdown : undefined
+          }
           paymentKind={paymentKindLabel(data.selectedPaymentKind, tr)}
-          project={data.selectedProjectGroup ? paymentProjectGroupLabel(data.selectedProjectGroup, tr) : t("Tüm projeler", "All projects")}
+          project={
+            data.selectedProjectGroup
+              ? paymentProjectGroupLabel(data.selectedProjectGroup, tr)
+              : t("Tüm projeler", "All projects")
+          }
           tr={tr}
           state={
             loading
@@ -636,25 +764,13 @@ export default function PaymentTrackingList() {
                       "customerName",
                       t("Müşteri / daire", "Customer / unit"),
                     )}
-                    {sortHeader("outstanding", t("Açık bakiye", "Outstanding"))}
-                    <th scope="col">
-                      {t("Gecikmiş ödeme", "Overdue amount")}
-                    </th>
-                    {sortHeader(
-                      "overdueDays",
-                      t("Asıl vade / gecikme", "Original due / delay"),
-                    )}
+                    {sortHeader("outstanding", t("Kalan borç", "Outstanding"))}
+                    <th scope="col">{t("Gecikmiş ödeme", "Overdue amount")}</th>
                     {sortHeader(
                       "effectiveDueDate",
                       t("Takip tarihi", "Follow-up date"),
                     )}
-                    <th scope="col">
-                      {t("Durum / sorumlu", "Status / owner")}
-                    </th>
-                    <th scope="col">
-                      {t("Yetki kodu", "Authorization code")}
-                    </th>
-                    <th scope="col">{t("Fatura OK", "Invoice OK")}</th>
+                    <th scope="col">{t("Takip durumu", "Follow-up status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -679,29 +795,44 @@ export default function PaymentTrackingList() {
                           {currencyName(row.identity.currency, tr)}
                         </small>
                         {row.tracking?.priority === "high" && (
-                          <small className={s.amber}>{t("Yüksek öncelik", "High priority")}</small>
+                          <small className={s.amber}>
+                            {t("Yüksek öncelik", "High priority")}
+                          </small>
                         )}
-                        {row.sourceReview?.status === "review_required" && <small className={s.amber}>{t("KDV iade / devir kontrolü", "VAT return / transfer review")}</small>}
+                        {row.sourceReview?.status === "review_required" && (
+                          <small className={s.amber}>
+                            {t(
+                              "KDV iade / devir kontrolü",
+                              "VAT return / transfer review",
+                            )}
+                          </small>
+                        )}
                       </td>
                       <td className={s.numeric}>
                         {money(row.outstanding, tr)}
-                        {data.currencyMode === "all" && <small>{currencyName(row.identity.currency, tr)}</small>}
+                        {data.currencyMode === "all" && (
+                          <small>
+                            {currencyName(row.identity.currency, tr)}
+                          </small>
+                        )}
                       </td>
                       <td
                         className={`${s.numeric} ${row.overdueAmount ? s.red : ""}`}
                       >
                         {money(row.overdueAmount, tr)}
-                        {data.currencyMode === "all" && <small>{currencyName(row.identity.currency, tr)}</small>}
-                      </td>
-                      <td>
-                        {dateLabel(row.oldestDueDate, tr)}
                         {row.overdueDays > 0 && (
-                          <small className={s.red}>
+                          <small>
                             {row.overdueDays}{" "}
                             {t("gün gecikmiş", "days overdue")}
                           </small>
                         )}
+                        {data.currencyMode === "all" && (
+                          <small>
+                            {currencyName(row.identity.currency, tr)}
+                          </small>
+                        )}
                       </td>
+
                       <td
                         className={
                           row.trackingStatus === "deferred"
@@ -711,9 +842,7 @@ export default function PaymentTrackingList() {
                       >
                         {dateLabel(row.effectiveDueDate, tr)}
                         {row.tracking?.trackingDate && (
-                          <small>
-                            {t("Ertelenmiş", "Deferred")}
-                          </small>
+                          <small>{t("Ertelenmiş", "Deferred")}</small>
                         )}
                       </td>
                       <td>
@@ -723,7 +852,10 @@ export default function PaymentTrackingList() {
                           {row.fullyPaid
                             ? t("Tamamen ödendi", "Fully paid")
                             : row.trackingStatus === "paid"
-                              ? t("Seçili bakiye ödendi", "Selected balance paid")
+                              ? t(
+                                  "Seçili bakiye ödendi",
+                                  "Selected balance paid",
+                                )
                               : statusLabel(row.trackingStatus, tr)}
                         </span>
                         <small>
@@ -737,10 +869,6 @@ export default function PaymentTrackingList() {
                           </small>
                         )}
                       </td>
-                      <td>
-                        {authorizationLabel(row.authorization, tr)}
-                      </td>
-                    <td title={invoiceOkDetails(row.invoiceOk, tr)}>{invoiceOkText(row.invoiceOk, tr)}{invoiceOkText(row.invoiceOk, tr) === (tr ? "Karma" : "Mixed") && <small>{invoiceOkDetails(row.invoiceOk, tr)}</small>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -801,7 +929,6 @@ export default function PaymentTrackingList() {
               </div>
             </div>
           </section>
-
         </>
       )}
     </div>
