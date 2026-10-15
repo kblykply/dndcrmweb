@@ -1,5 +1,5 @@
 import { getAuthSessionVersion, getUser } from "@/lib/auth";
-export function reportSessionGuard() {
+export function reportSessionGuard(audience: "finance" | "sales" = "finance") {
   const user = getUser(),
     version = getAuthSessionVersion();
   return () => {
@@ -10,7 +10,9 @@ export function reportSessionGuard() {
       user.id === current.id &&
       user.role === current.role &&
       version === getAuthSessionVersion() &&
-      ["ADMIN", "ACCOUNTING"].includes(current.role) &&
+      (audience === "sales" ? ["SALES"] : ["ADMIN", "ACCOUNTING"]).includes(
+        current.role,
+      ) &&
       !current.isPreview &&
       current.originalRole !== "PREVIEW"
     );

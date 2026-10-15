@@ -46,6 +46,7 @@ export default function PaymentListFilters({
   onApply,
   scopeLabel,
   sortLabel,
+  salesMode = false,
 }: {
   data: PaymentTrackingList | null;
   filters: Filters;
@@ -56,6 +57,7 @@ export default function PaymentListFilters({
   onApply: (filters: Filters) => void;
   scopeLabel: (value: string) => string;
   sortLabel: (value: string) => string;
+  salesMode?: boolean;
 }) {
   const t = (a: string, b: string) => (tr ? a : b);
   const [amountsCleared, setAmountsCleared] = useState(false);
@@ -181,6 +183,17 @@ export default function PaymentListFilters({
   const unavailable =
     data?.source.authorizationSource?.status === "unavailable";
   function select(key: TextFilterKey, allLabel?: string) {
+    if (
+      salesMode &&
+      [
+        "invoiceOk",
+        "authorizationState",
+        "authorizationCode",
+        "representative",
+        "assignee",
+      ].includes(key)
+    )
+      return null;
     const choices = options[key] || [];
     const value = draft[key];
     return (
@@ -242,6 +255,7 @@ export default function PaymentListFilters({
     );
   }
   function authorizationSelect() {
+    if (salesMode) return null;
     const choices = options.authorizationCode || [];
     const value =
       draft.authorizationState === "blank"
@@ -290,6 +304,11 @@ export default function PaymentListFilters({
   const chips: AppliedFilterChip[] = [];
   for (const [rawKey, label] of Object.entries(labels)) {
     const key = rawKey as TextFilterKey;
+    if (
+      salesMode &&
+      ["invoiceOk", "authorizationCode", "authorizationState"].includes(key)
+    )
+      continue;
     if (
       filters[key] !==
         (key === "authorizationState" || key === "invoiceOk"
@@ -560,7 +579,7 @@ export default function PaymentListFilters({
             </label>
 
             {authorizationSelect()}
-            {select("invoiceOk")}
+            {!salesMode && select("invoiceOk")}
             {select("scope")}
           </div>
           <p className={s.hint}>

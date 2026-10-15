@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import ExportMenu from "../../_reports/ExportMenu";
+import { reportSessionGuard } from "../../_reports/session";
+import { downloadFinanceReport } from "../../_reports/download";
+import { buildSalesLedgerReport } from "../../_reports/build";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
@@ -71,11 +75,19 @@ import {
   selectedCurrencyToken,
 } from "../_lib/list-currencies";
 
-export default function PaymentTrackingList() {
+export default function PaymentTrackingList({
+  salesMode = false,
+}: {
+  salesMode?: boolean;
+}) {
+  const apiBase = salesMode ? "/sales-ledger" : "/payment-tracking";
+  const basePath = salesMode
+    ? "/my-customer-accounts"
+    : "/finance/payment-tracking";
   const { locale } = useLanguage(),
     tr = locale === "tr";
   const t = (a: string, b: string) => (tr ? a : b);
-  const access = useTrackingAccess();
+  const access = useTrackingAccess(salesMode);
   const [ready, setReady] = useState(false);
   const [activePanel, setActivePanel] = useState<
     "search" | "filters" | "summary" | null
@@ -106,6 +118,12 @@ export default function PaymentTrackingList() {
       ++request.current.id;
       request.current.controller?.abort();
       const next = readFilters(new URLSearchParams(window.location.search));
+      if (salesMode)
+        Object.assign(next, {
+          invoiceOk: "value:DND",
+          authorizationState: "blank",
+          authorizationCode: "",
+        });
       applied.current = next;
       setRequestVersion((value) => value + 1);
       setFilters(next);
@@ -119,7 +137,7 @@ export default function PaymentTrackingList() {
       cancelAnimationFrame(frame);
       window.removeEventListener("popstate", restore);
     };
-  }, []);
+  }, [salesMode]);
   const load = useCallback(
     async (
       scope: Filters,
@@ -136,7 +154,9 @@ export default function PaymentTrackingList() {
       state.controller = controller;
       if (refresh) invalidatePaymentListCache();
       const cacheKey = query(normalizeFilters(scope)).toString();
-      const cacheTicket = paymentListCacheTicket();
+      const cacheTicket = paymentListCacheTicket(
+        salesMode ? "sales" : "finance",
+      );
       const cached =
         !refresh && !background
           ? readPaymentListCache(cacheKey, cacheTicket)
@@ -162,12 +182,14 @@ export default function PaymentTrackingList() {
       try {
         const params = query(scope);
         if (refresh) params.set("refresh", "true");
-        const next = (await authedFetch(`/payment-tracking?${params}`, {
+        const next = (await authedFetch(`${apiBase}?${params}`, {
           signal: controller.signal,
         })) as ListData;
         if (id !== state.id || controller.signal.aborted) return;
         requireSourceAudit(next.source, language.current);
-        const responseTicket = paymentListCacheTicket();
+        const responseTicket = paymentListCacheTicket(
+          salesMode ? "sales" : "finance",
+        );
         if (
           cacheTicket.identity !== responseTicket.identity ||
           !responseTicket.session
@@ -253,7 +275,7 @@ export default function PaymentTrackingList() {
         window.history.replaceState(
           null,
           "",
-          `/finance/payment-tracking?${query(normalized)}`,
+          `${basePath}?${query(normalized)}`,
         );
       } catch (cause) {
         if (id === state.id && !controller.signal.aborted) {
@@ -284,7 +306,7 @@ export default function PaymentTrackingList() {
         }
       }
     },
-    [],
+    [apiBase, basePath, salesMode],
   );
   useSourceExpiry(data?.source, () => {
     invalidatePaymentListCache();
@@ -323,6 +345,13 @@ export default function PaymentTrackingList() {
   function apply(next: Filters) {
     const normalized = {
       ...normalizeFilters(next),
+      ...(salesMode
+        ? {
+            invoiceOk: "value:DND",
+            authorizationState: "blank",
+            authorizationCode: "",
+          }
+        : {}),
       currency: next.currency || (data ? selectedCurrencyToken(data) : ""),
     };
     setDraft(normalized);
@@ -339,7 +368,7 @@ export default function PaymentTrackingList() {
       isPaymentListSourceRecent(data) &&
       readPaymentListCache(
         query(normalized).toString(),
-        paymentListCacheTicket(),
+        paymentListCacheTicket(salesMode ? "sales" : "finance"),
       ) &&
       query(normalized).toString() === query(applied.current).toString()
     )
@@ -350,11 +379,7 @@ export default function PaymentTrackingList() {
     setFilters(normalized);
     setLoading(true);
     setRequestVersion((value) => value + 1);
-    window.history.pushState(
-      null,
-      "",
-      `/finance/payment-tracking?${query(normalized)}`,
-    );
+    window.history.pushState(null, "", `${basePath}?${query(normalized)}`);
   }
   const scopeLabel = (value: string) =>
     value === "all"
@@ -424,7 +449,7 @@ export default function PaymentTrackingList() {
   if (access !== "allowed")
     return (
       <div className={s.page}>
-        <Access access={access} tr={tr} />
+        <Access access={access} tr={tr} salesMode={salesMode} />
       </div>
     );
   const currencyTitle =
@@ -446,7 +471,11 @@ export default function PaymentTrackingList() {
   return (
     <div className={`${s.page} ${s.listPage}`} aria-busy={loading}>
       <header className={`${s.header} ${s.listHeader}`}>
-        <h1>{t("Ödeme Takip", "Payment Tracking")}</h1>
+        <h1>
+          {salesMode
+            ? t("Müşteri Carilerim", "My Customer Accounts")
+            : t("Ödeme Takip", "Payment Tracking")}
+        </h1>
         <div className={s.actions}>
           <button
             type="button"
@@ -496,14 +525,71 @@ export default function PaymentTrackingList() {
           >
             <Wallet size={24} aria-hidden="true" />
           </button>
-          <Link
-            className={s.button}
-            href="/finance/collection-report"
-            aria-label={t("Tahsilat raporu", "Collection report")}
-          >
-            <FileText size={20} aria-hidden="true" />
-            {t("Rapor", "Report")}
-          </Link>
+          {salesMode && (
+            <ExportMenu
+              tr={tr}
+              disabled={loading || !data}
+              options={[
+                {
+                  value: "current",
+                  label: t("Gösterilen cari listesi", "Current customer list"),
+                },
+                {
+                  value: "overdue",
+                  label: t("Geciken cariler", "Overdue accounts"),
+                },
+                { value: "all", label: t("Tüm carilerim", "All my accounts") },
+              ]}
+              onExport={async (format, scope) => {
+                const allowed = reportSessionGuard("sales");
+                const values = {
+                  ...filters,
+                  ...(scope === "current" ? {} : { scope }),
+                  invoiceOk: "value:DND",
+                  authorizationState: "blank",
+                  authorizationCode: "",
+                };
+                const result = (await authedFetch(
+                  `${apiBase}/export?${query(values)}`,
+                )) as ListData;
+                requireSourceAudit(result.source, tr);
+                if (
+                  !allowed() ||
+                  result.rows.length !== result.total ||
+                  !hasCurrencyContract(result, filters.currency) ||
+                  !hasInvoiceOkContract(result, result.rows, "value:DND")
+                )
+                  throw new Error(
+                    t(
+                      "Rapor kapsamı doğrulanamadı.",
+                      "Report scope could not be verified.",
+                    ),
+                  );
+                await downloadFinanceReport(
+                  buildSalesLedgerReport(
+                    result,
+                    tr,
+                    scope === "current"
+                      ? scopeLabel(filters.scope)
+                      : scopeLabel(scope),
+                  ),
+                  format,
+                  tr,
+                  allowed,
+                );
+              }}
+            />
+          )}
+          {!salesMode && (
+            <Link
+              className={s.button}
+              href="/finance/collection-report"
+              aria-label={t("Tahsilat raporu", "Collection report")}
+            >
+              <FileText size={20} aria-hidden="true" />
+              {t("Rapor", "Report")}
+            </Link>
+          )}
           <button
             className={s.button}
             disabled={loading}
@@ -589,6 +675,7 @@ export default function PaymentTrackingList() {
           onApply={apply}
           scopeLabel={scopeLabel}
           sortLabel={sortLabel}
+          salesMode={salesMode}
         />
       </div>
       {!data && loading ? <Loading tr={tr} /> : null}
@@ -841,7 +928,7 @@ export default function PaymentTrackingList() {
                     >
                       <td>
                         <Link
-                          href={`${trackingHref(row.key)}?returnTo=${encodeURIComponent(query(filters).toString())}`}
+                          href={`${salesMode ? `${basePath}/${encodeURIComponent(row.key)}` : trackingHref(row.key)}?returnTo=${encodeURIComponent(query(filters).toString())}`}
                         >
                           {row.customerName || row.identity.customerCode || "—"}
                         </Link>

@@ -278,3 +278,25 @@ test("Invoice OK cache scopes reject stale or mixed-code substitutions", () => {
   api.writePaymentListCache("currency=GBP", legacy, ticket);
   assert.equal(api.readPaymentListCache("currency=GBP", ticket), null);
 });
+
+test("sales ledger caches only its explicit sales audience and never a finance audience", () => {
+  const { api, auth, value } = setup();
+  auth.user = { id: "bob", role: "SALES" };
+  assert.equal(api.paymentListCacheTicket().session, null);
+  const ticket = api.paymentListCacheTicket("sales");
+  assert(ticket.session);
+  api.writePaymentListCache("currency=GBP", value(), ticket);
+  assert(api.readPaymentListCache("currency=GBP", ticket));
+  assert.equal(api.paymentListCacheTicket().session, null);
+  assert.equal(api.readPaymentListCache("currency=GBP", ticket), null);
+});
+test("sales ledger caches are discarded when switching between salespeople", () => {
+  const { api, auth, value } = setup();
+  auth.user = { id: "bob", role: "SALES" };
+  const ticket = api.paymentListCacheTicket("sales");
+  api.writePaymentListCache("currency=GBP", value(), ticket);
+  auth.user = { id: "sabina", role: "SALES" };
+  assert.equal(api.readPaymentListCache("currency=GBP", ticket), null);
+  const next = api.paymentListCacheTicket("sales");
+  assert.equal(api.readPaymentListCache("currency=GBP", next), null);
+});

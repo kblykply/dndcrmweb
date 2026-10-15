@@ -39,7 +39,7 @@ const all = items(navigationGroups).map((item) => item.id);
 
 test("six groups contain unique, translated links to existing modules", () => {
   assert.equal(navigationGroups.length, 6);
-  assert.equal(all.length, 31);
+  assert.equal(all.length, 32);
   assert.equal(new Set(all).size, all.length);
   assert.equal(
     new Set(items(navigationGroups).map((item) => item.href)).size,
@@ -76,6 +76,7 @@ test("grouping preserves the old role matrix, excluding the dead help link", () 
           "payment-tracking",
           "collection-report",
           "collection-table",
+          "my-customer-accounts",
         ].includes(id),
     ),
     PREVIEW: all.filter(
@@ -84,12 +85,14 @@ test("grouping preserves the old role matrix, excluding the dead help link", () 
           "payment-tracking",
           "collection-report",
           "collection-table",
+          "my-customer-accounts",
           "digital-map",
           "digital-team",
           "it-support",
         ].includes(id),
     ),
     SALES: [
+      "my-customer-accounts",
       "call-followups",
       "it-support",
       "profile",
@@ -172,8 +175,8 @@ test("Turkish characters, case, English labels and multi-word searches match", (
 
 test("search cannot bring back modules hidden from a role", () => {
   assert.deepEqual(
-    searchNavigation(navigationForRole("SALES"), "finance", labels),
-    [],
+    ids(searchNavigation(navigationForRole("SALES"), "finance", labels)),
+    ["my-customer-accounts"],
   );
   assert.deepEqual(
     searchNavigation(navigationForRole("ACCOUNTING"), "customer", labels),

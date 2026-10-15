@@ -80,6 +80,7 @@ meetings: "Toplantılar",
     paymentTracking: "Ödeme Takip",
     collectionReport: "Tahsilat Raporu",
     collectionTable: "Tahsilat Tablosu",
+    myCustomerAccounts: "Müşteri Carilerim",
 
   },
 

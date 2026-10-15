@@ -73,6 +73,7 @@ meetings: "Meetings",
     paymentTracking: "Payment Tracking",
     collectionReport: "Collection Report",
     collectionTable: "Collection Table",
+    myCustomerAccounts: "My Customer Accounts",
 
       
   },

@@ -12,11 +12,13 @@ export default function StatementExport({
   dates,
   tr,
   disabled = false,
+  salesMode = false,
 }: {
   caseKey: string;
   dates: (string | null)[];
   tr: boolean;
   disabled?: boolean;
+  salesMode?: boolean;
 }) {
   const years = [
     ...new Set(dates.flatMap((date) => (date ? [date.slice(0, 4)] : []))),
@@ -51,9 +53,9 @@ export default function StatementExport({
         },
       ]}
       onExport={async (format, scope, period) => {
-        const allowed = reportSessionGuard();
+        const allowed = reportSessionGuard(salesMode ? "sales" : "finance");
         const data = (await authedFetch(
-          `/payment-tracking/${encodeURIComponent(caseKey)}`,
+          `${salesMode ? "/sales-ledger" : "/payment-tracking"}/${encodeURIComponent(caseKey)}`,
         )) as PaymentTrackingDetail;
         requireSourceAudit(data.source, tr);
         if (!allowed() || data.item.key !== caseKey)
@@ -66,6 +68,7 @@ export default function StatementExport({
           data,
           scope === "all" ? "" : period,
           tr,
+          salesMode,
         );
         await downloadFinanceReport(report, format, tr, allowed);
       }}

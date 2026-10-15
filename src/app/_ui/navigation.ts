@@ -282,6 +282,14 @@ export const navigationGroups: readonly NavigationGroup[] = [
     icon: "landmark",
     items: [
       {
+        id: "my-customer-accounts",
+        href: "/my-customer-accounts",
+        label: "nav.myCustomerAccounts",
+        icon: "landmark",
+        roles: ["ADMIN", "SALES"],
+        keywords: ["müşteri carilerim", "geciken ödemeler", "cari ekstre", "my customer accounts"],
+      },
+      {
         id: "payment-tracking",
         href: "/finance/payment-tracking",
         label: "nav.paymentTracking",

@@ -72,13 +72,19 @@ function requirePortfolio(data: DetailData, tr: boolean) {
 
 export default function PaymentTrackingDetail({
   caseKey,
+  salesMode = false,
 }: {
   caseKey: string;
+  salesMode?: boolean;
 }) {
+  const apiBase = salesMode ? "/sales-ledger" : "/payment-tracking";
+  const basePath = salesMode
+    ? "/my-customer-accounts"
+    : "/finance/payment-tracking";
   const { locale } = useLanguage(),
     tr = locale === "tr";
   const t = (a: string, b: string) => (tr ? a : b);
-  const access = useTrackingAccess();
+  const access = useTrackingAccess(salesMode);
   const [data, setData] = useState<DetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState("");
@@ -146,7 +152,7 @@ export default function PaymentTrackingDetail({
       }
       try {
         const next = (await authedFetch(
-          `/payment-tracking/${encodeURIComponent(caseKey)}${refresh ? "?refresh=true" : ""}`,
+          `${apiBase}/${encodeURIComponent(caseKey)}${refresh ? "?refresh=true" : ""}`,
           { signal: controller.signal },
         )) as DetailData;
         if (state.id !== id || controller.signal.aborted) return;
@@ -178,7 +184,7 @@ export default function PaymentTrackingDetail({
         }
       }
     },
-    [caseKey],
+    [caseKey, apiBase],
   );
   useEffect(() => {
     if (access !== "allowed") return;
@@ -239,7 +245,7 @@ export default function PaymentTrackingDetail({
     setSuccess(false);
     try {
       const next = (await authedFetch(
-        `/payment-tracking/${encodeURIComponent(caseKey)}/actions`,
+        `${apiBase}/${encodeURIComponent(caseKey)}/actions`,
         {
           method: "POST",
           signal: controller.signal,
@@ -314,13 +320,13 @@ export default function PaymentTrackingDetail({
   if (access !== "allowed")
     return (
       <div className={s.page}>
-        <Access access={access} tr={tr} />
+        <Access access={access} tr={tr} salesMode={salesMode} />
       </div>
     );
   if (!data)
     return (
       <div className={s.page}>
-        <Link className={s.back} href="/finance/payment-tracking">
+        <Link className={s.back} href={basePath}>
           <ArrowLeft size={15} />
           {t("Takip dosyaları", "Payment cases")}
         </Link>
@@ -394,7 +400,7 @@ export default function PaymentTrackingDetail({
         <div>
           <Link
             className={s.back}
-            href={`/finance/payment-tracking${backQuery ? `?${backQuery}` : ""}`}
+            href={`${basePath}${backQuery ? `?${backQuery}` : ""}`}
           >
             <ArrowLeft size={15} />
             {t("Takip dosyaları", "Payment cases")}
@@ -417,7 +423,9 @@ export default function PaymentTrackingDetail({
               className={`${s.badge} ${item.trackingStatus === "deferred" ? s.badgeAmber : item.trackingStatus === "overdue" ? s.badgeDanger : ""}`}
             >
               {data.portfolio.fullyPaid
-                ? t("Tamamen ödendi", "Fully paid")
+                ? salesMode
+                  ? t("Size ait bakiye ödendi", "Your assigned balance is paid")
+                  : t("Tamamen ödendi", "Fully paid")
                 : item.trackingStatus === "paid"
                   ? t("Seçili bakiye ödendi", "Selected balance paid")
                   : statusLabel(item.trackingStatus, tr)}
@@ -455,6 +463,7 @@ export default function PaymentTrackingDetail({
         </div>
         <div className={s.actions}>
           <StatementExport
+            salesMode={salesMode}
             caseKey={caseKey}
             dates={data.portfolio.installments.map((row) => row.dueDate)}
             tr={tr}
@@ -552,6 +561,7 @@ export default function PaymentTrackingDetail({
             {t("Diğer dövizlerdeki ödemeler", "Payments in other currencies")}
           </summary>
           <PaymentPortfolioSummary
+            basePath={basePath}
             data={data}
             backQuery={backQuery}
             busy={loading || !!saving}
@@ -956,83 +966,86 @@ export default function PaymentTrackingDetail({
               </form>
             </section>
           </details>
-          <details className={s.disclosure}>
-            <summary>{t("Sorumlu ve öncelik", "Owner and priority")}</summary>{" "}
-            <section className={s.panel}>
-              <div className={s.panelHead}>
-                <h2>
-                  <UserRound size={18} />
-                  {t("Sorumlu ve öncelik", "Owner and priority")}
-                </h2>
-              </div>
-              <form
-                className={s.form}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void act({
-                    type: "assign",
-                    assigneeId: assignee || null,
-                    body: "",
-                  });
-                }}
-              >
-                <p className={s.hint}>
-                  {t("Mevcut sorumlu", "Current owner")}:{" "}
-                  <strong>
-                    {tracking?.assigneeName || t("Atanmamış", "Unassigned")}
-                  </strong>
-                </p>
-                <label className={s.field}>
-                  <span>{t("Dosya sorumlusu", "Case owner")}</span>
-                  <select
-                    aria-label={t("Dosya sorumlusu", "Case owner")}
-                    value={assignee}
-                    disabled={disabled}
-                    onChange={(event) => setAssignee(event.target.value)}
+          {!salesMode && (
+            <details className={s.disclosure}>
+              <summary>{t("Sorumlu ve öncelik", "Owner and priority")}</summary>{" "}
+              <section className={s.panel}>
+                <div className={s.panelHead}>
+                  <h2>
+                    <UserRound size={18} />
+                    {t("Sorumlu ve öncelik", "Owner and priority")}
+                  </h2>
+                </div>
+                <form
+                  className={s.form}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void act({
+                      type: "assign",
+                      assigneeId: assignee || null,
+                      body: "",
+                    });
+                  }}
+                >
+                  <p className={s.hint}>
+                    {t("Mevcut sorumlu", "Current owner")}:{" "}
+                    <strong>
+                      {tracking?.assigneeName || t("Atanmamış", "Unassigned")}
+                    </strong>
+                  </p>
+                  <label className={s.field}>
+                    <span>{t("Dosya sorumlusu", "Case owner")}</span>
+                    <select
+                      aria-label={t("Dosya sorumlusu", "Case owner")}
+                      value={assignee}
+                      disabled={disabled}
+                      onChange={(event) => setAssignee(event.target.value)}
+                    >
+                      <option value="">{t("Atanmamış", "Unassigned")}</option>
+                      {data.assignees.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className={s.button}
+                    disabled={
+                      disabled || assignee === (tracking?.assigneeId || "")
+                    }
                   >
-                    <option value="">{t("Atanmamış", "Unassigned")}</option>
-                    {data.assignees.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    {t("Sorumluyu kaydet", "Save owner")}
+                  </button>
+                </form>
+                <div className={s.divider} />
                 <button
                   className={s.button}
-                  disabled={
-                    disabled || assignee === (tracking?.assigneeId || "")
+                  disabled={disabled}
+                  aria-pressed={tracking?.priority === "high"}
+                  onClick={() =>
+                    void act({
+                      type: "priority",
+                      priority:
+                        tracking?.priority === "high" ? "normal" : "high",
+                      body: "",
+                    })
                   }
                 >
-                  {t("Sorumluyu kaydet", "Save owner")}
+                  <Flag size={15} />
+                  {tracking?.priority === "high"
+                    ? t(
+                        "Yüksek öncelik · normale dön",
+                        "High priority · set normal",
+                      )
+                    : t(
+                        "Yüksek öncelik olarak işaretle",
+                        "Mark as high priority",
+                      )}
                 </button>
-              </form>
-              <div className={s.divider} />
-              <button
-                className={s.button}
-                disabled={disabled}
-                aria-pressed={tracking?.priority === "high"}
-                onClick={() =>
-                  void act({
-                    type: "priority",
-                    priority: tracking?.priority === "high" ? "normal" : "high",
-                    body: "",
-                  })
-                }
-              >
-                <Flag size={15} />
-                {tracking?.priority === "high"
-                  ? t(
-                      "Yüksek öncelik · normale dön",
-                      "High priority · set normal",
-                    )
-                  : t(
-                      "Yüksek öncelik olarak işaretle",
-                      "Mark as high priority",
-                    )}
-              </button>
-            </section>
-          </details>
+              </section>
+            </details>
+          )}
           <section className={s.panel}>
             <div className={s.panelHead}>
               <h2>

@@ -1,20 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import {
   AlertCircle,
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
-import { AUTH_SESSION_CHANGED_EVENT, getAuthSessionVersion, getUser } from "@/lib/auth";
+import {
+  AUTH_SESSION_CHANGED_EVENT,
+  getAuthSessionVersion,
+  getUser,
+} from "@/lib/auth";
 import s from "../payment-tracking.module.css";
 
 function sessionKey() {
   const user = getUser();
   return JSON.stringify([
-    user?.id, user?.role, user?.originalRole, !!user?.isPreview,
+    user?.id,
+    user?.role,
+    user?.originalRole,
+    !!user?.isPreview,
     getAuthSessionVersion(),
   ]);
 }
@@ -30,11 +43,15 @@ function subscribeSession(changed: () => void) {
 
 /** Real session changes discard visible data, drafts and in-flight requests. */
 export function TrackingSessionBoundary({ children }: { children: ReactNode }) {
-  const identity = useSyncExternalStore(subscribeSession, sessionKey, () => "server");
+  const identity = useSyncExternalStore(
+    subscribeSession,
+    sessionKey,
+    () => "server",
+  );
   return <Fragment key={identity}>{children}</Fragment>;
 }
 
-export function useTrackingAccess() {
+export function useTrackingAccess(salesMode = false) {
   const [access, setAccess] = useState<
     "checking" | "login" | "denied" | "allowed"
   >("checking");
@@ -48,7 +65,9 @@ export function useTrackingAccess() {
       setAccess(
         !user
           ? "login"
-          : ["ADMIN", "ACCOUNTING"].includes(user.role || "") &&
+          : (salesMode ? ["SALES"] : ["ADMIN", "ACCOUNTING"]).includes(
+                user.role || "",
+              ) &&
               user.originalRole !== "PREVIEW" &&
               !user.isPreview
             ? "allowed"
@@ -56,7 +75,7 @@ export function useTrackingAccess() {
       );
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [salesMode]);
   return access;
 }
 
@@ -69,22 +88,45 @@ export function Loading({ tr }: { tr: boolean }) {
   );
 }
 
-export function Access({ access, tr }: { access: string; tr: boolean }) {
+export function Access({
+  access,
+  tr,
+  salesMode = false,
+}: {
+  access: string;
+  tr: boolean;
+  salesMode?: boolean;
+}) {
   if (access === "checking") return <Loading tr={tr} />;
   return (
     <section className={s.empty}>
       <ShieldCheck size={30} />
-      <h1>{tr ? "Ödeme Takip" : "Payment Tracking"}</h1>
+      <h1>
+        {salesMode
+          ? tr
+            ? "Müşteri Carilerim"
+            : "My Customer Accounts"
+          : tr
+            ? "Ödeme Takip"
+            : "Payment Tracking"}
+      </h1>
       <p>
         {access === "login"
           ? tr
             ? "Devam etmek için giriş yapın."
             : "Sign in to continue."
-          : tr
-            ? "Bu çalışma alanı yönetici ve muhasebe hesaplarına açıktır."
-            : "This workspace is available to administrators and accounting accounts."}
+          : salesMode
+            ? tr
+              ? "Bu çalışma alanı satışçı hesaplarına açıktır."
+              : "This workspace is for salespeople."
+            : tr
+              ? "Bu çalışma alanı yönetici ve muhasebe hesaplarına açıktır."
+              : "This workspace is available to administrators and accounting accounts."}
       </p>
-      <Link className={s.button} href={access === "login" ? "/" : "/finance"}>
+      <Link
+        className={s.button}
+        href={access === "login" ? "/" : salesMode ? "/leads" : "/finance"}
+      >
         {tr ? "Geri dön" : "Go back"}
       </Link>
     </section>

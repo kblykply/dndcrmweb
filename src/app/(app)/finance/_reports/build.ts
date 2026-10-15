@@ -213,6 +213,7 @@ export function buildStatementReport(
   data: PaymentTrackingDetail,
   period: string,
   tr: boolean,
+  ownedOnly = false,
 ): FinanceReport {
   const t = label(tr),
     lines = data.portfolio.installments.filter(
@@ -248,7 +249,7 @@ export function buildStatementReport(
     metadata: metadata(
       data.source,
       tr,
-      `${data.item.customerName} · ${data.item.identity.customerCode || "—"} · ${data.item.unitName} · ${period || t("Tüm vadeler", "All due dates")} · ${t("Tüm ödeme türleri ve dövizler", "All payment kinds and currencies")}`,
+      `${data.item.customerName} · ${data.item.identity.customerCode || "—"} · ${data.item.unitName} · ${period || t("Tüm vadeler", "All due dates")} · ${ownedOnly ? t("Yalnız satışçıya eşleştirilmiş cariler", "Only accounts mapped to this salesperson") : t("Tüm ödeme türleri ve dövizler", "All payment kinds and currencies")}`,
     ),
     sheets: [
       summary,
@@ -267,6 +268,72 @@ export function buildStatementReport(
           paymentKindLabel(line.paymentKind, tr),
           line.projectCode,
           ...values(line),
+        ]),
+      },
+    ],
+  };
+}
+
+export function buildSalesLedgerReport(
+  data: import("../payment-tracking/_lib/types").PaymentTrackingList,
+  tr: boolean,
+  scope: string,
+): FinanceReport {
+  const t = label(tr);
+  const balances =
+    data.currencyMode === "all"
+      ? data.currencyBreakdown
+      : [
+          {
+            currency: data.selectedCurrency,
+            filteredSummary: data.filteredSummary,
+          },
+        ];
+  return {
+    title: t("Müşteri Carilerim", "My Customer Accounts"),
+    filename: `musteri-carilerim-${scope}-${data.source.asOf}`,
+    metadata: metadata(
+      data.source,
+      tr,
+      `${t("Yalnız kendi carilerim", "My own accounts only")} · Fatura OK: DND · ${t("Yetki kodu boş", "Blank authorization code")} · ${scope} · ${paymentKindLabel(data.selectedPaymentKind, tr)}`,
+    ),
+    sheets: [
+      {
+        name: t("Özet", "Summary"),
+        columns: [
+          { label: t("Döviz", "Currency") },
+          { label: t("Kalan borç", "Outstanding"), kind: "money" },
+          { label: t("Gecikmiş borç", "Overdue"), kind: "money" },
+        ],
+        rows: balances.map((part) => [
+          currencyName(part.currency, tr),
+          part.filteredSummary.outstanding,
+          part.filteredSummary.overdueAmount,
+        ]),
+      },
+      {
+        name: t("Cari listesi", "Customer accounts"),
+        columns: [
+          { label: t("Müşteri", "Customer"), width: 42 },
+          { label: t("Cari kod", "Customer code") },
+          { label: t("Daire", "Unit") },
+          { label: t("Döviz", "Currency") },
+          { label: t("Planlanan", "Scheduled"), kind: "money" },
+          { label: t("Ödenen", "Paid"), kind: "money" },
+          { label: t("Kalan borç", "Outstanding"), kind: "money" },
+          { label: t("Gecikmiş borç", "Overdue"), kind: "money" },
+          { label: t("Takip tarihi", "Follow-up date") },
+        ],
+        rows: data.rows.map((row) => [
+          row.customerName,
+          row.identity.customerCode,
+          row.unitName || row.identity.unitCode,
+          currencyName(row.identity.currency, tr),
+          row.amount,
+          row.paid,
+          row.outstanding,
+          row.overdueAmount,
+          row.effectiveDueDate,
         ]),
       },
     ],
