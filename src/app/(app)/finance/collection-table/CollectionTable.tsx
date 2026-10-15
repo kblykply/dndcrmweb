@@ -19,66 +19,15 @@ import {
 } from "../payment-tracking/_lib/utils";
 import { paymentProjectGroupLabel } from "../payment-tracking/_lib/project-groups";
 import { usableReportSource } from "../collection-report/_lib/report";
-import type {
-  PaymentInstallment,
-  PaymentProjectGroup,
-  PaymentSourceSnapshot,
-} from "../payment-tracking/_lib/types";
+import type { InstallmentTableData as Data } from "./types";
 import s from "./table.module.css";
 import CaseStatement from "./CaseStatement";
 import CollectionRate from "./CollectionRate";
+import ExportMenu from "../_reports/ExportMenu";
+import { buildTableReport } from "../_reports/build";
+import { downloadFinanceReport } from "../_reports/download";
+import { reportSessionGuard } from "../_reports/session";
 
-type Row = PaymentInstallment & {
-  id: string;
-  caseKey: string;
-  customerCode: string | null;
-  customerName: string;
-  representatives: string[];
-  brokers: string[];
-  unitCode: string | null;
-  unitName: string;
-  currency: string | null;
-  projectGroup: PaymentProjectGroup;
-};
-type PeriodTotals = {
-  count: number;
-  amount: number | null;
-  paid: number | null;
-  outstanding: number | null;
-};
-type YearGroup = PeriodTotals & {
-  currency: string | null;
-  year: string;
-  months: (PeriodTotals & { month: string })[];
-};
-type Data = {
-  previousMonthEnd: string;
-  overview: {
-    currency: string | null;
-    overall: PeriodTotals;
-    throughPreviousMonth: PeriodTotals;
-    undated: PeriodTotals;
-  }[];
-  year: string;
-  month: string;
-  years: YearGroup[];
-  source: Omit<PaymentSourceSnapshot, "cases">;
-  currency: string;
-  search: string;
-  status: string;
-  sort: string;
-  direction: string;
-  currencies: (string | null)[];
-  rows: Row[];
-  total: number;
-  page: number;
-  totalPages: number;
-  totals: {
-    amount: number | null;
-    paid: number | null;
-    outstanding: number | null;
-  };
-};
 type Sort =
   | "dueDate"
   | "customerName"
@@ -237,6 +186,107 @@ export default function CollectionTable() {
           <h1>{text("Tahsilat Tablosu", "Collection Table")}</h1>
         </div>
         <div className={s.headerActions}>
+          <ExportMenu
+            tr={tr}
+            disabled={loading || !usable}
+            years={[
+              ...new Set(
+                data?.years
+                  .map((part) => part.year)
+                  .filter((value) => value !== "undated") || [],
+              ),
+            ]
+              .sort()
+              .reverse()}
+            months={[
+              ...new Set(
+                data?.years.flatMap((part) =>
+                  part.months.map((entry) => entry.month),
+                ) || [],
+              ),
+            ]
+              .sort()
+              .reverse()}
+            options={[
+              {
+                value: "general",
+                label: text("Genel rapor", "General report"),
+              },
+              {
+                value: "years",
+                label: text("Tüm yılların özeti", "All years summary"),
+              },
+              {
+                value: "year",
+                label: text("Yıl raporu", "Annual report"),
+                period: "year",
+              },
+              {
+                value: "month",
+                label: text("Ay raporu", "Monthly report"),
+                period: "month",
+              },
+              {
+                value: "customers",
+                label: text("Ayın cari dökümü", "Monthly customer balances"),
+                period: "month",
+              },
+              { value: "past", label: text("Geçmiş vadeler", "Past dues") },
+              {
+                value: "detail",
+                label: text(
+                  "Açık kapsamın tüm vadeleri",
+                  "All installments in current scope",
+                ),
+              },
+            ]}
+            onExport={async (format, scope, period) => {
+              const allowed = reportSessionGuard();
+              const params = new URLSearchParams({
+                currency: ["general", "years", "past"].includes(scope)
+                  ? "__ALL__"
+                  : currency,
+                search,
+                status,
+                sort,
+                direction,
+              });
+              if (scope === "year") params.set("year", period);
+              if (scope === "month" || scope === "customers") {
+                params.set("year", period.slice(0, 4));
+                params.set("month", period);
+              }
+              if (scope === "detail") {
+                params.set("year", year);
+                params.set("month", month);
+              }
+              const result = (await authedFetch(
+                `/payment-installment-table/export?${params}`,
+              )) as Data;
+              requireSourceAudit(result.source, tr);
+              if (
+                !allowed() ||
+                result.rows.length !== result.total ||
+                result.currency !== params.get("currency") ||
+                result.year !== (params.get("year") || "") ||
+                result.month !== (params.get("month") || "") ||
+                result.search !== search.trim().toLocaleLowerCase("tr-TR")
+              )
+                throw new Error(
+                  text(
+                    "Rapor kapsamı doğrulanamadı.",
+                    "The report scope could not be verified.",
+                  ),
+                );
+              await downloadFinanceReport(
+                buildTableReport(result, scope, tr),
+                format,
+                tr,
+                allowed,
+              );
+            }}
+          />
+
           <button
             type="button"
             className={s.iconButton}

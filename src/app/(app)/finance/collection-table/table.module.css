@@ -433,3 +433,10 @@
   outline: 2px solid var(--ct-teal);
   outline-offset: 2px;
 }
+
+.statementActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: normal;
+}

@@ -1,0 +1,110 @@
+.root {
+  position: relative;
+  display: inline-flex;
+  text-align: left;
+  font-size: 14px;
+  color: var(--text-primary, #172638);
+}
+.root > .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border: 1px solid var(--stroke, #d6dee8);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  color: inherit;
+  cursor: pointer;
+}
+.root > .icon svg {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+.root > .icon:hover,
+.root > .icon[aria-expanded="true"] {
+  border-color: #176f78;
+  color: #176f78;
+  background: var(--surface-2, #edf5f8);
+}
+.icon:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.menu {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  color: var(--text-primary, #172638);
+  z-index: 30;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  padding: 16px;
+  border: 1px solid var(--stroke, #d6dee8);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  box-shadow: 0 12px 32px #14283f26;
+  white-space: normal;
+}
+.menu form,
+.menu label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.menu form {
+  gap: 14px;
+}
+.menu label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.menu select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid var(--stroke, #d6dee8);
+  border-radius: 7px;
+  background: var(--surface, #fff);
+  color: inherit;
+  font: inherit;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.root .actions button {
+  padding: 9px 14px;
+  border: 1px solid var(--stroke, #d6dee8);
+  border-radius: 7px;
+  background: var(--surface, #fff);
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.root .actions .primary {
+  background: #176f78;
+  color: #fff;
+  border-color: #176f78;
+}
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.error {
+  color: #b91c1c;
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.4;
+}
+.root :is(button, select):focus-visible {
+  outline: 2px solid #176f78;
+  outline-offset: 2px;
+}
+
+.menu::backdrop {
+  background: #12233545;
+}

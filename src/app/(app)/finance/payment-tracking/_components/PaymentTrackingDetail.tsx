@@ -1,4 +1,5 @@
 "use client";
+import StatementExport from "../../_reports/StatementExport";
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -453,6 +454,12 @@ export default function PaymentTrackingDetail({
           </details>
         </div>
         <div className={s.actions}>
+          <StatementExport
+            caseKey={caseKey}
+            dates={data.portfolio.installments.map((row) => row.dueDate)}
+            tr={tr}
+            disabled={loading || !!saving}
+          />
           <button
             className={s.button}
             disabled={loading || !!saving}

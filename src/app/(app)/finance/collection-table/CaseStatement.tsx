@@ -12,6 +12,7 @@ import {
 import { paymentKindLabel } from "../payment-tracking/_lib/payment-kinds";
 import { usableReportSource } from "../collection-report/_lib/report";
 import CollectionRate from "./CollectionRate";
+import StatementExport from "../_reports/StatementExport";
 import s from "./table.module.css";
 
 export default function CaseStatement({
@@ -106,9 +107,17 @@ export default function CaseStatement({
     <>
       <tr className={s.statementTitle}>
         <th colSpan={8}>
-          {tr
-            ? "Daire ekstresi · Tüm vadeler ve ödeme türleri"
-            : "Unit statement · All due dates and payment kinds"}
+          <div className={s.statementActions}>
+            <StatementExport
+              caseKey={caseKey}
+              dates={lines.map((line) => line.dueDate)}
+              tr={tr}
+            />
+
+            {tr
+              ? "Daire ekstresi · Tüm vadeler ve ödeme türleri"
+              : "Unit statement · All due dates and payment kinds"}
+          </div>
         </th>
       </tr>
       {lines.map((line) => (
