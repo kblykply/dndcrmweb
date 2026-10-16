@@ -60,6 +60,8 @@ type BulkPreview = {
   missingEmailCount: number;
   recipients: BulkRecipient[];
   missingEmail: BulkRecipient[];
+  blockedRecipients?: Array<BulkRecipient & { reason: string }>;
+  languageReview?: Array<{ customerId: string; language: string; fallback: boolean }>;
   facets?: {
     languages: string[];
     nationalities: string[];
@@ -67,6 +69,8 @@ type BulkPreview = {
 };
 
 type BulkResult = {
+  queued?: boolean;
+  delivery?: { queueEnabled: boolean; hourlyLimit: number | null; dailyLimit: number | null };
   campaignId: string;
   campaignName: string;
   campaignStatus: string;
@@ -100,6 +104,8 @@ type CampaignSummary = {
   project: ProjectType;
   subject: string;
   status: "SENDING" | "COMPLETED" | "PARTIAL" | "FAILED";
+  pausedAt?: string | null;
+  pauseReason?: string | null;
   totalUnits: number;
   uniqueCustomers: number;
   attemptedCount: number;
@@ -118,6 +124,8 @@ type CampaignSummary = {
 };
 
 type CampaignRecipient = {
+  subject?: string | null;
+  deliveryLanguage?: string | null;
   id: string;
   customerId?: string | null;
   customerName: string;
@@ -128,7 +136,7 @@ type CampaignRecipient = {
   ownerEmail?: string | null;
   ownerRole?: string | null;
   unitNumbers: string;
-  status: "SENT" | "FAILED" | "MISSING_EMAIL";
+  status: "SENT" | "FAILED" | "MISSING_EMAIL" | "QUEUED" | "SENDING" | "UNCERTAIN" | "SKIPPED";
   error?: string | null;
   sentAt?: string | null;
 };
@@ -347,7 +355,7 @@ function deliveryLabel(status: UnitDeliveryStatus | "", isTr: boolean) {
 }
 
 function formatError(error: unknown) {
-  const raw = String((error as any)?.message || error || "Request failed");
+  const raw = String((error instanceof Error ? error.message : null) || error || "Request failed");
 
   try {
     const parsed = JSON.parse(raw);
@@ -406,6 +414,10 @@ function campaignStatusLabel(status: CampaignSummary["status"], isTr: boolean) {
 }
 
 function recipientStatusLabel(status: CampaignRecipient["status"], isTr: boolean) {
+  if (status === "QUEUED") return isTr ? "Sırada" : "Queued";
+  if (status === "SENDING") return isTr ? "Gönderiliyor" : "Sending";
+  if (status === "UNCERTAIN") return isTr ? "Teslim doğrulanmalı" : "Verify delivery";
+  if (status === "SKIPPED") return isTr ? "Atlandı" : "Skipped";
   if (status === "SENT") return isTr ? "Gönderildi" : "Sent";
   if (status === "FAILED") return isTr ? "Hata" : "Failed";
   return isTr ? "Mail eksik" : "Missing email";
@@ -428,7 +440,7 @@ export default function BulkEmailPage() {
   const { locale } = useLanguage();
   const isTr = locale === "tr";
   const [mounted, setMounted] = useState(false);
-  const [me, setMe] = useState<any>(null);
+  const [me, setMe] = useState<ReturnType<typeof getUser>>(null);
   const [project, setProject] = useState<ProjectType>("LA_JOYA");
   const [preview, setPreview] = useState<BulkPreview | null>(null);
   const [result, setResult] = useState<BulkResult | null>(null);
@@ -451,6 +463,10 @@ export default function BulkEmailPage() {
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<string[]>([]);
   const [manualCustomerId, setManualCustomerId] = useState("");
   const [showMissingEmails, setShowMissingEmails] = useState(false);
+  const [brandedPerla, setBrandedPerla] = useState(false);
+  const [brandedLanguage, setBrandedLanguage] = useState("tr");
+  const [brandedHtml, setBrandedHtml] = useState("");
+  const [queueEnabled, setQueueEnabled] = useState(false);
   const [templateKey, setTemplateKey] = useState<TemplateKey>("DELIVERY_UPDATE");
   const [templateLanguage, setTemplateLanguage] = useState<TemplateLanguage>("tr");
   const [previewCustomerId, setPreviewCustomerId] = useState("");
@@ -480,6 +496,11 @@ export default function BulkEmailPage() {
   );
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedProject = params.get("project");
+    if (PROJECTS.some(p => p === requestedProject)) setProject(requestedProject as ProjectType);
+    const requestedCampaign = params.get("campaign");
+    if (requestedCampaign) void loadCampaignDetail(requestedCampaign);
     setMounted(true);
     setMe(getUser());
     void loadUsers();
@@ -493,6 +514,7 @@ export default function BulkEmailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, project, deliveryStatus, ownerId, language, nationality]);
 
+  const selectionKey = selectedCustomerIds.join(",");
   useEffect(() => {
     if (!mounted) return;
     void loadAttachmentOptions(project);
@@ -505,7 +527,7 @@ export default function BulkEmailPage() {
     language,
     nationality,
     q,
-    selectedCustomerIds.join(","),
+    selectionKey,
   ]);
 
   const ownerOptions = useMemo(
@@ -766,6 +788,7 @@ export default function BulkEmailPage() {
       if (selectedCustomerIds.length > 0) {
         body.append("selectedCustomerIds", selectedCustomerIds.join(","));
       }
+      if (brandedPerla) body.append("templateId", "perla-update");
       body.append("subject", subject.trim());
       body.append("message", message.trim());
       appendAttachments(body);
@@ -813,6 +836,7 @@ export default function BulkEmailPage() {
       if (previewRecipient?.customerId) {
         body.append("previewCustomerId", previewRecipient.customerId);
       }
+      if (brandedPerla) body.append("templateId", "perla-update");
       body.append("subject", subject.trim());
       body.append("message", message.trim());
       appendAttachments(body, selectedAttachmentIdsForTest());
@@ -832,6 +856,37 @@ export default function BulkEmailPage() {
       setTesting(false);
     }
   }
+
+  useEffect(() => {
+    if (project !== "LA_JOYA_PERLA") setBrandedPerla(false);
+  }, [project]);
+
+  useEffect(() => {
+    let active = true;
+    void authedFetch("/bulk-email/delivery-settings").then(data => { if (active) setQueueEnabled(Boolean(data.queueEnabled)); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!brandedPerla) return;
+    let active = true;
+    void authedFetch(`/bulk-email/templates/perla/${brandedLanguage}`).then(data => {
+      if (!active) return;
+      setBrandedHtml(data.html);
+      setSubject(data.subject);
+      setMessage(data.text);
+    }).catch(error => { if (active) setErr(formatError(error)); });
+    return () => { active = false; };
+  }, [brandedPerla, brandedLanguage]);
+
+  useEffect(() => {
+    if (!selectedCampaignId || campaignDetail?.status !== "SENDING") return;
+    let active = true;
+    const timer = setInterval(() => {
+      void authedFetch(`/bulk-email/campaigns/${encodeURIComponent(selectedCampaignId)}`).then(data => { if (active) setCampaignDetail(data); }).catch(() => {});
+    }, 15000);
+    return () => { active = false; clearInterval(timer); };
+  }, [selectedCampaignId, campaignDetail?.status]);
 
   function applyTemplate(
     nextKey = templateKey,
@@ -1104,6 +1159,8 @@ export default function BulkEmailPage() {
         </div>
       </section>
 
+      {preview?.blockedRecipients?.length ? <details><summary>{isTr ? `${preview.blockedRecipients.length} kayıt gönderim dışında: ortak veya engellenmiş e-posta` : `${preview.blockedRecipients.length} records excluded: shared or suppressed email`}</summary>{preview.blockedRecipients.map(r => <p key={r.customerId}>{customerName(r)} · {r.email} · {r.reason === "SHARED_EMAIL" ? (isTr ? "Ortak adres: kontrol gerekli" : "Shared address: review required") : (isTr ? "Teslim hatası nedeniyle engellendi" : "Suppressed after delivery failure")}</p>)}</details> : null}
+      {brandedPerla && preview?.languageReview?.length ? <details><summary>{isTr ? `${preview.languageReview.length} alıcının dil seçimini kontrol edin` : `Review language selection for ${preview.languageReview.length} recipients`}</summary>{preview.languageReview.map(r => <p key={r.customerId}>{customerName(preview.recipients.find(p => p.customerId === r.customerId) || {customerId:r.customerId,fullName:r.customerId,units:[]})} · {r.language.toUpperCase()}</p>)}</details> : null}
       <section className="workspace">
         <div className="compose-panel">
           <div className="panel-head">
@@ -1113,7 +1170,14 @@ export default function BulkEmailPage() {
             </div>
           </div>
 
-          <div className="template-panel">
+          {!queueEnabled ? <p role="status">{isTr ? "Toplu gönderim beklemede: sağlayıcı kotası doğrulanıp kuyruk etkinleştirilmeli. Kendinize test gönderebilirsiniz." : "Bulk delivery is paused until provider quotas are confirmed and the queue enabled. Self-tests are available."}</p> : null}
+          {project === "LA_JOYA_PERLA" ? <label className="field"><span><input type="checkbox" checked={brandedPerla} onChange={e => setBrandedPerla(e.target.checked)} /> {isTr ? "Onaylı Perla bildirimi · Logolu HTML · Alıcının dilinde" : "Approved Perla update · Branded HTML · Recipient language"}</span></label> : null}
+          {brandedPerla ? <div>
+            <label className="field"><span>{isTr ? "Şablon önizleme dili (alıcı dili otomatik seçilir)" : "Preview language (delivery uses recipient preference)"}</span><select value={brandedLanguage} onChange={e => setBrandedLanguage(e.target.value)}>{[["tr","Türkçe"],["en","English"],["ru","Русский"],["fa","فارسی"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+            <iframe title="Perla HTML" sandbox="" srcDoc={brandedHtml} style={{width:"100%",height:600,border:"1px solid #dcebf0",background:"white"}} />
+            <p>{isTr ? "Onaylı metin sabittir. İletişim dili önceliklidir; dil yoksa milliyet eşleştirmesi, eşleşme yoksa İngilizce kullanılır. Test de seçilen müşterinin dilinde gönderilir." : "Approved copy is fixed. Preferred language takes priority; nationality is a fallback, then English. Tests also use the selected customer's language."}</p>
+          </div> : null}
+          <div className="template-panel" hidden={brandedPerla}>
             <div className="template-controls">
               <label>
                 <span>{isTr ? "Hazır şablon" : "Template"}</span>
@@ -1173,6 +1237,7 @@ export default function BulkEmailPage() {
             <span>{isTr ? "Konu" : "Subject"}</span>
             <input
               value={subject}
+              disabled={brandedPerla}
               onChange={(event) => setSubject(event.target.value)}
               placeholder={
                 isTr
@@ -1191,6 +1256,7 @@ export default function BulkEmailPage() {
             <span>{isTr ? "Mesaj" : "Message"}</span>
             <textarea
               value={message}
+              disabled={brandedPerla}
               onChange={(event) => setMessage(event.target.value)}
               placeholder={
                 isTr
@@ -1585,7 +1651,7 @@ export default function BulkEmailPage() {
             <div>
               <span className="kicker">{isTr ? "Sonuç" : "Result"}</span>
               <h2>
-                {isTr
+                {result.queued ? (isTr ? `${result.campaignName}: ${result.attempted} alıcı sırada` : `${result.campaignName}: ${result.attempted} recipients queued`) : isTr
                   ? `${result.campaignName}: ${result.successCount} başarılı, ${result.failedCount} hata`
                   : `${result.campaignName}: ${result.successCount} sent, ${result.failedCount} failed`}
               </h2>
@@ -1609,7 +1675,7 @@ export default function BulkEmailPage() {
             </div>
           ) : (
             <p>
-              {isTr
+              {result.queued ? (result.delivery?.queueEnabled ? (isTr ? "Gönderim arka planda kontrollü olarak devam edecek. Durumu gönderim takibinden izleyebilirsiniz." : "Delivery will proceed in the background. Track campaign progress below.") : (isTr ? "Kuyruk kayıtları saklandı. Gönderim ayarları etkinleştirilene kadar mail gönderilmez." : "Queue saved. No mail will be sent until delivery is enabled.")) : isTr
                 ? "Gönderim tamamlandı ve ilgili unit iletişim loglarına işlendi."
                 : "Sending completed and related unit communication logs were updated."}
             </p>
@@ -1721,7 +1787,7 @@ export default function BulkEmailPage() {
         </div>
       </section>
 
-      <section className="history-workspace">
+      <section className="history-workspace" id="delivery-process">
         <div className="history-panel">
           <div className="panel-head">
             <div>
@@ -1762,7 +1828,7 @@ export default function BulkEmailPage() {
                   </div>
                   <div className="campaign-metrics">
                     <span className={`status ${campaign.status.toLowerCase()}`}>
-                      {campaignStatusLabel(campaign.status, isTr)}
+                      {campaign.pausedAt ? (isTr ? "Duraklatıldı" : "Paused") : campaignStatusLabel(campaign.status, isTr)}
                     </span>
                     <small>
                       {campaign.successCount}/{campaign.attemptedCount}{" "}
@@ -1796,8 +1862,13 @@ export default function BulkEmailPage() {
             {campaignDetail ? (
               <div className="detail-actions">
                 <span className={`status ${campaignDetail.status.toLowerCase()}`}>
-                  {campaignStatusLabel(campaignDetail.status, isTr)}
+                  {campaignDetail.pausedAt ? (isTr ? "Duraklatıldı" : "Paused") : campaignStatusLabel(campaignDetail.status, isTr)}
                 </span>
+                {campaignDetail.status === "SENDING" ? <button className="secondary compact" type="button" onClick={async () => {
+                  const action = campaignDetail.pausedAt ? "resume" : "pause";
+                  if (action === "resume" && !window.confirm(isTr ? "Bu kampanyanın kalan mailleri gönderilmeye devam edecek. Devam edilsin mi?" : "Resume delivery of the remaining campaign emails?")) return;
+                  try { await authedFetch(`/bulk-email/campaigns/${encodeURIComponent(campaignDetail.id)}/${action}`, {method:"POST"}); await loadCampaignDetail(campaignDetail.id); await loadCampaigns(); } catch (error) { setErr(formatError(error)); }
+                }}>{campaignDetail.pausedAt ? (isTr ? "Gönderime devam et" : "Resume delivery") : (isTr ? "Duraklat" : "Pause")}</button> : null}
                 <button
                   className="secondary compact"
                   type="button"
@@ -1823,6 +1894,7 @@ export default function BulkEmailPage() {
             <div className="empty">{isTr ? "Detay yükleniyor..." : "Loading detail..."}</div>
           ) : campaignDetail ? (
             <>
+              {campaignDetail.pausedAt ? <p role="status"><strong>{isTr ? "Gönderim duraklatıldı." : "Delivery paused."}</strong> {campaignDetail.pauseReason}</p> : null}
               <div className="detail-stats">
                 <div>
                   <span>{isTr ? "Gönderilen" : "Sent"}</span>
@@ -1837,8 +1909,8 @@ export default function BulkEmailPage() {
                   <strong>{campaignDetail.missingEmailCount}</strong>
                 </div>
                 <div>
-                  <span>{isTr ? "Unit" : "Units"}</span>
-                  <strong>{campaignDetail.totalUnits}</strong>
+                  <span>{isTr ? "Sırada" : "Queued"}</span>
+                  <strong>{campaignDetail.recipients.filter(r => r.status === "QUEUED" || r.status === "SENDING").length}</strong>
                 </div>
               </div>
 
@@ -1859,10 +1931,13 @@ export default function BulkEmailPage() {
                       <strong>{recipient.customerName}</strong>
                       <span>{recipient.email || (isTr ? "Mail yok" : "No email")}</span>
                       <small>{recipient.unitNumbers}</small>
+                      <span>{recipient.subject || (isTr ? "Konu kaydı bulunmuyor" : "Subject unavailable")}</span>
+                      {recipient.deliveryLanguage ? <small>{recipient.deliveryLanguage.toUpperCase()}</small> : null}
+                      {recipient.sentAt ? <small>{new Date(recipient.sentAt).toLocaleString(isTr ? "tr-TR" : "en-US")}</small> : null}
                     </div>
                     <div>
                       <span className={`status ${recipient.status.toLowerCase()}`}>
-                        {recipientStatusLabel(recipient.status, isTr)}
+                        {recipient.status === "QUEUED" && campaignDetail.pausedAt ? (isTr ? "Duraklatıldı" : "Paused") : recipientStatusLabel(recipient.status, isTr)}
                       </span>
                       {recipient.error ? (
                         <small className="recipient-error">{recipient.error}</small>

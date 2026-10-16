@@ -89,6 +89,8 @@ type UnitDetail = {
   customer: UnitCustomer;
   previousCustomer?: UnitCustomer | null;
   logs?: UnitLog[];
+  emailHistory?: Array<{ id: string; email: string | null; subject: string | null; deliveryLanguage: string | null; status: string; error: string | null; sentAt: string | null; createdAt: string; campaign: { id: string; name: string; pausedAt: string | null } }>;
+
 };
 
 const DELIVERY_STATUSES: UnitDeliveryStatus[] = [
@@ -2121,6 +2123,16 @@ export default function UnitDetailPage() {
                   </button>
                 </div>
 
+                <div style={{marginTop:24,marginBottom:24}}>
+                  <h3>{locale === "tr" ? "Mail gönderim takibi" : "Email delivery tracking"}</h3>
+                  {unit.emailHistory?.length ? unit.emailHistory.map(mail => <article key={mail.id} style={{padding:"14px 0",borderBottom:"1px solid #dce5eb",lineHeight:1.6}}>
+                    <strong>{mail.subject || mail.campaign.name}</strong>
+                    <div>{mail.email || "—"} {mail.deliveryLanguage ? `· ${mail.deliveryLanguage.toUpperCase()}` : ""}</div>
+                    <div><strong>{mail.status === "SENT" ? (locale === "tr" ? "Gönderildi" : "Sent") : mail.status === "QUEUED" && mail.campaign.pausedAt ? (locale === "tr" ? "Duraklatıldı" : "Paused") : mail.status === "QUEUED" ? (locale === "tr" ? "Sırada" : "Queued") : mail.status === "SENDING" ? (locale === "tr" ? "Gönderiliyor" : "Sending") : mail.status === "UNCERTAIN" ? (locale === "tr" ? "Teslim doğrulanmalı" : "Verify delivery") : mail.status === "FAILED" ? (locale === "tr" ? "Başarısız" : "Failed") : mail.status === "MISSING_EMAIL" ? (locale === "tr" ? "E-posta yok — alternatif iletişim bekliyor" : "No email — alternate contact pending") : mail.status === "SKIPPED" ? (locale === "tr" ? "Alıcı kontrolü bekliyor" : "Recipient review pending") : mail.status}</strong>{mail.sentAt ? ` · ${new Date(mail.sentAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")}` : ""}</div>
+                    {mail.error ? <div>{mail.error}</div> : null}
+                    {["ADMIN","MANAGER","AFTERSALES"].includes(me?.role || "") ? <Link href={`/bulk-email?project=${encodeURIComponent(unit.project)}&campaign=${encodeURIComponent(mail.campaign.id)}#delivery-process`}>{locale === "tr" ? "Kampanyayı görüntüle" : "View campaign"}</Link> : null}
+                  </article>) : <p>{locale === "tr" ? "Bu daire için kayıtlı toplu mail gönderimi yok." : "No recorded bulk email for this unit."}</p>}
+                </div>
                 <CommunicationLogList logs={communicationLogs} locale={locale} />
               </section>
             </div>
