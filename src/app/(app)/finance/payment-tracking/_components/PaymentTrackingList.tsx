@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { getUser } from "@/lib/auth";
+import SalesLedgerSettings from "../../../my-customer-accounts/SalesLedgerSettings";
 import ExportMenu from "../../_reports/ExportMenu";
 import { reportSessionGuard } from "../../_reports/session";
 import { downloadFinanceReport } from "../../_reports/download";
@@ -452,6 +454,9 @@ export default function PaymentTrackingList({
         <Access access={access} tr={tr} salesMode={salesMode} />
       </div>
     );
+  const role = getUser()?.role;
+  const salesSupervisor =
+    salesMode && ["ADMIN", "MANAGER"].includes(role || "");
   const currencyTitle =
     data?.currencyMode === "all"
       ? t("Tüm para birimleri", "All currencies")
@@ -473,10 +478,45 @@ export default function PaymentTrackingList({
       <header className={`${s.header} ${s.listHeader}`}>
         <h1>
           {salesMode
-            ? t("Müşteri Carilerim", "My Customer Accounts")
+            ? salesSupervisor
+              ? t("Müşteri Carileri", "Customer Accounts")
+              : t("Müşteri Carilerim", "My Customer Accounts")
             : t("Ödeme Takip", "Payment Tracking")}
         </h1>
         <div className={s.actions}>
+          {salesSupervisor && (
+            <select
+              aria-label={t("Satışçı", "Salesperson")}
+              value={filters.representative}
+              disabled={loading || !data}
+              className={`${s.button} ${s.salesRepresentative}`}
+              onChange={(event) =>
+                apply({
+                  ...filters,
+                  representative: event.target.value,
+                  page: 1,
+                })
+              }
+            >
+              <option value="">{t("Tüm satışçılar", "All salespeople")}</option>
+              {filters.representative &&
+                !data?.filterOptions.representatives.some(
+                  (option) => option.value === filters.representative,
+                ) && (
+                  <option value={filters.representative}>
+                    {filters.representative}
+                  </option>
+                )}
+              {data?.filterOptions.representatives.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
+          {salesMode && role === "ADMIN" && (
+            <SalesLedgerSettings tr={tr} onSaved={refreshSource} />
+          )}
           <button
             type="button"
             className={s.iconButton}
@@ -538,7 +578,12 @@ export default function PaymentTrackingList({
                   value: "overdue",
                   label: t("Geciken cariler", "Overdue accounts"),
                 },
-                { value: "all", label: t("Tüm carilerim", "All my accounts") },
+                {
+                  value: "all",
+                  label: salesSupervisor
+                    ? t("Tüm cariler", "All accounts")
+                    : t("Tüm carilerim", "All my accounts"),
+                },
               ]}
               onExport={async (format, scope) => {
                 const allowed = reportSessionGuard("sales");
@@ -572,6 +617,9 @@ export default function PaymentTrackingList({
                     scope === "current"
                       ? scopeLabel(filters.scope)
                       : scopeLabel(scope),
+                    salesSupervisor
+                      ? `${t("Satışçı", "Salesperson")}: ${filters.representative || t("Tüm satışçılar", "All salespeople")}`
+                      : undefined,
                   ),
                   format,
                   tr,

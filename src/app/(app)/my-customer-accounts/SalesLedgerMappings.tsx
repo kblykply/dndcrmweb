@@ -7,8 +7,19 @@ type Data = {
   codes: string[];
   users: { id: string; name: string; email: string }[];
   mappings: { code: string; userId: string }[];
+  portfolios?: {
+    userId: string;
+    accountCount: number;
+    customerCount: number;
+    overdueCount: number;
+  }[];
+  importedAt?: string | null;
 };
-export default function SalesLedgerMappings() {
+export default function SalesLedgerMappings({
+  onSaved,
+}: {
+  onSaved?: () => void;
+}) {
   const { locale } = useLanguage(),
     tr = locale === "tr";
   const [data, setData] = useState<Data | null>(null),
@@ -32,14 +43,14 @@ export default function SalesLedgerMappings() {
     return () => controller.abort();
   }, []);
   return (
-    <section className={s.page}>
+    <section className={`${s.page} ${s.mappingPage}`}>
       <header className={s.header}>
         <div>
-          <h1>{tr ? "Müşteri Carilerim" : "My Customer Accounts"}</h1>
+          <h1>{tr ? "Satışçı eşleştirmeleri" : "Salesperson mappings"}</h1>
           <p>
             {tr
-              ? "Logo satışçı kodlarını CRM satışçılarına bağlayın. Satışçılar yalnız kendi eşleşen carilerini görür. Eşleşmeyen veya birden fazla kişiye bağlı cariler satışçılara açılmaz."
-              : "Map Logo representative codes to CRM salespeople. Unmapped or ambiguous accounts are not shared."}
+              ? "Satışçılar yalnızca kendi eşleşen carilerini görür. Cari ve geciken kayıt sayıları tüm ödeme türlerini kapsar."
+              : "Salespeople see only their matched accounts. Account and overdue counts include all payment types."}
           </p>
         </div>
       </header>
@@ -52,92 +63,130 @@ export default function SalesLedgerMappings() {
         <p role="status">{tr ? "Yükleniyor…" : "Loading…"}</p>
       ) : (
         <div className={s.panel}>
-          <table className={s.table}>
-            <thead>
-              <tr>
-                <th>{tr ? "Logo satışçı kodu" : "Logo representative code"}</th>
-                <th>{tr ? "CRM satışçısı" : "CRM salesperson"}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {data.codes.map((code) => (
-                <tr key={code}>
-                  <th scope="row">{code}</th>
-                  <td>
-                    <select
-                      aria-label={`${code} ${tr ? "satışçısı" : "salesperson"}`}
-                      value={draft[code] || ""}
-                      disabled={!!busy}
-                      onChange={(event) =>
-                        setDraft({ ...draft, [code]: event.target.value })
-                      }
-                    >
-                      <option value="">
-                        {tr ? "Eşleştirilmemiş" : "Unmapped"}
-                      </option>
-                      {data.users.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name} ({user.email})
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    <button
-                      className={s.button}
-                      disabled={
-                        !!busy ||
-                        (draft[code] || "") ===
-                          (data.mappings.find((row) => row.code === code)
-                            ?.userId || "")
-                      }
-                      onClick={async () => {
-                        setBusy(code);
-                        setError("");
-                        try {
-                          const userId = draft[code] || null;
-                          await authedFetch(
-                            `/sales-ledger-mappings/${encodeURIComponent(code)}`,
-                            { method: "PUT", body: JSON.stringify({ userId }) },
-                          );
-                          setData((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  mappings: [
-                                    ...current.mappings.filter(
-                                      (row) => row.code !== code,
-                                    ),
-                                    ...(userId ? [{ code, userId }] : []),
-                                  ],
-                                }
-                              : null,
-                          );
-                        } catch (cause) {
-                          setError(
-                            cause instanceof Error
-                              ? cause.message
-                              : String(cause),
-                          );
-                        } finally {
-                          setBusy("");
-                        }
-                      }}
-                    >
-                      {busy === code
-                        ? tr
-                          ? "Kaydediliyor…"
-                          : "Saving…"
-                        : tr
-                          ? "Kaydet"
-                          : "Save"}
-                    </button>
-                  </td>
+          <div className={s.tableWrap}>
+            <table className={s.table}>
+              <thead>
+                <tr>
+                  <th>
+                    {tr ? "Logo satışçı kodu" : "Logo representative code"}
+                  </th>
+                  <th>{tr ? "CRM satışçısı" : "CRM salesperson"}</th>
+                  <th className={s.numeric}>{tr ? "Müşteri" : "Customers"}</th>
+                  <th className={s.numeric}>{tr ? "Cari" : "Accounts"}</th>
+                  <th className={s.numeric}>
+                    {tr ? "Geciken cari" : "Overdue accounts"}
+                  </th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {data.codes.map((code) => {
+                  const savedUserId = data.mappings.find(
+                    (row) => row.code === code,
+                  )?.userId;
+                  const portfolio = data.portfolios?.find(
+                    (row) => row.userId === savedUserId,
+                  );
+                  return (
+                    <tr key={code}>
+                      <th scope="row">{code}</th>
+                      <td>
+                        <select
+                          aria-label={`${code} ${tr ? "satışçısı" : "salesperson"}`}
+                          value={draft[code] || ""}
+                          disabled={!!busy}
+                          onChange={(event) =>
+                            setDraft({ ...draft, [code]: event.target.value })
+                          }
+                        >
+                          <option value="">
+                            {tr ? "Eşleştirilmemiş" : "Unmapped"}
+                          </option>
+                          {data.users.map((user) => (
+                            <option key={user.id} value={user.id}>
+                              {user.name} ({user.email})
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className={s.numeric}>
+                        {portfolio?.customerCount ?? "—"}
+                      </td>
+                      <td className={s.numeric}>
+                        {portfolio?.accountCount ?? "—"}
+                      </td>
+                      <td className={s.numeric}>
+                        {portfolio?.overdueCount ?? "—"}
+                      </td>
+                      <td>
+                        <button
+                          className={s.button}
+                          disabled={
+                            !!busy ||
+                            (draft[code] || "") ===
+                              (data.mappings.find((row) => row.code === code)
+                                ?.userId || "")
+                          }
+                          onClick={async () => {
+                            setBusy(code);
+                            setError("");
+                            try {
+                              const userId = draft[code] || null;
+                              await authedFetch(
+                                `/sales-ledger-mappings/${encodeURIComponent(code)}`,
+                                {
+                                  method: "PUT",
+                                  body: JSON.stringify({ userId }),
+                                },
+                              );
+                              const refreshed: Data = await authedFetch(
+                                "/sales-ledger-mappings",
+                              );
+                              setData(refreshed);
+                              onSaved?.();
+                              setDraft(
+                                Object.fromEntries(
+                                  refreshed.mappings.map((row) => [
+                                    row.code,
+                                    row.userId,
+                                  ]),
+                                ),
+                              );
+                            } catch (cause) {
+                              setError(
+                                cause instanceof Error
+                                  ? cause.message
+                                  : String(cause),
+                              );
+                            } finally {
+                              setBusy("");
+                            }
+                          }}
+                        >
+                          {busy === code
+                            ? tr
+                              ? "Kaydediliyor…"
+                              : "Saving…"
+                            : tr
+                              ? "Kaydet"
+                              : "Save"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {data.importedAt && (
+            <p className={s.notice}>
+              {tr ? "Logo veri aktarımı: " : "Logo data imported: "}
+              {new Date(data.importedAt).toLocaleString(
+                tr ? "tr-TR" : "en-GB",
+                { timeZone: "Europe/Istanbul" },
+              )}
+            </p>
+          )}
         </div>
       )}
     </section>

@@ -65,9 +65,10 @@ export function useTrackingAccess(salesMode = false) {
       setAccess(
         !user
           ? "login"
-          : (salesMode ? ["SALES"] : ["ADMIN", "ACCOUNTING"]).includes(
-                user.role || "",
-              ) &&
+          : (salesMode
+                ? ["SALES", "ADMIN", "MANAGER"]
+                : ["ADMIN", "ACCOUNTING"]
+              ).includes(user.role || "") &&
               user.originalRole !== "PREVIEW" &&
               !user.isPreview
             ? "allowed"

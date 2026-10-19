@@ -48,6 +48,7 @@ import { useSourceExpiry } from "../_lib/useSourceExpiry";
 import { useSourceRefresh } from "../_lib/useSourceRefresh";
 import { invalidatePaymentListCache } from "../_lib/list-cache";
 import { query, readFilters } from "../_lib/list-filters";
+import PaymentKindMenu from "./PaymentKindMenu";
 import { paymentKinds, paymentKindLabel } from "../_lib/payment-kinds";
 import { paymentProjectGroupLabel } from "../_lib/project-groups";
 import s from "../payment-tracking.module.css";
@@ -112,6 +113,7 @@ export default function PaymentTrackingDetail({
   const [installmentKind, setInstallmentKind] = useState("all");
   const [installmentCurrency, setInstallmentCurrency] = useState("all");
   const [installmentSort, setInstallmentSort] = useState("date_asc");
+  const paymentSchedule = useRef<HTMLElement>(null);
   const initialized = useRef(false);
   const request = useRef({
     id: 0,
@@ -462,6 +464,22 @@ export default function PaymentTrackingDetail({
           </details>
         </div>
         <div className={s.actions}>
+          <PaymentKindMenu
+            data={data}
+            tr={tr}
+            onSelect={(kind, selectedCurrency) => {
+              setInstallmentKind(kind);
+              setInstallmentCurrency(selectedCurrency);
+              setInstallmentScope("all");
+              requestAnimationFrame(() => {
+                paymentSchedule.current?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
+                paymentSchedule.current?.focus({ preventScroll: true });
+              });
+            }}
+          />
           <StatementExport
             salesMode={salesMode}
             caseKey={caseKey}
@@ -555,6 +573,166 @@ export default function PaymentTrackingDetail({
           )}
         </div>
       )}
+      <section
+        ref={paymentSchedule}
+        id="account-payment-schedule"
+        className={s.panel}
+        tabIndex={-1}
+        aria-label={t("Ödeme planı", "Payment schedule")}
+      >
+        <div className={s.panelHead}>
+          <div>
+            <h2>
+              <CalendarDays size={18} />
+              {t("Ödeme planı", "Payment schedule")}
+            </h2>
+            <p>
+              {installments.length} / {data.portfolio.installments.length}{" "}
+              {t("ödeme", "payments")}
+            </p>
+          </div>
+          {(installmentKind !== "all" ||
+            installmentCurrency !== "all" ||
+            installmentScope !== "all") && (
+            <button
+              type="button"
+              className={s.button}
+              onClick={() => {
+                setInstallmentKind("all");
+                setInstallmentCurrency("all");
+                setInstallmentScope("all");
+              }}
+            >
+              {t("Tüm ödemeleri göster", "Show all payments")}
+            </button>
+          )}
+        </div>
+        <details className={s.inlineDetails}>
+          <summary>{t("Ödeme listesini filtrele", "Filter payments")}</summary>{" "}
+          <div className={s.actions} style={{ marginBottom: 14 }}>
+            <label className={s.field}>
+              <span>{t("Taksit dövizi", "Installment currency")}</span>
+              <select
+                aria-label={t("Taksit dövizi", "Installment currency")}
+                value={installmentCurrency}
+                onChange={(event) => setInstallmentCurrency(event.target.value)}
+              >
+                <option value="all">
+                  {t("Tüm dövizler", "All currencies")}
+                </option>
+                {data.portfolio.cases.map((entry) => (
+                  <option
+                    key={entry.key}
+                    value={entry.identity.currency ?? "__NULL__"}
+                  >
+                    {currencyName(entry.identity.currency, tr)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={s.field}>
+              <span>{t("Taksit türü", "Installment type")}</span>
+              <select
+                aria-label={t("Taksit türü", "Installment type")}
+                value={installmentKind}
+                onChange={(event) => setInstallmentKind(event.target.value)}
+              >
+                {paymentKinds.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {paymentKindLabel(kind, tr)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={s.field}>
+              <span>{t("Taksit durumu", "Installment status")}</span>
+              <select
+                aria-label={t("Taksit durumu", "Installment status")}
+                value={installmentScope}
+                onChange={(event) => setInstallmentScope(event.target.value)}
+              >
+                <option value="all">{t("Tümü", "All")}</option>
+                <option value="open">{t("Açık", "Open")}</option>
+                <option value="overdue">{t("Gecikmiş", "Overdue")}</option>
+                <option value="paid">{t("Ödenmiş", "Paid")}</option>
+              </select>
+            </label>
+            <label className={s.field}>
+              <span>{t("Taksit sıralaması", "Installment sort")}</span>
+              <select
+                aria-label={t("Taksit sıralaması", "Installment sort")}
+                value={installmentSort}
+                onChange={(event) => setInstallmentSort(event.target.value)}
+              >
+                <option value="date_asc">
+                  {t("En eski vade önce", "Oldest due date first")}
+                </option>
+                <option value="date_desc">
+                  {t("En yeni vade önce", "Newest due date first")}
+                </option>
+                <option value="outstanding_desc">
+                  {t(
+                    "Döviz içinde en yüksek kalan önce",
+                    "Highest outstanding within each currency",
+                  )}
+                </option>
+              </select>
+            </label>
+          </div>
+        </details>{" "}
+        <div className={s.tableWrap}>
+          <table className={s.table} style={{ minWidth: 690 }}>
+            <thead>
+              <tr>
+                <th>{t("Asıl vade", "Original due")}</th>
+                <th>{t("Döviz", "Currency")}</th>
+                <th>{t("Ödeme türü", "Payment type")}</th>
+                <th className={s.numeric}>{t("Tutar", "Amount")}</th>
+                <th className={s.numeric}>
+                  {t("Ödenen / kapatılan", "Paid / settled")}
+                </th>
+                <th className={s.numeric}>{t("Kalan", "Outstanding")}</th>
+                <th>{t("Durum", "Status")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {installments.map((row) => (
+                <tr
+                  key={`${row.caseKey}:${row.sequence}`}
+                  className={
+                    row.status === "overdue" ? s.overdueRow : undefined
+                  }
+                >
+                  <td>{dateLabel(row.dueDate, tr)}</td>
+                  <td>{currencyName(row.currency, tr)}</td>
+                  <td>{paymentKindLabel(row.paymentKind, tr)}</td>
+                  <td className={s.numeric}>{money(row.amount, tr)}</td>
+                  <td className={s.numeric}>{money(row.paid, tr)}</td>
+                  <td className={s.numeric}>{money(row.outstanding, tr)}</td>
+                  <td>
+                    <span
+                      className={`${s.badge} ${row.status === "overdue" ? s.badgeDanger : ""}`}
+                    >
+                      {statusLabel(row.status, tr)}
+                      {row.overdueDays > 0
+                        ? ` · ${row.overdueDays} ${t("gün", "days")}`
+                        : ""}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!installments.length && (
+            <div className={s.empty}>
+              {t(
+                "Bu döviz, tür ve durumda taksit bulunmuyor.",
+                "No installments match this currency, type and status.",
+              )}
+            </div>
+          )}
+        </div>
+      </section>
       {data.portfolio.cases.length > 1 && (
         <details className={s.disclosure}>
           <summary>
@@ -622,168 +800,6 @@ export default function PaymentTrackingDetail({
               </p>
             </details>
           </section>
-          <details className={s.disclosure}>
-            <summary>{t("Ödeme planı", "Payment schedule")}</summary>{" "}
-            <section className={s.panel}>
-              <div className={s.panelHead}>
-                <div>
-                  <h2>
-                    <CalendarDays size={18} />
-                    {t(
-                      "Ödeme planı ve Logo vadeleri",
-                      "Payment plan and Logo due dates",
-                    )}
-                  </h2>
-                  <p>
-                    {installments.length} / {data.portfolio.installments.length}{" "}
-                    {t(
-                      "kaynak satırı · tüm dövizler ve ödeme türleri",
-                      "source rows · all currencies and payment types",
-                    )}
-                  </p>
-                </div>
-              </div>
-              <details className={s.inlineDetails}>
-                <summary>
-                  {t("Ödeme listesini filtrele", "Filter payments")}
-                </summary>{" "}
-                <div className={s.actions} style={{ marginBottom: 14 }}>
-                  <label className={s.field}>
-                    <span>{t("Taksit dövizi", "Installment currency")}</span>
-                    <select
-                      aria-label={t("Taksit dövizi", "Installment currency")}
-                      value={installmentCurrency}
-                      onChange={(event) =>
-                        setInstallmentCurrency(event.target.value)
-                      }
-                    >
-                      <option value="all">
-                        {t("Tüm dövizler", "All currencies")}
-                      </option>
-                      {data.portfolio.cases.map((entry) => (
-                        <option
-                          key={entry.key}
-                          value={entry.identity.currency ?? "__NULL__"}
-                        >
-                          {currencyName(entry.identity.currency, tr)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className={s.field}>
-                    <span>{t("Taksit türü", "Installment type")}</span>
-                    <select
-                      aria-label={t("Taksit türü", "Installment type")}
-                      value={installmentKind}
-                      onChange={(event) =>
-                        setInstallmentKind(event.target.value)
-                      }
-                    >
-                      {paymentKinds.map((kind) => (
-                        <option key={kind} value={kind}>
-                          {paymentKindLabel(kind, tr)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className={s.field}>
-                    <span>{t("Taksit durumu", "Installment status")}</span>
-                    <select
-                      aria-label={t("Taksit durumu", "Installment status")}
-                      value={installmentScope}
-                      onChange={(event) =>
-                        setInstallmentScope(event.target.value)
-                      }
-                    >
-                      <option value="all">{t("Tümü", "All")}</option>
-                      <option value="open">{t("Açık", "Open")}</option>
-                      <option value="overdue">
-                        {t("Gecikmiş", "Overdue")}
-                      </option>
-                      <option value="paid">{t("Ödenmiş", "Paid")}</option>
-                    </select>
-                  </label>
-                  <label className={s.field}>
-                    <span>{t("Taksit sıralaması", "Installment sort")}</span>
-                    <select
-                      aria-label={t("Taksit sıralaması", "Installment sort")}
-                      value={installmentSort}
-                      onChange={(event) =>
-                        setInstallmentSort(event.target.value)
-                      }
-                    >
-                      <option value="date_asc">
-                        {t("En eski vade önce", "Oldest due date first")}
-                      </option>
-                      <option value="date_desc">
-                        {t("En yeni vade önce", "Newest due date first")}
-                      </option>
-                      <option value="outstanding_desc">
-                        {t(
-                          "Döviz içinde en yüksek kalan önce",
-                          "Highest outstanding within each currency",
-                        )}
-                      </option>
-                    </select>
-                  </label>
-                </div>
-              </details>{" "}
-              <div className={s.tableWrap}>
-                <table className={s.table} style={{ minWidth: 690 }}>
-                  <thead>
-                    <tr>
-                      <th>{t("Asıl vade", "Original due")}</th>
-                      <th>{t("Döviz", "Currency")}</th>
-                      <th>{t("Ödeme türü", "Payment type")}</th>
-                      <th className={s.numeric}>{t("Tutar", "Amount")}</th>
-                      <th className={s.numeric}>
-                        {t("Ödenen / kapatılan", "Paid / settled")}
-                      </th>
-                      <th className={s.numeric}>{t("Kalan", "Outstanding")}</th>
-                      <th>{t("Durum", "Status")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {installments.map((row) => (
-                      <tr
-                        key={`${row.caseKey}:${row.sequence}`}
-                        className={
-                          row.status === "overdue" ? s.overdueRow : undefined
-                        }
-                      >
-                        <td>{dateLabel(row.dueDate, tr)}</td>
-                        <td>{currencyName(row.currency, tr)}</td>
-                        <td>{paymentKindLabel(row.paymentKind, tr)}</td>
-                        <td className={s.numeric}>{money(row.amount, tr)}</td>
-                        <td className={s.numeric}>{money(row.paid, tr)}</td>
-                        <td className={s.numeric}>
-                          {money(row.outstanding, tr)}
-                        </td>
-                        <td>
-                          <span
-                            className={`${s.badge} ${row.status === "overdue" ? s.badgeDanger : ""}`}
-                          >
-                            {statusLabel(row.status, tr)}
-                            {row.overdueDays > 0
-                              ? ` · ${row.overdueDays} ${t("gün", "days")}`
-                              : ""}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {!installments.length && (
-                  <div className={s.empty}>
-                    {t(
-                      "Bu döviz, tür ve durumda taksit bulunmuyor.",
-                      "No installments match this currency, type and status.",
-                    )}
-                  </div>
-                )}
-              </div>
-            </section>
-          </details>
           <details className={s.disclosure}>
             <summary>{t("Geçmiş işlemler", "Previous actions")}</summary>{" "}
             <section className={s.panel}>

@@ -43,6 +43,7 @@ export function paymentListCacheTicket(
   const user = getUser();
   const token = getAccessToken();
   const identity = JSON.stringify([
+    audience,
     user?.id,
     user?.role,
     user?.originalRole,
@@ -52,9 +53,10 @@ export function paymentListCacheTicket(
   const next =
     token &&
     user?.id &&
-    (audience === "sales" ? ["SALES"] : ["ADMIN", "ACCOUNTING"]).includes(
-      user.role,
-    ) &&
+    (audience === "sales"
+      ? ["SALES", "ADMIN", "MANAGER"]
+      : ["ADMIN", "ACCOUNTING"]
+    ).includes(user.role) &&
     user.originalRole !== "PREVIEW" &&
     !user.isPreview
       ? JSON.stringify([identity, token])

@@ -134,6 +134,13 @@ export async function downloadFinanceReport(
     doc.addFileToVFS(name, loadedFonts[index]);
     doc.addFont(name, "NotoSans", style);
   });
+  if (report.pdf) {
+    const { renderAccountPdf } = await import("./account-pdf");
+    renderAccountPdf(doc, report, tr);
+    check();
+    doc.save(`${report.filename}.pdf`);
+    return;
+  }
   report.sheets.forEach((part, index) => {
     if (index) doc.addPage();
     doc.setFont("NotoSans", "bold");

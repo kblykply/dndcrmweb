@@ -300,3 +300,27 @@ test("sales ledger caches are discarded when switching between salespeople", () 
   const next = api.paymentListCacheTicket("sales");
   assert.equal(api.readPaymentListCache("currency=GBP", next), null);
 });
+
+
+test("admin finance and sales portfolios never share cached responses", () => {
+  const { api, value } = setup();
+  const finance = api.paymentListCacheTicket("finance");
+  api.writePaymentListCache("q", value(), finance);
+  const sales = api.paymentListCacheTicket("sales");
+  assert(sales.session);
+  assert.equal(api.readPaymentListCache("q", sales), null);
+  api.writePaymentListCache("q", value(), sales);
+  assert(api.readPaymentListCache("q", sales));
+  assert.equal(api.readPaymentListCache("q", api.paymentListCacheTicket("finance")), null);
+});
+
+test("manager cache access is restricted to sales portfolio and clears on role change", () => {
+  const { api, auth, value } = setup();
+  auth.user.role = "MANAGER";
+  assert.equal(api.paymentListCacheTicket("finance").session, null);
+  const sales = api.paymentListCacheTicket("sales");
+  assert(sales.session);
+  api.writePaymentListCache("q", value(), sales);
+  auth.user.role = "SALES";
+  assert.equal(api.readPaymentListCache("q", api.paymentListCacheTicket("sales")), null);
+});

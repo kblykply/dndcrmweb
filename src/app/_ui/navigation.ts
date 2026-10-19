@@ -286,7 +286,7 @@ export const navigationGroups: readonly NavigationGroup[] = [
         href: "/my-customer-accounts",
         label: "nav.myCustomerAccounts",
         icon: "landmark",
-        roles: ["ADMIN", "SALES"],
+        roles: ["ADMIN", "MANAGER", "SALES"],
         keywords: ["müşteri carilerim", "geciken ödemeler", "cari ekstre", "my customer accounts"],
       },
       {

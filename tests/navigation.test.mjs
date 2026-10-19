@@ -76,7 +76,6 @@ test("grouping preserves the old role matrix, excluding the dead help link", () 
           "payment-tracking",
           "collection-report",
           "collection-table",
-          "my-customer-accounts",
         ].includes(id),
     ),
     PREVIEW: all.filter(
@@ -166,6 +165,7 @@ test("Turkish characters, case, English labels and multi-word searches match", (
     "payment-tracking",
   ]);
   assert.deepEqual(ids(searchNavigation(admin, "  iş   takibi  ", labels)), [
+    "bulk-email",
     "tasks",
   ]);
   assert.equal(normalizeModuleSearch("İŞ ŞEMASI ÇĞÖÜ ı"), "is semasi cgou i");

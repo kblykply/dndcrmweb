@@ -10,9 +10,10 @@ export function reportSessionGuard(audience: "finance" | "sales" = "finance") {
       user.id === current.id &&
       user.role === current.role &&
       version === getAuthSessionVersion() &&
-      (audience === "sales" ? ["SALES"] : ["ADMIN", "ACCOUNTING"]).includes(
-        current.role,
-      ) &&
+      (audience === "sales"
+        ? ["SALES", "ADMIN", "MANAGER"]
+        : ["ADMIN", "ACCOUNTING"]
+      ).includes(current.role) &&
       !current.isPreview &&
       current.originalRole !== "PREVIEW"
     );

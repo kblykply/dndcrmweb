@@ -209,36 +209,61 @@ export function buildTableReport(
     sheets,
   };
 }
+function installmentArrears(
+  line: PaymentTrackingDetail["portfolio"]["installments"][number],
+  asOf: string,
+) {
+  const balance = line.outstanding;
+  if (balance === null) return { status: "unknown", overdue: null, days: null };
+  if (balance <= 0) return { status: "paid", overdue: 0, days: 0 };
+  if (!line.dueDate) return { status: "unknown", overdue: null, days: null };
+  if (line.dueDate < asOf)
+    return {
+      status: "overdue",
+      overdue: balance,
+      days: Math.round(
+        (Date.parse(asOf) - Date.parse(line.dueDate)) / 86_400_000,
+      ),
+    };
+  return {
+    status: line.dueDate === asOf ? "today" : "upcoming",
+    overdue: 0,
+    days: 0,
+  };
+}
 export function buildStatementReport(
   data: PaymentTrackingDetail,
   period: string,
   tr: boolean,
   ownedOnly = false,
 ): FinanceReport {
-  const t = label(tr),
-    lines = data.portfolio.installments.filter(
-      (line) => !period || line.dueDate?.startsWith(period),
+  const t = label(tr);
+  const lines = data.portfolio.installments
+    .filter((line) => !period || line.dueDate?.startsWith(period))
+    .slice()
+    .sort(
+      (a, b) =>
+        (a.currency || "").localeCompare(b.currency || "") ||
+        (a.dueDate || "9999").localeCompare(b.dueDate || "9999") ||
+        a.sequence - b.sequence,
     );
+  const arrears = lines.map((line) =>
+    installmentArrears(line, data.source.asOf),
+  );
   const currencies = [...new Set(lines.map((line) => line.currency))];
-  const summary: ReportSheet = {
-    name: t("Cari özeti", "Account summary"),
-    columns: [{ label: t("Döviz", "Currency") }, ...amounts(tr)],
-    rows: currencies.map((currency) => {
-      const rows = lines.filter((line) => line.currency === currency);
-      const sum = (field: "amount" | "paid" | "outstanding") =>
-        rows.some((row) => row[field] === null)
-          ? null
-          : rows.reduce((sum, row) => sum + (row[field] ?? 0), 0);
-      return [
-        currencyName(currency, tr),
-        ...values({
-          amount: sum("amount"),
-          paid: sum("paid"),
-          outstanding: sum("outstanding"),
-        }),
-      ];
-    }),
-  };
+  const sum = (numbers: (number | null)[]) =>
+    numbers.some((value) => value === null)
+      ? null
+      : numbers.reduce<number>((total, value) => total + (value ?? 0), 0);
+  const periodLabel = period || t("Tüm vadeler", "All due dates");
+  const statusLabel = (status: string) =>
+    ({
+      overdue: t("Gecikmiş", "Overdue"),
+      paid: t("Ödendi", "Paid"),
+      today: t("Bugün vadeli", "Due today"),
+      upcoming: t("Vadesi gelmedi", "Upcoming"),
+      unknown: t("Bilgi eksik", "Incomplete"),
+    })[status] || "—";
   return {
     title: t("Müşteri cari ekstresi", "Customer account statement"),
     filename:
@@ -249,25 +274,80 @@ export function buildStatementReport(
     metadata: metadata(
       data.source,
       tr,
-      `${data.item.customerName} · ${data.item.identity.customerCode || "—"} · ${data.item.unitName} · ${period || t("Tüm vadeler", "All due dates")} · ${ownedOnly ? t("Yalnız satışçıya eşleştirilmiş cariler", "Only accounts mapped to this salesperson") : t("Tüm ödeme türleri ve dövizler", "All payment kinds and currencies")}`,
+      `${data.item.customerName} · ${data.item.identity.customerCode || "—"} · ${data.item.unitName} · ${periodLabel} · ${ownedOnly ? t("Satış cari kapsamı", "Sales account scope") : t("Tüm ödeme türleri ve dövizler", "All payment kinds and currencies")}`,
     ),
+    pdf: {
+      subtitle:
+        data.item.customerName || data.item.identity.customerCode || "—",
+      details: [
+        `${t("Daire", "Unit")}: ${data.item.unitName || data.item.identity.unitCode || "—"}   ·   ${t("Cari kod", "Account code")}: ${data.item.identity.customerCode || "—"}`,
+        `${t("Dönem", "Period")}: ${periodLabel}   ·   ${t("Değerlendirme tarihi", "As of")}: ${dateLabel(data.source.asOf, tr)}`,
+        `${t("Veri tarihi", "Data updated")}: ${data.source.importedAt ? dateLabel(data.source.importedAt, tr, true) : "—"}`,
+      ],
+      note: t(
+        "Gecikmiş tutar kalan borca dahildir. Ödemeler vadeye dağıtılmıştır. —: eksik bilgi. Tutarlar seçili döneme aittir; dövizler ayrı değerlendirilir.",
+        "Overdue is included in the remaining balance. Payments are allocated to installments. —: missing data. Totals cover the selected period; currencies are separate.",
+      ),
+    },
     sheets: [
-      summary,
       {
-        name: t("Cari hareketler", "Account ledger"),
+        name: t("Borç özeti", "Balance summary"),
         columns: [
-          { label: t("Vade", "Due date") },
           { label: t("Döviz", "Currency") },
-          { label: t("Ödeme türü", "Payment kind") },
-          { label: t("Kayıt kodu", "Record code") },
-          ...amounts(tr),
+          { label: t("Toplam plan", "Scheduled"), kind: "money" },
+          { label: t("Ödenen", "Paid"), kind: "money" },
+          { label: t("Kalan borç", "Remaining"), kind: "money" },
+          { label: t("Gecikmiş borç", "Overdue"), kind: "money" },
         ],
-        rows: lines.map((line) => [
-          line.dueDate,
+        overdueColumns: [4],
+        rows: currencies.map((currency) => {
+          const rows = lines.filter((line) => line.currency === currency);
+          return [
+            currencyName(currency, tr),
+            sum(rows.map((row) => row.amount)),
+            sum(rows.map((row) => row.paid)),
+            sum(rows.map((row) => row.outstanding)),
+            sum(
+              rows.map(
+                (row) => installmentArrears(row, data.source.asOf).overdue,
+              ),
+            ),
+          ];
+        }),
+      },
+      {
+        name: t("Ödeme planı ve gecikmeler", "Payment schedule and arrears"),
+        columns: [
+          { label: t("Vade", "Due date"), pdfWidth: 25 },
+          { label: t("Döviz", "Currency"), pdfWidth: 18 },
+          { label: t("Ödeme türü", "Payment type"), pdfWidth: 32 },
+          { label: t("Kayıt kodu", "Record code"), pdfHidden: true },
+          { label: t("Planlanan", "Scheduled"), kind: "money" },
+          { label: t("Ödenen", "Paid"), kind: "money" },
+          { label: t("Kalan", "Remaining"), kind: "money" },
+          { label: t("Gecikmiş tutar", "Overdue amount"), kind: "money" },
+          {
+            label: t("Gecikme (gün)", "Days overdue"),
+            kind: "count",
+            pdfWidth: 23,
+          },
+          { label: t("Durum", "Status"), pdfWidth: 30 },
+        ],
+        overdueRows: arrears.flatMap((row, index) =>
+          row.status === "overdue" ? [index] : [],
+        ),
+        overdueColumns: [7, 8, 9],
+        rows: lines.map((line, index) => [
+          dateLabel(line.dueDate, tr),
           currencyName(line.currency, tr),
           paymentKindLabel(line.paymentKind, tr),
           line.projectCode,
-          ...values(line),
+          line.amount,
+          line.paid,
+          line.outstanding,
+          arrears[index].overdue,
+          arrears[index].days,
+          statusLabel(arrears[index].status),
         ]),
       },
     ],
@@ -278,6 +358,7 @@ export function buildSalesLedgerReport(
   data: import("../payment-tracking/_lib/types").PaymentTrackingList,
   tr: boolean,
   scope: string,
+  supervisorPortfolio?: string,
 ): FinanceReport {
   const t = label(tr);
   const balances =
@@ -290,13 +371,28 @@ export function buildSalesLedgerReport(
           },
         ];
   return {
-    title: t("Müşteri Carilerim", "My Customer Accounts"),
+    title: supervisorPortfolio
+      ? t("Müşteri Carileri", "Customer Accounts")
+      : t("Müşteri Carilerim", "My Customer Accounts"),
     filename: `musteri-carilerim-${scope}-${data.source.asOf}`,
     metadata: metadata(
       data.source,
       tr,
-      `${t("Yalnız kendi carilerim", "My own accounts only")} · Fatura OK: DND · ${t("Yetki kodu boş", "Blank authorization code")} · ${scope} · ${paymentKindLabel(data.selectedPaymentKind, tr)}`,
+      `${supervisorPortfolio || t("Yalnız kendi carilerim", "My own accounts only")} · Fatura OK: DND · ${t("Yetki kodu boş", "Blank authorization code")} · ${scope} · ${paymentKindLabel(data.selectedPaymentKind, tr)}`,
     ),
+    pdf: {
+      subtitle:
+        supervisorPortfolio ||
+        t("Kendi müşteri carilerim", "My customer accounts"),
+      details: [
+        `${scope} · ${paymentKindLabel(data.selectedPaymentKind, tr)} · ${t("Değerlendirme tarihi", "As of")}: ${dateLabel(data.source.asOf, tr)}`,
+        `${t("Veri tarihi", "Data updated")}: ${data.source.importedAt ? dateLabel(data.source.importedAt, tr, true) : "—"}`,
+      ],
+      note: t(
+        "Gecikmiş tutar kalan borca dahildir. Takip tarihi, asıl vade tarihini değiştirmez. —: eksik bilgi. Dövizler ayrı değerlendirilir.",
+        "Overdue is included in the remaining balance. Follow-up dates do not change original due dates. —: missing data. Currencies are separate.",
+      ),
+    },
     sheets: [
       {
         name: t("Özet", "Summary"),
@@ -305,6 +401,7 @@ export function buildSalesLedgerReport(
           { label: t("Kalan borç", "Outstanding"), kind: "money" },
           { label: t("Gecikmiş borç", "Overdue"), kind: "money" },
         ],
+        overdueColumns: [2],
         rows: balances.map((part) => [
           currencyName(part.currency, tr),
           part.filteredSummary.outstanding,
@@ -314,16 +411,25 @@ export function buildSalesLedgerReport(
       {
         name: t("Cari listesi", "Customer accounts"),
         columns: [
-          { label: t("Müşteri", "Customer"), width: 42 },
-          { label: t("Cari kod", "Customer code") },
-          { label: t("Daire", "Unit") },
-          { label: t("Döviz", "Currency") },
+          { label: t("Müşteri", "Customer"), width: 42, pdfWidth: 53 },
+          { label: t("Cari kod", "Customer code"), pdfHidden: true },
+          { label: t("Daire", "Unit"), pdfWidth: 33 },
+          { label: t("Döviz", "Currency"), pdfWidth: 17 },
           { label: t("Planlanan", "Scheduled"), kind: "money" },
           { label: t("Ödenen", "Paid"), kind: "money" },
           { label: t("Kalan borç", "Outstanding"), kind: "money" },
           { label: t("Gecikmiş borç", "Overdue"), kind: "money" },
-          { label: t("Takip tarihi", "Follow-up date") },
+          { label: t("Takip tarihi", "Follow-up date"), pdfWidth: 27 },
+          {
+            label: t("Gecikme (gün)", "Days overdue"),
+            kind: "count",
+            pdfWidth: 22,
+          },
         ],
+        overdueColumns: [7, 9],
+        overdueRows: data.rows.flatMap((row, index) =>
+          (row.overdueAmount || 0) > 0 ? [index] : [],
+        ),
         rows: data.rows.map((row) => [
           row.customerName,
           row.identity.customerCode,
@@ -333,7 +439,8 @@ export function buildSalesLedgerReport(
           row.paid,
           row.outstanding,
           row.overdueAmount,
-          row.effectiveDueDate,
+          dateLabel(row.effectiveDueDate, tr),
+          row.overdueAmount === null ? null : row.overdueDays,
         ]),
       },
     ],
