@@ -980,6 +980,9 @@ export default function PaymentTrackingList({
                         >
                           {row.customerName || row.identity.customerCode || "—"}
                         </Link>
+                        {salesMode && row.followupAssignment?.userName && (
+                          <small>{t("Takip sorumlusu", "Follow-up owner")}: {row.followupAssignment.userName}</small>
+                        )}
                         <small>
                           {paymentProjectGroupLabel(row.projectGroup, tr)} ·{" "}
                           {row.unitName || row.identity.unitCode || "—"} ·{" "}

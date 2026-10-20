@@ -60,6 +60,7 @@ type CustomerRow = {
     role?: string;
   } | null;
   canSeeContactDetails?: boolean;
+  canEdit?: boolean;
   _count?: {
     presentations: number;
   };
@@ -1181,15 +1182,17 @@ export default function CustomersPage() {
 
                   {canDelete ? (
                     <td>
-                      <button
-                        className="danger"
-                        onClick={() => deleteCustomer(c.id, c.fullName)}
-                        disabled={deletingId === c.id}
-                      >
-                        {deletingId === c.id
-                          ? t("customers.deleting")
-                          : t("common.delete")}
-                      </button>
+                      {(role === "ADMIN" || c.canEdit === true) && (
+                        <button
+                          className="danger"
+                          onClick={() => deleteCustomer(c.id, c.fullName)}
+                          disabled={deletingId === c.id}
+                        >
+                          {deletingId === c.id
+                            ? t("customers.deleting")
+                            : t("common.delete")}
+                        </button>
+                      )}
                     </td>
                   ) : null}
                 </tr>

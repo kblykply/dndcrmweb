@@ -300,10 +300,10 @@ export default function CustomerDetailPage() {
 
   const canEditCustomer = useMemo(() => {
     if (!customer) return false;
-    if (isManagerOrAdmin || isAftersales) return true;
-    if (!isSales) return false;
+    if (role === "ADMIN" || isAftersales) return true;
+    if (role !== "MANAGER" && !isSales) return false;
     return customer.canEdit === true;
-  }, [customer, isAftersales, isManagerOrAdmin, isSales]);
+  }, [customer, isAftersales, role, isSales]);
 
   const canCreatePresentation = canEditCustomer;
 

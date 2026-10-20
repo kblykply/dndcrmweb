@@ -32,6 +32,13 @@ export interface PaymentInvoiceOk {
   hasBlank: boolean;
 }
 export interface PaymentSourceCase {
+  followupAssignment?: {
+    userId: string | null;
+    userName: string | null;
+    changedByName: string | null;
+    updatedAt: string | null;
+    version: number;
+  };
   invoiceOk?: PaymentInvoiceOk;
   key: string;
   identity: PaymentIdentity;
@@ -222,6 +229,8 @@ export interface PaymentContact {
   status: "matched" | "missing" | "ambiguous" | "unavailable";
 }
 export interface PaymentTrackingDetail {
+  followupAssignees?: PaymentAssignee[];
+  canAssignFollowup?: boolean;
   source: Omit<PaymentSourceSnapshot, "cases">;
   item: PaymentTrackingRow;
   installments: PaymentInstallment[];

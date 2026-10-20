@@ -49,6 +49,7 @@ import { useSourceRefresh } from "../_lib/useSourceRefresh";
 import { invalidatePaymentListCache } from "../_lib/list-cache";
 import { query, readFilters } from "../_lib/list-filters";
 import PaymentKindMenu from "./PaymentKindMenu";
+import SalesFollowupAssignment from "../../../my-customer-accounts/SalesFollowupAssignment";
 import { paymentKinds, paymentKindLabel } from "../_lib/payment-kinds";
 import { paymentProjectGroupLabel } from "../_lib/project-groups";
 import s from "../payment-tracking.module.css";
@@ -227,14 +228,14 @@ export default function PaymentTrackingDetail({
         : "Source data has expired. Refresh to view amounts.",
     );
   });
-  async function act(action: Omit<PaymentTrackingAction, "expectedVersion">) {
+  async function act(action: Omit<PaymentTrackingAction, "expectedVersion"> | { type: "followup-assignment"; userId: string | null; expectedVersion: number }) {
     if (
       !data ||
       mutation.current ||
       saving ||
       loading ||
       conflict ||
-      !data.item.canTrack
+      (action.type !== "followup-assignment" && !data.item.canTrack)
     )
       return;
     ++request.current.id;
@@ -247,11 +248,14 @@ export default function PaymentTrackingDetail({
     setSuccess(false);
     try {
       const next = (await authedFetch(
-        `${apiBase}/${encodeURIComponent(caseKey)}/actions`,
+        `${apiBase}/${encodeURIComponent(caseKey)}/${action.type === "followup-assignment" ? "followup-assignment" : "actions"}`,
         {
-          method: "POST",
+          method: action.type === "followup-assignment" ? "PUT" : "POST",
           signal: controller.signal,
-          body: JSON.stringify({
+          body: JSON.stringify(action.type === "followup-assignment" ? {
+            userId: action.userId,
+            expectedVersion: action.expectedVersion,
+          } : {
             ...action,
             expectedVersion: data.item.tracking?.version ?? 0,
           }),
@@ -270,6 +274,7 @@ export default function PaymentTrackingDetail({
       if (action.type === "note") setNote("");
       if (action.type === "contact") setContactNote("");
       setSuccess(true);
+      return true;
     } catch (cause) {
       if (!controller.signal.aborted) {
         const issue = problem(cause, tr);
@@ -464,6 +469,15 @@ export default function PaymentTrackingDetail({
           </details>
         </div>
         <div className={s.actions}>
+          {salesMode && (
+            <SalesFollowupAssignment
+              data={data}
+              tr={tr}
+              disabled={loading || !!saving || conflict}
+              error={error}
+              onSave={(userId, expectedVersion) => act({ type: "followup-assignment", userId, expectedVersion })}
+            />
+          )}
           <PaymentKindMenu
             data={data}
             tr={tr}
@@ -571,6 +585,11 @@ export default function PaymentTrackingDetail({
             "kaynak satırında eksik bilgi bulunuyor; bilinmeyen tutarlar sıfır sayılmaz.",
             "source rows contain incomplete data; unknown amounts are not treated as zero.",
           )}
+        </div>
+      )}
+      {salesMode && data.item.followupAssignment?.userName && (
+        <div className={s.badge}>
+          {t("Takip sorumlusu", "Follow-up owner")}: {data.item.followupAssignment.userName}
         </div>
       )}
       <section
