@@ -19,6 +19,7 @@ import {
   UserRound,
   Wallet,
 } from "lucide-react";
+import { getUser } from "@/lib/auth";
 import { authedFetch } from "@/lib/authedFetch";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
 import type {
@@ -389,6 +390,8 @@ export default function PaymentTrackingDetail({
           a.dueDate.localeCompare(b.dueDate) || a.sequence - b.sequence
       );
     });
+  const confirmedMessageIds = new Set(data.history.filter((event) => event.type === "message_sent").map((event) => event.message?.id));
+  const visibleHistory = data.history.filter((event) => event.type !== "message_draft" || !confirmedMessageIds.has(event.message?.id));
   const eventTitle = (type: string) =>
     ({
       defer: t("Takip ertelendi", "Follow-up deferred"),
@@ -397,6 +400,8 @@ export default function PaymentTrackingDetail({
       assign: t("Sorumlu değişti", "Owner changed"),
       priority: t("Öncelik değişti", "Priority changed"),
       contact: t("Görüşme kaydı", "Contact recorded"),
+      message_draft: t("Mesaj taslağı kaydedildi", "Message draft saved"),
+      message_sent: t("Gönderildi · kullanıcı onayı", "Sent · user confirmation"),
     })[type] || type;
   return (
     <div
@@ -447,6 +452,14 @@ export default function PaymentTrackingDetail({
               {item.identity.customerCode} · {item.identity.unitCode}
             </p>
             <dl className={s.sourceTags}>
+              <div>
+                <dt>{t("E-posta", "Email")}{data.contact.emailSource === "crm" ? " · CRM" : ""}</dt>
+                <dd>{data.contact.email || "—"}</dd>
+              </div>
+              <div>
+                <dt>{t("Telefon", "Phone")}{data.contact.phoneSource === "crm" ? " · CRM" : ""}</dt>
+                <dd>{data.contact.phone || "—"}</dd>
+              </div>
               <div>
                 <dt>{t("Yetki Kodu", "Authorization code")}</dt>
                 <dd>{authorizationLabel(item.authorization, tr)}</dd>
@@ -820,7 +833,7 @@ export default function PaymentTrackingDetail({
             </details>
           </section>
           <details className={s.disclosure}>
-            <summary>{t("Geçmiş işlemler", "Previous actions")}</summary>{" "}
+            <summary>{t("Mesajlar ve geçmiş", "Messages and history")} · {visibleHistory.length}</summary>{" "}
             <section className={s.panel}>
               <div className={s.panelHead}>
                 <div>
@@ -838,7 +851,7 @@ export default function PaymentTrackingDetail({
               </div>
               {data.history.length ? (
                 <ol className={s.history}>
-                  {data.history.map((event) => (
+                  {visibleHistory.map((event) => (
                     <li key={event.id}>
                       <strong>
                         {eventTitle(event.type)}
@@ -846,7 +859,19 @@ export default function PaymentTrackingDetail({
                           ? ` · ${event.channel === "phone" ? t("Telefon", "Phone") : event.channel === "email" ? t("E-posta", "Email") : "WhatsApp"}`
                           : ""}
                       </strong>
-                      <p>{event.body}</p>
+                      {event.message ? <>
+                        <p>{t("Alıcı", "Recipient")}: {event.message.recipient}</p>
+                        {event.message.subject && <p>{t("Konu", "Subject")}: {event.message.subject}</p>}
+                        <details className={s.inlineDetails}>
+                          <summary>{t("Mesajı göster", "View message")}</summary>
+                          <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{event.body}</p>
+                        </details>
+                        {event.type === "message_draft" && event.actorId === getUser()?.id && !data.history.some((other) => other.type === "message_sent" && other.message?.id === event.message?.id) && (
+                          <button className={s.button} disabled={!!saving || loading || conflict} onClick={() => void act({ type: "message_sent", messageId: event.message!.id, body: "" })}>
+                            {t("Gönderdim · kaydet", "I sent it · save")}
+                          </button>
+                        )}
+                      </> : <p>{event.body}</p>}
                       {(event.previousDate || event.nextDate) && (
                         <p className={s.hint}>
                           {dateLabel(event.previousDate, tr)} →{" "}
@@ -1187,6 +1212,8 @@ export default function PaymentTrackingDetail({
           data={data}
           tr={tr}
           onClose={() => setCompose(null)}
+          onRecord={act}
+          saveError={error}
         />
       )}
     </div>

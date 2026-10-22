@@ -221,8 +221,15 @@ export default function CustomersPage() {
   }
 
   async function loadAgencies() {
+    if (isSales && !me?.id) {
+      setAgencies([]);
+      return;
+    }
+
     try {
-      const res = await authedFetch("/agencies?page=1&pageSize=500");
+      const params = new URLSearchParams({ page: "1", pageSize: "500" });
+      if (isSales) params.set("assignedSalesId", me.id);
+      const res = await authedFetch(`/agencies?${params.toString()}`);
       setAgencies(Array.isArray(res?.items) ? res.items : []);
     } catch {
       setAgencies([]);
@@ -438,7 +445,7 @@ export default function CustomersPage() {
       setAgencies([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, canCreate]);
+  }, [mounted, canCreate, isSales, me?.id]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -457,11 +464,9 @@ export default function CustomersPage() {
   }, [mounted, isSales, canUseOwnerFilter, me?.id]);
 
   const filteredAgencies = useMemo(() => {
-    if (!agencySearch.trim()) return agencies.slice(0, 80);
+    if (!agencySearch.trim()) return agencies;
 
-    return agencies
-      .filter((a) => optionMatch(a.name, agencySearch))
-      .slice(0, 80);
+    return agencies.filter((a) => optionMatch(a.name, agencySearch));
   }, [agencies, agencySearch]);
 
   const filteredOwnerUsers = useMemo(() => {
@@ -664,7 +669,9 @@ export default function CustomersPage() {
                 value={agencySearch}
                 onChange={(e) => setAgencySearch(e.target.value)}
                 placeholder={
-                  locale === "tr" ? "Ajans ara..." : "Search agency..."
+                  locale === "tr"
+                    ? isSales ? "Acentelerim içinde ara..." : "Acente ara..."
+                    : isSales ? "Search my agencies..." : "Search agency..."
                 }
               />
 

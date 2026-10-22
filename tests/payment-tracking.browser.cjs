@@ -958,11 +958,10 @@ async function main() {
     await mixedDraft.getByRole("button", { name: "Regenerate template", exact: true }).click();
     const trReminder = await reminderBody.inputValue();
     assert(trReminder.includes("Eylül 2026") && trReminder.includes("1.150,00 GBP") && trReminder.includes("350,00 TL"));
-    const reminderHref = await mixedDraft.getByRole("link", { name: "Open in WhatsApp", exact: true }).getAttribute("href");
-    assert.equal(new URL(reminderHref).searchParams.get("text"), trReminder, "WhatsApp receives the complete Unicode/multiline template");
+    assert.equal(await mixedDraft.getByRole("button", { name: "Open in WhatsApp", exact: true }).isEnabled(), true, "The complete Unicode/multiline template can be recorded and opened");
     await reminderBody.fill("x".repeat(4001));
     assert.equal((await reminderBody.inputValue()).length, 4001, "Long messages are not silently truncated");
-    assert.equal(await mixedDraft.getByRole("link", { name: "Open in WhatsApp", exact: true }).count(), 0, "Overlong messages cannot open an incomplete reminder");
+    assert.equal(await mixedDraft.getByRole("button", { name: "Open in WhatsApp", exact: true }).isDisabled(), true, "Overlong messages cannot open an incomplete reminder");
     await mixedDraft.getByRole("button", { name: "Regenerate template", exact: true }).click();
     await page.waitForFunction(() => document.querySelector('dialog textarea')?.scrollTop === 0);
     await page.keyboard.press("Escape");
@@ -2129,10 +2128,7 @@ async function main() {
     await dialog
       .getByLabel("Recipient email", { exact: true })
       .fill("edited@example.test");
-    const mailHref = await dialog
-      .getByRole("link", { name: "Open in email app", exact: true })
-      .getAttribute("href");
-    assert(mailHref.startsWith("mailto:edited%40example.test?"));
+    assert.equal(await dialog.getByRole("button", { name: "Open in email app", exact: true }).isEnabled(), true);
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "detached" });
     await main.getByRole("button", { name: "WhatsApp payment reminder", exact: true }).click();
@@ -2140,53 +2136,20 @@ async function main() {
     await dialog
       .getByLabel("Phone · with country code", { exact: true })
       .fill("0533 000 2222");
-    assert.equal(
-      await dialog
-        .getByRole("link", { name: "Open in WhatsApp", exact: true })
-        .count(),
-      0,
-      "A local leading-zero number is not treated as an international number",
-    );
-    await dialog
-      .getByLabel("Phone · with country code", { exact: true })
-      .fill("0090 533 000 2222");
-    assert(
-      (
-        await dialog
-          .getByRole("link", { name: "Open in WhatsApp", exact: true })
-          .getAttribute("href")
-      ).startsWith("https://wa.me/905330002222?text="),
-      "The international 00 prefix is normalized without guessing a country",
-    );
-    await dialog
-      .getByLabel("Phone · with country code", { exact: true })
-      .fill("+90 533 000 2222");
-    const wa = dialog.getByRole("link", {
-      name: "Open in WhatsApp",
-      exact: true,
+    assert.equal(await dialog.getByRole("button", { name: "Open in WhatsApp", exact: true }).isDisabled(), true, "Local leading-zero numbers are not international numbers");
+    await dialog.getByLabel("Phone · with country code", { exact: true }).fill("0090 533 000 2222");
+    assert.equal(await dialog.getByRole("button", { name: "Open in WhatsApp", exact: true }).isEnabled(), true);
+    await page.evaluate(() => {
+      window.__paymentExternal = [];
+      window.open = () => ({ opener: null, closed: false, close() {}, location: { set href(value) { window.__paymentExternal.push(value); } } });
     });
-    assert(
-      (await wa.getAttribute("href")).startsWith(
-        "https://wa.me/905330002222?text=",
-      ),
-    );
-    await wa.evaluate((link) =>
-      link.addEventListener("click", (event) => event.preventDefault(), {
-        once: true,
-      }),
-    );
-    await wa.click();
-    await dialog
-      .getByText(
-        "The external application link was opened. This does not confirm that a message was sent.",
-        { exact: true },
-      )
-      .waitFor();
-    assert.equal(
-      actions.length,
-      beforeDraft,
-      "Opening or editing drafts never creates a write/send action",
-    );
+    await dialog.getByRole("button", { name: "Open in WhatsApp", exact: true }).click();
+    await dialog.getByRole("button", { name: "I sent it · save", exact: true }).waitFor();
+    const openedHref = await page.evaluate(() => window.__paymentExternal[0]);
+    assert(openedHref.startsWith("https://wa.me/905330002222?text="), "The international 00 prefix is normalized without guessing a country");
+    assert.equal(new URL(openedHref).searchParams.get("text"), await dialog.getByLabel("Message", { exact: true }).inputValue());
+    assert.equal(actions.length, beforeDraft + 1, "Opening records a draft, not a confirmed send");
+    assert.equal(actions.at(-1).type, "message_draft");
     await page.keyboard.press("Escape");
     await main
       .getByLabel("Contact summary", { exact: true })

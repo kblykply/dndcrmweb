@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Mail, MessageCircle, RefreshCw, X } from "lucide-react";
-import type { PaymentTrackingDetail } from "../_lib/types";
+import type { PaymentTrackingAction, PaymentTrackingDetail } from "../_lib/types";
 import { composeLink, currencyName, dateLabel, money } from "../_lib/utils";
 import { buildPaymentMessage } from "../_lib/payment-message";
 import s from "../payment-tracking.module.css";
@@ -12,11 +12,15 @@ export default function ComposeDialog({
   data,
   tr,
   onClose,
+  onRecord,
+  saveError,
 }: {
   channel: "email" | "whatsapp";
   data: PaymentTrackingDetail;
   tr: boolean;
   onClose: () => void;
+  onRecord: (action: Omit<PaymentTrackingAction, "expectedVersion">) => Promise<boolean | undefined>;
+  saveError?: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const messageBody = useRef<HTMLTextAreaElement>(null);
@@ -66,6 +70,12 @@ export default function ComposeDialog({
       : `Dear ${item.customerName},\n\n${position}\n\nPlease let us know the payment status. If you have already paid, you may share the payment receipt.\n\nThank you.`;
   });
   const [opened, setOpened] = useState(false);
+  const [preparedId, setPreparedId] = useState<string | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordError, setRecordError] = useState("");
+  const recordingRef = useRef(false);
+  const attempt = useRef<{ signature: string; id: string } | null>(null);
   useEffect(() => {
     const element = dialog.current;
     element?.showModal();
@@ -77,6 +87,49 @@ export default function ComposeDialog({
   const tooLong = isWhatsApp && (body.length > 4000 || (!dirty && template?.tooLong === true));
   const href = composeLink(channel, recipient, subject, body);
   const canOpen = !!href && !!body.trim() && !tooLong && !pendingTemplate;
+  async function openAndRecord() {
+    if (!canOpen || recordingRef.current) return;
+    setRecordError("");
+    // Keep the user gesture for popup blockers. No external navigation before persistence.
+    const popup = window.open("about:blank", "_blank");
+    if (!popup) {
+      setRecordError(t("Yeni pencereye izin verip tekrar deneyin.", "Allow popups and try again."));
+      return;
+    }
+    popup.opener = null;
+    recordingRef.current = true;
+    setRecording(true);
+    try {
+      const signature = JSON.stringify([channel, recipient.trim(), subject, body]);
+      if (attempt.current?.signature !== signature) attempt.current = { signature, id: crypto.randomUUID() };
+      const id = attempt.current.id;
+      const saved = await onRecord({ type: "message_draft", messageId: id, channel, recipient: recipient.trim(), subject: channel === "email" ? subject : "", body });
+      if (!saved) throw new Error("save_failed");
+      setPreparedId(id);
+      if (popup.closed) throw new Error("window_closed");
+      popup.location.href = href!;
+      setOpened(true);
+    } catch {
+      popup.close();
+      setRecordError(t("İşlem tamamlanamadı. Hata bilgisini kontrol edip tekrar deneyin.", "Could not complete the action. Check the error and try again."));
+    } finally {
+      recordingRef.current = false;
+      setRecording(false);
+    }
+  }
+  async function confirmSent() {
+    if (!preparedId || recordingRef.current || confirmed) return;
+    recordingRef.current = true;
+    setRecording(true);
+    setRecordError("");
+    try {
+      if (await onRecord({ type: "message_sent", messageId: preparedId, body: "" })) setConfirmed(true);
+      else setRecordError(t("Gönderim onayı kaydedilemedi. Tekrar deneyin.", "Could not save confirmation. Try again."));
+    } finally {
+      recordingRef.current = false;
+      setRecording(false);
+    }
+  }
   function regenerateTemplate(scope = messageScope, nextTr = messageTr) {
     const next = buildPaymentMessage(data, { scope, tr: nextTr });
     setTemplate(next);
@@ -101,7 +154,7 @@ export default function ComposeDialog({
       aria-labelledby="payment-compose-title"
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        if (!recordingRef.current) onClose();
       }}
       onClose={(event) => {
         // A development effect replay can queue an old close event after reopening.
@@ -128,11 +181,13 @@ export default function ComposeDialog({
           type="button"
           className={s.button}
           onClick={onClose}
+          disabled={recording}
           aria-label={t("Taslağı kapat", "Close draft")}
         >
           <X size={17} />
         </button>
       </div>
+      <fieldset disabled={recording || preparedId !== null} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <p className={s.hint}>
         {t(
           "Adresi ve mesajı kontrol edin. Taslak harici uygulamada açılır; gönderme işlemi size aittir.",
@@ -253,6 +308,12 @@ export default function ComposeDialog({
           placeholder={channel === "email" ? "name@example.com" : "+90…"}
         />
       </label>
+      {(channel === "email" ? data.contact.emailSource : data.contact.phoneSource) === "crm" && (
+        <p className={s.hint}>{t("Alıcı bilgisi CRM müşteri kaydından tamamlandı.", "Recipient details filled from the CRM customer record.")}</p>
+      )}
+      {(data.contact.crmFallbackStatus === "ambiguous" || data.contact.crmFallbackStatus === "unit_mismatch") && (
+        <p className={s.hint}>{t("CRM müşteri veya daire eşleşmesi kontrol gerektiriyor; eksik iletişim bilgisi otomatik doldurulmadı.", "The CRM customer or unit match needs review; missing contact details were not filled automatically.")}</p>
+      )}
       {channel === "email" && (
         <label className={s.field}>
           <span>{t("Konu", "Subject")}</span>
@@ -300,35 +361,36 @@ export default function ComposeDialog({
               )}
         </p>
       )}
-      {opened && (
+      </fieldset>
+      {recordError && <p className={s.notice} role="alert">{saveError || recordError}</p>}
+      {confirmed && <p className={s.success} role="status">{t("Gönderildi olarak kaydedildi · kullanıcı onayı.", "Recorded as sent · user confirmation.")}</p>}
+      {opened && !confirmed && (
         <p className={s.success} role="status">
           {t(
-            "Harici uygulama bağlantısı açıldı. Bu işlem gönderim onayı değildir.",
-            "The external application link was opened. This does not confirm that a message was sent.",
+            "Taslak geçmişe kaydedildi. Uygulamada gönderdikten sonra “Gönderdim” ile onaylayın. Harici uygulamada yaptığınız değişiklikler CRM’ye aktarılmaz.",
+            "Draft saved to history. After sending in the app, confirm with “I sent it”. Edits made in the external app are not reflected in CRM.",
           )}
         </p>
       )}
       <div className={s.dialogFooter}>
-        <button className={s.button} onClick={onClose}>
+        <button className={s.button} onClick={onClose} disabled={recording}>
           {t("Kapat", "Close")}
         </button>
-        {canOpen ? (
-          <a
-            className={`${s.primary} ${isWhatsApp ? s.whatsappButton : ""}`}
-            href={href!}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setOpened(true)}
-          >
-            <ExternalLink size={15} />
-            {channel === "email"
-              ? t("E-posta uygulamasında aç", "Open in email app")
-              : t("WhatsApp’ta aç", "Open in WhatsApp")}
+        {preparedId && !confirmed && (
+          <button className={s.primary} disabled={recording} onClick={() => void confirmSent()}>
+            {recording ? t("Kaydediliyor…", "Saving…") : t("Gönderdim · kaydet", "I sent it · save")}
+          </button>
+        )}
+        {preparedId ? (
+          <a className={s.button} href={href!} target="_blank" rel="noopener noreferrer">
+            <ExternalLink size={15} />{t("Uygulamada tekrar aç", "Reopen in app")}
           </a>
         ) : (
-          <button className={s.primary} disabled>
+          <button className={`${s.primary} ${isWhatsApp ? s.whatsappButton : ""}`} disabled={!canOpen || recording} onClick={() => void openAndRecord()}>
             <ExternalLink size={15} />
-            {t("Uygulamada aç", "Open in app")}
+            {recording ? t("Kaydediliyor…", "Saving…") : channel === "email"
+              ? t("E-posta uygulamasında aç", "Open in email app")
+              : t("WhatsApp’ta aç", "Open in WhatsApp")}
           </button>
         )}
       </div>
