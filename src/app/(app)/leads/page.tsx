@@ -51,6 +51,7 @@ type LeadRow = {
   status: string;
   nextFollowUpAt?: string | null;
   lastActivityAt?: string | null;
+  newPriorityAt?: string | null;
   avatarUrl?: string | null;
 };
 
@@ -652,6 +653,22 @@ export default function LeadsPage() {
                       <Link href={`/leads/${l.id}`} style={{ fontWeight: 800 }}>
                         {l.fullName}
                       </Link>
+                      {l.newPriorityAt ? (
+                        <span
+                          data-testid="new-lead-badge"
+                          style={{
+                            background: "#b91c1c",
+                            color: "#fff",
+                            borderRadius: 6,
+                            padding: "4px 9px",
+                            fontSize: 12,
+                            fontWeight: 800,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {t("leadStatuses.NEW")}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div
