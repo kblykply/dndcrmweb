@@ -1527,3 +1527,33 @@
   cursor: pointer;
 }
 .kindDetailButton:hover { text-decoration: underline; }
+
+.assignmentCell {
+  min-width: 180px;
+}
+.assignmentButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+.assignmentButton svg { flex-shrink: 0; }
+.assignmentButton:disabled { opacity: .6; cursor: wait; }
+.assignmentButton:hover:not(:disabled) { border-color: var(--text-secondary); }
+.assignmentDialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  text-align: start;
+}

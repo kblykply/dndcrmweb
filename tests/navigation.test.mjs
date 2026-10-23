@@ -37,9 +37,9 @@ const ids = (groups) =>
     .sort();
 const all = items(navigationGroups).map((item) => item.id);
 
-test("six groups contain unique, translated links to existing modules", () => {
-  assert.equal(navigationGroups.length, 6);
-  assert.equal(all.length, 32);
+test("seven groups contain unique, translated links to existing modules", () => {
+  assert.equal(navigationGroups.length, 7);
+  assert.equal(all.length, 38);
   assert.equal(new Set(all).size, all.length);
   assert.equal(
     new Set(items(navigationGroups).map((item) => item.href)).size,
@@ -67,8 +67,7 @@ test("grouping preserves the old role matrix, excluding the dead help link", () 
     ADMIN: all,
     MANAGER: all.filter(
       (id) =>
-        ![
-          "unit-dashboard",
+        !id.startsWith("construction-") && ![
           "users",
           "lead-cleanup",
           "digital-map",
@@ -80,7 +79,7 @@ test("grouping preserves the old role matrix, excluding the dead help link", () 
     ),
     PREVIEW: all.filter(
       (id) =>
-        ![
+        !id.startsWith("construction-") && ![
           "payment-tracking",
           "collection-report",
           "collection-table",
@@ -133,6 +132,7 @@ test("grouping preserves the old role matrix, excluding the dead help link", () 
       "iso-2026",
     ],
     ACCOUNTING: [
+      ...all.filter(id => id.startsWith("construction-")),
       "payment-tracking",
       "collection-report",
       "collection-table",
@@ -329,4 +329,21 @@ test("IT Support is available to every real employee role, never preview", () =>
     activeNavigationItem(navigationGroups, "/it-support/ticket-id")?.id,
     "it-support",
   );
+});
+
+ test("Construction costs are restricted to ADMIN and ACCOUNTING, including deep unit links", () => {
+  for (const role of ["SALES", "MANAGER", "CALLCENTER", "AFTERSALES", "PREVIEW"]) {
+    assert.equal(navigationForRole(role).some(g => g.id === "construction"), false);
+    assert.deepEqual(ids(searchNavigation(navigationForRole(role), "hakediş", labels)), []);
+  }
+  for (const role of ["ADMIN", "ACCOUNTING"]) assert.equal(navigationForRole(role).find(g => g.id === "construction").items.length, 6);
+  assert.equal(activeNavigationItem(navigationGroups, "/construction/units/perla-unit-A-10").id, "construction-progress");
+});
+
+// Sales managers need the complete customer, agency and unit workspace.
+test("sales managers can open all sales management modules and unit reports", () => {
+  const paths = items(navigationForRole("MANAGER")).map(item => item.href);
+  for (const path of ["/agencies", "/customers", "/units", "/units/dashboard"]) {
+    assert(paths.includes(path), path);
+  }
 });

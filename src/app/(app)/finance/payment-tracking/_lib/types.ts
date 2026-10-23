@@ -190,6 +190,8 @@ export interface PaymentTrackingSummary {
   incompleteRows: number;
 }
 export interface PaymentTrackingList {
+  followupAssignees?: PaymentAssignee[];
+  canAssignFollowup?: boolean;
   selectedInvoiceOk: string;
   invoiceOkOptions: PaymentFilterOption[];
   source: Omit<PaymentSourceSnapshot, "cases">;

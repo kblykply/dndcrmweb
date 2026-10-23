@@ -96,7 +96,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (me?.role !== "ACCOUNTING") return;
     if (
-      ["/finance", "/org-chart", "/tasks", "/it-support"].some((path) =>
+      ["/finance", "/construction", "/org-chart", "/tasks", "/it-support"].some((path) =>
         inArea(pathname, path),
       )
     )

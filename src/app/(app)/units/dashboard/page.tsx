@@ -279,7 +279,7 @@ export default function UnitsDashboardPage() {
     setMe(user);
     setAccessChecked(true);
 
-    if (user?.role === "ADMIN" || user?.role === "PREVIEW") {
+    if (["ADMIN", "MANAGER", "PREVIEW"].includes(user?.role || "")) {
       load();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -488,7 +488,7 @@ export default function UnitsDashboardPage() {
     color: "var(--text-primary)",
   };
 
-  if (accessChecked && me?.role !== "ADMIN" && me?.role !== "PREVIEW") {
+  if (accessChecked && !["ADMIN", "MANAGER", "PREVIEW"].includes(me?.role || "")) {
     return (
       <div style={{ display: "grid", gap: 18, paddingBottom: 28 }}>
         <section
@@ -511,7 +511,7 @@ export default function UnitsDashboardPage() {
               textTransform: "uppercase",
             }}
           >
-            Admin
+            {locale === "tr" ? "Daire raporları" : "Unit reports"}
           </span>
           <h1
             style={{
@@ -521,7 +521,7 @@ export default function UnitsDashboardPage() {
               letterSpacing: 0,
             }}
           >
-            {locale === "tr" ? "Bu panel sadece admin için." : "This dashboard is admin only."}
+            {locale === "tr" ? "Bu panel için erişim yetkiniz yok." : "You do not have access to this dashboard."}
           </h1>
           <p style={{ margin: 0, color: "var(--text-secondary)", lineHeight: 1.5 }}>
             {locale === "tr"

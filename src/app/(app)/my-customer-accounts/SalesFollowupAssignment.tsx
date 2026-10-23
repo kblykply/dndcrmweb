@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
-import { UserRoundPlus, X } from "lucide-react";
+import { Pencil, UserRoundPlus, X } from "lucide-react";
 import type { PaymentTrackingDetail } from "../finance/payment-tracking/_lib/types";
 import s from "../finance/payment-tracking/payment-tracking.module.css";
 
@@ -10,8 +10,10 @@ export default function SalesFollowupAssignment({
   disabled,
   error,
   onSave,
+  label,
 }: {
-  data: PaymentTrackingDetail;
+  data: Pick<PaymentTrackingDetail, "item" | "canAssignFollowup" | "followupAssignees">;
+  label?: string;
   tr: boolean;
   disabled: boolean;
   error: string;
@@ -35,10 +37,10 @@ export default function SalesFollowupAssignment({
     <>
       <button
         type="button"
-        className={s.iconButton}
+        className={label ? s.assignmentButton : s.iconButton}
         disabled={disabled}
         title={t("Takip sorumlusu ata", "Assign follow-up owner")}
-        aria-label={t("Takip sorumlusu ata", "Assign follow-up owner")}
+        aria-label={label ? `${t("Sorumluyu değiştir", "Change owner")}: ${data.item.customerName} — ${label}` : t("Takip sorumlusu ata", "Assign follow-up owner")}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={id}
@@ -48,12 +50,12 @@ export default function SalesFollowupAssignment({
           setOpen(true);
         }}
       >
-        <UserRoundPlus size={24} aria-hidden="true" />
+        {label ? <><span>{label}</span><Pencil size={16} aria-hidden="true" /></> : <UserRoundPlus size={24} aria-hidden="true" />}
       </button>
       <dialog
         ref={dialog}
         id={id}
-        className={s.dialog}
+        className={`${s.dialog} ${s.assignmentDialog}`}
         aria-label={t("Cari takip sorumlusu", "Account follow-up owner")}
         onCancel={() => setOpen(false)}
         onClose={() => setOpen(false)}
@@ -86,6 +88,7 @@ export default function SalesFollowupAssignment({
           <label className={s.field}>
             <span>{t("Takip sorumlusu", "Follow-up owner")}</span>
             <select
+              aria-label={t("Takip sorumlusu", "Follow-up owner")}
               value={userId}
               onChange={(event) => setUserId(event.target.value)}
               disabled={disabled}

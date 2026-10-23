@@ -526,8 +526,8 @@ export default function UnitDetailPage() {
   const [communicationSending, setCommunicationSending] = useState<"" | "EMAIL" | "WHATSAPP">("");
   const [communicationNotice, setCommunicationNotice] = useState("");
 
-  const isAdmin = me?.role === "ADMIN" || me?.role === "PREVIEW";
-  const canCancelUnit = isAdmin || me?.role === "AFTERSALES";
+  const canManageAllUnits = ["ADMIN", "MANAGER", "PREVIEW"].includes(me?.role || "");
+  const canCancelUnit = canManageAllUnits || me?.role === "AFTERSALES";
 
   const logs = useMemo(() => unit?.logs || [], [unit?.logs]);
   const unitInformationLogs = useMemo(
@@ -1713,7 +1713,7 @@ export default function UnitDetailPage() {
                   />
                 </div>
 
-                {isAdmin ? (
+                {canManageAllUnits ? (
                   <LogList
                     title={locale === "tr" ? "Unit bilgi geçmişi" : "Unit information history"}
                     logs={unitInformationLogs}
@@ -1813,7 +1813,7 @@ export default function UnitDetailPage() {
                   />
                 ) : null}
 
-                {isAdmin && (rentalPackage === "CUSTOM" || customFurnitureLogs.length > 0) ? (
+                {canManageAllUnits && (rentalPackage === "CUSTOM" || customFurnitureLogs.length > 0) ? (
                   <LogList
                     title={locale === "tr" ? "Eklenen mobilya geçmişi" : "Added furniture history"}
                     logs={customFurnitureLogs}
@@ -2022,7 +2022,7 @@ export default function UnitDetailPage() {
                   </div>
                 </div>
 
-                {isAdmin ? (
+                {canManageAllUnits ? (
                   <LogList
                     title={locale === "tr" ? "Müşteri kayıt geçmişi" : "Customer record history"}
                     logs={customerRecordLogs}

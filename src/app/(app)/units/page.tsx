@@ -446,7 +446,7 @@ export default function UnitsPage() {
     me?.role === "MANAGER" ||
     me?.role === "AFTERSALES" ||
     me?.role === "PREVIEW";
-  const canDeleteUnits = me?.role === "ADMIN" || me?.role === "PREVIEW";
+  const canDeleteUnits = ["ADMIN", "MANAGER", "PREVIEW"].includes(me?.role || "");
 
   const statusCounts = useMemo(() => {
     const next: Record<UnitDeliveryStatus, number> = {

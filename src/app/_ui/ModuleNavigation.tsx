@@ -20,6 +20,7 @@ import {
   Globe,
   Handshake,
   Headset,
+  HardHat,
   House,
   Landmark,
   LayoutDashboard,
@@ -54,6 +55,7 @@ import {
 import s from "./AppShell.module.css";
 
 const icons: Record<string, LucideIcon> = {
+  construction: HardHat,
   support: Headset,
   briefcase: BriefcaseBusiness,
   profile: UserRound,

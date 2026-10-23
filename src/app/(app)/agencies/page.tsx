@@ -190,6 +190,7 @@ export default function AgenciesPage() {
       if (nextStatus !== "ALL") params.set("status", nextStatus);
       if (nextAssignedId) params.set("assignedSalesId", nextAssignedId);
 
+      params.set("scope", "all");
       params.set("page", String(nextPage));
       params.set("pageSize", String(nextPageSize));
 

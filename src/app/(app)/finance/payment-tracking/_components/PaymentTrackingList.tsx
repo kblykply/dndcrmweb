@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { getUser } from "@/lib/auth";
+import SalesFollowupCell from "../../../my-customer-accounts/SalesFollowupCell";
 import SalesLedgerSettings from "../../../my-customer-accounts/SalesLedgerSettings";
 import ExportMenu from "../../_reports/ExportMenu";
 import { reportSessionGuard } from "../../_reports/session";
@@ -962,6 +963,7 @@ export default function PaymentTrackingList({
                       t("Takip tarihi", "Follow-up date"),
                     )}
                     <th scope="col">{t("Takip durumu", "Follow-up status")}</th>
+                    {salesMode && <th scope="col">{t("Sorumlu", "Owner")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -980,9 +982,6 @@ export default function PaymentTrackingList({
                         >
                           {row.customerName || row.identity.customerCode || "—"}
                         </Link>
-                        {salesMode && row.followupAssignment?.userName && (
-                          <small>{t("Takip sorumlusu", "Follow-up owner")}: {row.followupAssignment.userName}</small>
-                        )}
                         <small>
                           {paymentProjectGroupLabel(row.projectGroup, tr)} ·{" "}
                           {row.unitName || row.identity.unitCode || "—"} ·{" "}
@@ -1052,10 +1051,10 @@ export default function PaymentTrackingList({
                                 )
                               : statusLabel(row.trackingStatus, tr)}
                         </span>
-                        <small>
+                        {!salesMode && <small>
                           {row.tracking?.assigneeName ||
                             t("Atanmamış", "Unassigned")}
-                        </small>
+                        </small>}
                         {!row.canTrack && (
                           <small>
                             {row.trackingIssue ||
@@ -1063,6 +1062,31 @@ export default function PaymentTrackingList({
                           </small>
                         )}
                       </td>
+                      {salesMode && (
+                        <td className={s.assignmentCell}>
+                          <SalesFollowupCell
+                            row={row}
+                            tr={tr}
+                            canAssign={data.canAssignFollowup === true}
+                            assignees={data.followupAssignees || []}
+                            disabled={loading}
+                            onAssigned={async (updated) => {
+                              const patch = (current: ListData): ListData => ({
+                                ...current,
+                                rows: current.rows.map((item) =>
+                                  item.identity.customerCode === updated.identity.customerCode &&
+                                  item.identity.unitCode === updated.identity.unitCode
+                                    ? { ...item, followupAssignment: updated.followupAssignment }
+                                    : item,
+                                ),
+                              });
+                              setData((current) => current ? patch(current) : current);
+                              if (confirmed.current) confirmed.current.value = patch(confirmed.current.value);
+                              await load(applied.current);
+                            }}
+                          />
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
