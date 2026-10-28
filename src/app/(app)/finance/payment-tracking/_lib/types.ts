@@ -32,6 +32,7 @@ export interface PaymentInvoiceOk {
   hasBlank: boolean;
 }
 export interface PaymentSourceCase {
+  unallocatedCredit?: { status: "clear" | "blocked" | "unavailable"; recordCount: number | null };
   followupAssignment?: {
     userId: string | null;
     userName: string | null;

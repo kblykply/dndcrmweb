@@ -87,6 +87,7 @@ const base = {
   oldestDueDate: "2026-09-01",
   nextDueDate: "2026-12-01",
   overdueDays: 28,
+  unallocatedCredit: { status: "clear", recordCount: 0 },
   canTrack: true,
   trackingIssue: null,
   tracking: null,
@@ -124,6 +125,8 @@ async function main() {
     projectFixture = false,
     mismatchedProject = false,
     invalidCurrencyTotal = false;
+  let syncPosts = 0, syncPolls = 0;
+  const syncState = { workerOnline: true, source: { id: 'batch-old', importedAt: '2026-10-23T09:00:00Z' }, job: null };
   const heldReads = [];
   function holdRead(path, method = "GET") {
     let started, release;
@@ -236,7 +239,25 @@ async function main() {
         "access-control-allow-headers": "authorization,content-type",
       };
       if (method === "OPTIONS") return route.fulfill({ status: 204, headers });
-      const path = url.pathname.replace(/^\/api(?=\/)/, "");
+      let path = url.pathname.replace(/^\/api(?=\/)/, "");
+      if (process.env.CLOSURE_ONLY === "true") path = path.replace(/^\/sales-ledger(?=\/|$)/, "/payment-tracking");
+      if (path === '/finance-sync') {
+        if (method === 'POST') {
+          syncPosts++;
+          syncState.job = syncPosts === 1
+            ? { id: 'sync-1', status: 'RUNNING', stage: 'READING', errorCode: null }
+            : { id: 'sync-2', status: 'FAILED', stage: 'FAILED', errorCode: 'SOURCE_ATTRIBUTES_UNMATCHED' };
+        } else if (syncState.job?.status === 'RUNNING') {
+          syncPolls++;
+          if (syncPolls === 1) syncState.job.stage = 'VALIDATING';
+          else {
+            syncState.job = { ...syncState.job, status: 'SUCCEEDED', stage: 'SUCCEEDED', recordCount: 52 };
+            syncState.source = { id: 'batch-new', importedAt: new Date().toISOString() };
+            source.importedAt = syncState.source.importedAt;
+          }
+        }
+        return route.fulfill({ status: 200, headers, contentType: 'application/json', body: JSON.stringify(syncState) });
+      }
       let body,
         status = 200;
       if (path.startsWith("/payment-tracking"))
@@ -508,6 +529,9 @@ async function main() {
           }
           if (invalidCurrencyTotal && allCurrencies) body.filteredSummary.overdueAmount = 16020;
         }
+      } else if (method === "GET" && [key, siblingKey].some((entry) => path === `/payment-tracking/${entry}/statement`)) {
+        body = detail(path.split("/").at(-2));
+        if (body.item.unallocatedCredit?.status !== "clear") { status = 409; body = { code: "PAYMENT_UNALLOCATED_CREDIT", message: "Finance review required" }; }
       } else if (method === "GET" && [key, siblingKey].some((entry) => path === `/payment-tracking/${entry}`))
         body = detail(path.split("/").at(-1));
       else if (
@@ -586,6 +610,7 @@ async function main() {
         }
       } else if (method === "POST" && path === "/auth/refresh")
         body = { accessToken: "isolated-payment-refreshed-access-token" };
+      else if (method === "GET" && path === "/auth/me") body = { id: "fixture-admin", role: "ADMIN", name: "Synthetic Admin" };
       else if (method === "GET" && path === "/notifications") body = [];
       else if (method === "GET" && path === "/notifications/unread-count")
         body = { unread: 0 };
@@ -609,6 +634,79 @@ async function main() {
         errors.push(message.text());
     });
     const main = page.locator("#crm-main-content");
+    if (process.env.CLOSURE_ONLY === 'true') {
+      projectChoices.push(['NEOCITY', 'Neocity']);
+      item.invoiceOk = { status: 'matched', values: ['DND'], hasBlank: false };
+      item.unallocatedCredit = { status: 'blocked', recordCount: 2 };
+      await page.goto(`${origin}/my-customer-accounts`);
+      const blockedRow = main.locator('tr[data-closure-blocked]').first();
+      await blockedRow.waitFor();
+      assert.match(await blockedRow.innerText(), /Unallocated credit · Actions blocked/);
+      assert.equal(await blockedRow.locator('td').first().locator('a').count(), 0);
+      await blockedRow.getByRole('button', { name: 'Synthetic Customer', exact: true }).click();
+      const warningDialog = page.getByRole('alertdialog');
+      await warningDialog.waitFor();
+      assert.match(await warningDialog.innerText(), /Ms\. Tanem/);
+      assert.match(await warningDialog.innerText(), /cannot send a debt notification or perform any action/);
+      const warningBounds = await warningDialog.boundingBox();
+      assert(warningBounds && warningBounds.x > 100 && warningBounds.y > 100, 'Warning dialog is centered in the viewport');
+      await page.screenshot({ path: '/private/tmp/payment-closure-warning.png', animations: 'disabled' });
+      await warningDialog.getByRole('button', { name: 'Understood' }).click();
+      await warningDialog.waitFor({ state: 'hidden' });
+      assert.equal(new URL(page.url()).pathname, '/my-customer-accounts');
+      await blockedRow.locator('td').nth(1).click();
+      await warningDialog.waitFor();
+      await page.keyboard.press('Escape');
+      await warningDialog.waitFor({ state: 'hidden' });
+      for (const route of ['/finance/payment-tracking', '/my-customer-accounts']) {
+        for (const status of ['blocked', 'unavailable']) {
+          item.unallocatedCredit = { status, recordCount: status === 'blocked' ? 2 : null };
+          await page.goto(`${origin}${route}/${key}`);
+          await main.locator('[data-closure-warning]').waitFor();
+          assert.equal(await main.getByRole('button', { name: 'Email draft', exact: true }).isDisabled(), true);
+          assert.equal(await main.getByRole('button', { name: 'WhatsApp payment reminder', exact: true }).isDisabled(), true);
+          assert.equal(await main.getByRole('button', { name: 'Download report', exact: true }).isDisabled(), true);
+          assert.match(await main.locator('[data-closure-warning]').innerText(), status === 'blocked' ? /Ms\. Tanem/ : /could not be verified/);
+          for (const name of ['Add note', 'Record contact']) {
+            const button = main.getByRole('button', { name, exact: true, includeHidden: true });
+            assert.equal(await button.isDisabled(), true);
+          }
+        }
+        item.unallocatedCredit = { status: 'clear', recordCount: 0 };
+        await page.goto(`${origin}${route}/${key}`);
+        await main.getByRole('button', { name: 'Email draft', exact: true }).waitFor();
+        assert.equal(await main.getByRole('button', { name: 'Email draft', exact: true }).isEnabled(), true);
+        assert.equal(await main.locator('[data-closure-warning]').count(), 0);
+      }
+      assert.equal(unexpected.length, 0, unexpected.join('\n'));
+      assert.equal(errors.length, 0, errors.join('\n'));
+      console.log('PASS: blocked sales rows are highlighted and open the Tanem dialog; finance and sales details block actions/exports; clear accounts remain usable.');
+      return;
+    }
+    if (process.env.FINANCE_SYNC_ONLY === 'true') {
+      await page.goto(`${origin}/finance/payment-tracking`);
+      const button = main.getByRole('button', { name: 'Update Logo data', exact: true });
+      await button.waitFor();
+      const before = requests.length;
+      await button.click();
+      const busy = main.getByRole('button', { name: 'Updating…', exact: true });
+      await busy.waitFor();
+      assert.equal(await busy.isDisabled(), true);
+      await main.getByText('Update completed', { exact: true }).waitFor({ timeout: 20000 });
+      await page.waitForTimeout(500);
+      assert.equal(syncPosts, 1);
+      assert.ok(requests.slice(before).some(r => r.query.refresh === 'true'), 'Success must reload the report');
+      const successfulBatch = syncState.source.id;
+      await button.click();
+      await main.getByText('Logo payment and invoice records do not match. Finance review required; previous data retained.', { exact: true }).waitFor();
+      assert.equal(syncState.source.id, successfulBatch);
+      assert.equal(await button.isEnabled(), true);
+      assert.equal(unexpected.length, 0, unexpected.join('\n'));
+      assert.equal(errors.length, 0, errors.join('\n'));
+      console.log('PASS: CRM trigger, disabled duplicate button, progress, success refresh and retryable failure.');
+      return;
+    }
+
     const filterToggle = () => main.getByRole("button", { name: /^(Filters|Filtreler)$/, exact: true });
     const management = () => main.locator("details[data-payment-management]");
     async function setFiltersOpen(open) {

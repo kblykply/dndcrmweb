@@ -237,6 +237,7 @@ export function buildStatementReport(
   tr: boolean,
   ownedOnly = false,
 ): FinanceReport {
+  requireCustomerActions(data.item, tr);
   const t = label(tr);
   const lines = data.portfolio.installments
     .filter((line) => !period || line.dueDate?.startsWith(period))
@@ -446,3 +447,4 @@ export function buildSalesLedgerReport(
     ],
   };
 }
+import { requireCustomerActions } from "../payment-tracking/_lib/closure-check";

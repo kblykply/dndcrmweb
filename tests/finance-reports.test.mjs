@@ -144,7 +144,7 @@ test("detail report preserves zero balances, missing dates, Turkish text and eve
 test("customer statement limits by due year or month and includes all payment kinds and undated rows only in full statements", () => {
   const data = {
     source,
-    item: {
+    item: { unallocatedCredit: { status: "clear", recordCount: 0 },
       customerName: "İlker Şahin",
       key: "case-gbp",
       identity: { customerCode: "C1", unitCode: "LJ-A1" },
@@ -352,7 +352,7 @@ test("sales report guards accept only explicit sales mode and revoke downloads o
 
 
 test("statement highlights only overdue unpaid balances and keeps incomplete totals unknown", () => {
-  const data = { source, item: { customerName: "İlker Şahin", key: "case-gbp", identity: { customerCode: "C1", unitCode: "LJ-A1" }, unitName: "La Joya Perla A-1" }, portfolio: { installments: [
+  const data = { source, item: { unallocatedCredit: { status: "clear", recordCount: 0 }, customerName: "İlker Şahin", key: "case-gbp", identity: { customerCode: "C1", unitCode: "LJ-A1" }, unitName: "La Joya Perla A-1" }, portfolio: { installments: [
     line({dueDate:"2026-10-09",outstanding:75}),
     line({dueDate:"2026-10-15",outstanding:50}),
     line({dueDate:"2026-11-01",outstanding:100}),
@@ -391,7 +391,7 @@ test("customer PDF keeps a short summary and ledger together, and repeats identi
     return {ok:true,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)};
   };
   try {
-    const data = { source, item: {customerName:"İlker Şahin",key:"case-gbp",identity:{customerCode:"C1",unitCode:"PERLA-A1"},unitName:"La Joya Perla A-1"},portfolio:{installments:[
+    const data = { source, item: { unallocatedCredit: { status: "clear", recordCount: 0 },customerName:"İlker Şahin",key:"case-gbp",identity:{customerCode:"C1",unitCode:"PERLA-A1"},unitName:"La Joya Perla A-1"},portfolio:{installments:[
       line({dueDate:"2026-07-10",amount:10000,paid:2500,outstanding:7500}),
       line({dueDate:"2026-08-10",amount:10000,paid:10000,outstanding:0}),
       line({dueDate:"2026-09-10",amount:10000,paid:4000,outstanding:6000}),
@@ -409,3 +409,11 @@ test("customer PDF keeps a short summary and ledger together, and repeats identi
     }
   } finally { jsPDF.API.save = originalSave; globalThis.fetch = originalFetch; }
 });
+
+ test("statement export refuses blocked or unverified closure status for every period", () => {
+   for (const status of ["blocked", "unavailable", undefined]) {
+     for (const period of ["", "2026", "2026-10"]) {
+       assert.throws(() => buildStatementReport({ item: { unallocatedCredit: status ? { status, recordCount: 1 } : undefined } }, period, true), /kapat|Kapat/);
+     }
+   }
+ });

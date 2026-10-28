@@ -532,6 +532,39 @@
 .table .overdueRow td:first-child {
   box-shadow: inset 3px 0 0 var(--danger);
 }
+.table .closureRow {
+  background: #fff4df;
+  color: #49320f;
+  cursor: pointer;
+}
+.table .closureRow td:first-child {
+  box-shadow: inset 5px 0 0 #bd6a08;
+}
+.table .closureRow td small { color: #684713; }
+.accountButton {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.accountButton:hover { text-decoration: underline; }
+.accountButton:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; }
+.closureBadge {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.closureDialog { position: fixed; inset: 0; margin: auto; height: fit-content; }
+.closureDialog h2 { display: flex; align-items: center; gap: 10px; }
+.closureDialog p { font-size: 16px; line-height: 1.65; }
+.closureCustomer { font-weight: 700; }
+:global([data-theme="dark"]) .table .closureRow { background: #3c2b13; color: #ffe0a4; }
+:global([data-theme="dark"]) .table .closureRow td small { color: #f1ce94; }
 .sortButton {
   height: auto;
   background: none !important;
@@ -1557,3 +1590,15 @@
   margin: auto;
   text-align: start;
 }
+.closureWarning {
+  margin: 16px 0;
+  padding: 18px 20px;
+  border: 1px solid #b45309;
+  border-left: 5px solid #b45309;
+  border-radius: 12px;
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.closureWarning p { margin: 6px 0; }

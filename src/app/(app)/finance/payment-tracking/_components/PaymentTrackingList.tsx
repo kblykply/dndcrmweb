@@ -26,7 +26,9 @@ import {
 } from "lucide-react";
 import { authedFetch } from "@/lib/authedFetch";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
-import type { PaymentTrackingList as ListData } from "../_lib/types";
+import type { PaymentTrackingList as ListData, PaymentTrackingRow } from "../_lib/types";
+import { customerActionsAllowed } from "../_lib/closure-check";
+import ClosureWarningDialog from "./ClosureWarningDialog";
 import { paymentKindLabel } from "../_lib/payment-kinds";
 import {
   hasProjectGroupContract,
@@ -50,6 +52,7 @@ import s from "../payment-tracking.module.css";
 
 import PaymentListFilters from "./PaymentListFilters";
 import SourceFreshness from "./SourceFreshness";
+import FinanceSyncButton from "./FinanceSyncButton";
 import { requireSourceAudit } from "../_lib/source-integrity";
 import { useSourceExpiry } from "../_lib/useSourceExpiry";
 import FilteredOverdueTotal from "./FilteredOverdueTotal";
@@ -100,6 +103,7 @@ export default function PaymentTrackingList({
   const [filters, setFilters] = useState<Filters>(defaults);
   const [draft, setDraft] = useState<Filters>(defaults);
   const [data, setData] = useState<ListData | null>(null);
+  const [closureNotice, setClosureNotice] = useState<{ item: PaymentTrackingRow; href: string } | null>(null);
   const confirmed = useRef<{ session: string | null; value: ListData } | null>(
     null,
   );
@@ -648,6 +652,7 @@ export default function PaymentTrackingList({
             <RefreshCw size={20} className={loading ? s.spin : undefined} />
             {t("Yenile", "Refresh")}
           </button>
+          {!salesMode && ["ADMIN", "ACCOUNTING"].includes(role || "") && <FinanceSyncButton tr={tr} onUpdated={refreshSource} displayedImport={data?.source.importedAt} />}
         </div>
       </header>
       {data &&
@@ -967,21 +972,32 @@ export default function PaymentTrackingList({
                   </tr>
                 </thead>
                 <tbody>
-                  {data.rows.map((row) => (
+                  {data.rows.map((row) => {
+                    const blocked = salesMode && !customerActionsAllowed(row);
+                    const href = `${salesMode ? `${basePath}/${encodeURIComponent(row.key)}` : trackingHref(row.key)}?returnTo=${encodeURIComponent(query(filters).toString())}`;
+                    return (
                     <tr
                       key={row.key}
+                      data-closure-blocked={blocked || undefined}
+                      onClick={blocked ? () => setClosureNotice({ item: row, href }) : undefined}
                       className={
-                        row.overdueAmount != null && row.overdueAmount > 0
+                        blocked ? s.closureRow : row.overdueAmount != null && row.overdueAmount > 0
                           ? s.overdueRow
                           : undefined
                       }
                     >
                       <td>
-                        <Link
-                          href={`${salesMode ? `${basePath}/${encodeURIComponent(row.key)}` : trackingHref(row.key)}?returnTo=${encodeURIComponent(query(filters).toString())}`}
-                        >
+                        {blocked ? <button type="button" className={s.accountButton}
+                          aria-haspopup="dialog" onClick={() => setClosureNotice({ item: row, href })}>
                           {row.customerName || row.identity.customerCode || "—"}
-                        </Link>
+                        </button> : <Link href={href}>
+                          {row.customerName || row.identity.customerCode || "—"}
+                        </Link>}
+                        {blocked && <span className={s.closureBadge}>
+                          {row.unallocatedCredit?.status === "blocked"
+                            ? t("Kapatılmamış hesap · İşlemler kapalı", "Unallocated credit · Actions blocked")
+                            : t("Kapatma kontrolü bekleniyor", "Closure check pending")}
+                        </span>}
                         <small>
                           {paymentProjectGroupLabel(row.projectGroup, tr)} ·{" "}
                           {row.unitName || row.identity.unitCode || "—"} ·{" "}
@@ -1069,7 +1085,7 @@ export default function PaymentTrackingList({
                             tr={tr}
                             canAssign={data.canAssignFollowup === true}
                             assignees={data.followupAssignees || []}
-                            disabled={loading}
+                            disabled={loading || blocked}
                             onAssigned={async (updated) => {
                               const patch = (current: ListData): ListData => ({
                                 ...current,
@@ -1088,7 +1104,7 @@ export default function PaymentTrackingList({
                         </td>
                       )}
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
               {!data.rows.length && (
@@ -1149,6 +1165,8 @@ export default function PaymentTrackingList({
           </section>
         </>
       )}
+      {closureNotice && <ClosureWarningDialog item={closureNotice.item} href={closureNotice.href}
+        tr={tr} onClose={() => setClosureNotice(null)} />}
     </div>
   );
 }

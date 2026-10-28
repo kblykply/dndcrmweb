@@ -5,6 +5,7 @@ import { ExternalLink, Mail, MessageCircle, RefreshCw, X } from "lucide-react";
 import type { PaymentTrackingAction, PaymentTrackingDetail } from "../_lib/types";
 import { composeLink, currencyName, dateLabel, money } from "../_lib/utils";
 import { buildPaymentMessage } from "../_lib/payment-message";
+import { customerActionsAllowed } from "../_lib/closure-check";
 import s from "../payment-tracking.module.css";
 
 export default function ComposeDialog({
@@ -86,7 +87,7 @@ export default function ComposeDialog({
     (messageScope !== appliedTemplate.scope || messageTr !== appliedTemplate.tr);
   const tooLong = isWhatsApp && (body.length > 4000 || (!dirty && template?.tooLong === true));
   const href = composeLink(channel, recipient, subject, body);
-  const canOpen = !!href && !!body.trim() && !tooLong && !pendingTemplate;
+  const canOpen = customerActionsAllowed(data.item) && !!href && !!body.trim() && !tooLong && !pendingTemplate;
   async function openAndRecord() {
     if (!canOpen || recordingRef.current) return;
     setRecordError("");

@@ -2,6 +2,7 @@
 import { authedFetch } from "@/lib/authedFetch";
 import type { PaymentTrackingDetail } from "../payment-tracking/_lib/types";
 import { requireSourceAudit } from "../payment-tracking/_lib/source-integrity";
+import { requireCustomerActions } from "../payment-tracking/_lib/closure-check";
 import { buildStatementReport } from "./build";
 import { downloadFinanceReport } from "./download";
 import { reportSessionGuard } from "./session";
@@ -55,9 +56,10 @@ export default function StatementExport({
       onExport={async (format, scope, period) => {
         const allowed = reportSessionGuard(salesMode ? "sales" : "finance");
         const data = (await authedFetch(
-          `${salesMode ? "/sales-ledger" : "/payment-tracking"}/${encodeURIComponent(caseKey)}`,
+          `${salesMode ? "/sales-ledger" : "/payment-tracking"}/${encodeURIComponent(caseKey)}/statement`,
         )) as PaymentTrackingDetail;
         requireSourceAudit(data.source, tr);
+        requireCustomerActions(data.item, tr);
         if (!allowed() || data.item.key !== caseKey)
           throw new Error(
             tr

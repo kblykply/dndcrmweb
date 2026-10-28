@@ -1,5 +1,6 @@
 "use client";
 import StatementExport from "../../_reports/StatementExport";
+import { customerActionsAllowed, closureWarning } from "../_lib/closure-check";
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -352,7 +353,8 @@ export default function PaymentTrackingDetail({
     );
   const item = data.item,
     tracking = item.tracking;
-  const disabled = !!saving || loading || conflict || !item.canTrack;
+  const customerActionsBlocked = !customerActionsAllowed(item);
+  const disabled = !!saving || loading || conflict || !item.canTrack || customerActionsBlocked;
   const currency = currencyName(item.identity.currency, tr);
   const sourceOverdue = item.overdueAmount != null && item.overdueAmount > 0;
   const installments = data.portfolio.installments
@@ -486,7 +488,7 @@ export default function PaymentTrackingDetail({
             <SalesFollowupAssignment
               data={data}
               tr={tr}
-              disabled={loading || !!saving || conflict}
+              disabled={disabled}
               error={error}
               onSave={(userId, expectedVersion) => act({ type: "followup-assignment", userId, expectedVersion })}
             />
@@ -512,7 +514,7 @@ export default function PaymentTrackingDetail({
             caseKey={caseKey}
             dates={data.portfolio.installments.map((row) => row.dueDate)}
             tr={tr}
-            disabled={loading || !!saving}
+            disabled={loading || !!saving || customerActionsBlocked}
           />
           <button
             className={s.button}
@@ -524,7 +526,7 @@ export default function PaymentTrackingDetail({
           </button>
           <button
             className={s.button}
-            disabled={loading || !!saving}
+            disabled={loading || !!saving || customerActionsBlocked}
             onClick={() => setCompose("email")}
           >
             <Mail size={15} />
@@ -532,7 +534,7 @@ export default function PaymentTrackingDetail({
           </button>
           <button
             className={`${s.primary} ${s.whatsappButton}`}
-            disabled={loading || !!saving}
+            disabled={loading || !!saving || customerActionsBlocked}
             onClick={() => setCompose("whatsapp")}
           >
             <MessageCircle size={17} />
@@ -548,6 +550,13 @@ export default function PaymentTrackingDetail({
         />
       ) : null}
       <SourceReviewNotice cases={data.portfolio.cases} tr={tr} />
+      {customerActionsBlocked && <div className={s.closureWarning} role="alert" data-closure-warning>
+        <strong>{item.unallocatedCredit?.status === "blocked"
+          ? t("Finans kontrolü gerekiyor", "Finance review required")
+          : t("Kapatma bilgisi bekleniyor", "Payment closure check pending")}</strong>
+        <p>{closureWarning(item, tr)}</p>
+        {item.unallocatedCredit?.status === "blocked" && <span>{item.unallocatedCredit.recordCount} {t("kayıt · Bu cari koduna bağlı tüm daireler için geçerlidir.", "entries · Applies to every unit under this customer code.")}</span>}
+      </div>}
       {error && (
         <>
           <ErrorMessage message={error} tr={tr} />
@@ -867,7 +876,7 @@ export default function PaymentTrackingDetail({
                           <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{event.body}</p>
                         </details>
                         {event.type === "message_draft" && event.actorId === getUser()?.id && !data.history.some((other) => other.type === "message_sent" && other.message?.id === event.message?.id) && (
-                          <button className={s.button} disabled={!!saving || loading || conflict} onClick={() => void act({ type: "message_sent", messageId: event.message!.id, body: "" })}>
+                          <button className={s.button} disabled={!!saving || loading || conflict || customerActionsBlocked} onClick={() => void act({ type: "message_sent", messageId: event.message!.id, body: "" })}>
                             {t("Gönderdim · kaydet", "I sent it · save")}
                           </button>
                         )}
@@ -989,7 +998,7 @@ export default function PaymentTrackingDetail({
                     maxLength={2000}
                     aria-label={t("Gerekçe · zorunlu", "Reason · required")}
                     value={reason}
-                    disabled={!!saving || loading}
+                    disabled={disabled}
                     onChange={(event) => setReason(event.target.value)}
                     placeholder={t(
                       "Neden ertelendi veya asıl vadeye dönüldü?",
@@ -1129,7 +1138,7 @@ export default function PaymentTrackingDetail({
                   aria-label={t("Dosya notu", "Case note")}
                   value={note}
                   onChange={(event) => setNote(event.target.value)}
-                  disabled={!!saving || loading}
+                  disabled={disabled}
                 />
               </label>
               <button className={s.primary} disabled={disabled || !note.trim()}>
@@ -1178,8 +1187,8 @@ export default function PaymentTrackingDetail({
                     disabled={disabled}
                   >
                     <option value="phone">{t("Telefon", "Phone")}</option>
-                    <option value="email">{t("E-posta", "Email")}</option>
-                    <option value="whatsapp">WhatsApp</option>
+                    <option value="email" disabled={customerActionsBlocked}>{t("E-posta", "Email")}</option>
+                    <option value="whatsapp" disabled={customerActionsBlocked}>WhatsApp</option>
                   </select>
                 </label>
                 <label className={s.field}>
@@ -1191,12 +1200,12 @@ export default function PaymentTrackingDetail({
                     aria-label={t("Görüşme özeti", "Contact summary")}
                     value={contactNote}
                     onChange={(event) => setContactNote(event.target.value)}
-                    disabled={!!saving || loading}
+                    disabled={disabled}
                   />
                 </label>
                 <button
                   className={s.button}
-                  disabled={disabled || !contactNote.trim()}
+                  disabled={disabled || !contactNote.trim() || (customerActionsBlocked && contactChannel !== "phone")}
                 >
                   {t("Görüşmeyi kaydet", "Record contact")}
                 </button>
@@ -1206,7 +1215,7 @@ export default function PaymentTrackingDetail({
         </aside>
       </div>
 
-      {compose && (
+      {compose && !customerActionsBlocked && (
         <ComposeDialog
           channel={compose}
           data={data}
