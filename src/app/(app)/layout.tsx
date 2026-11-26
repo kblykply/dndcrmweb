@@ -114,6 +114,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       logoSrc={theme === "dark" ? "/dndwhite.png" : "/dndblack.png"}
       userId={me?.id}
       navigation={navigationForRole(me?.role)}
+      restricted={me?.role === 'AGENCY_ENTRY'}
     >
       {me?.role === "CALLCENTER" && !callcenterAllowed ? null : <Fragment key={`${me?.id}:${me?.role}`}>{children}</Fragment>}
     </AppShell>

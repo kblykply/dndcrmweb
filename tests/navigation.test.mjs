@@ -37,6 +37,15 @@ const ids = (groups) =>
     .sort();
 const all = items(navigationGroups).map((item) => item.id);
 
+test('agency entry role has exactly one module and no inherited employee links', () => {
+  const navigation = navigationForRole('AGENCY_ENTRY');
+  assert.deepEqual(ids(navigation), ['agency-customers']);
+  assert.equal(items(navigation)[0].href, '/agency-customers');
+  assert.equal(existsSync(new URL('../src/app/(app)/agency-customers/page.tsx', import.meta.url)), true);
+  assert.equal(label(tr, 'roles.AGENCY_ENTRY'), 'Acente Müşteri Girişi');
+  assert.equal(label(en, 'roles.AGENCY_ENTRY'), 'Agency Customer Entry');
+});
+
 test("seven groups contain unique, translated links to existing modules", () => {
   assert.equal(navigationGroups.length, 7);
   assert.equal(all.length, 38);

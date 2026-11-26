@@ -588,6 +588,7 @@ roles: {
   AFTERSALES: "Satış Sonrası",
   ACCOUNTING: "Muhasebe",
   PREVIEW: "Ön İzleme",
+  AGENCY_ENTRY: 'Acente Müşteri Girişi',
 },
 
 admin: {

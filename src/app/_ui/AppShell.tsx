@@ -17,11 +17,13 @@ export default function AppShell({
   navigation,
   userId,
   children,
+  restricted = false,
 }: {
   logoSrc: string;
   navigation: readonly NavigationGroup[];
   userId?: string;
   children: ReactNode;
+  restricted?: boolean;
 }) {
   const { locale } = useLanguage();
   const tr = locale === "tr";
@@ -200,8 +202,8 @@ export default function AppShell({
           </div>
           <div className={s.topbarActions}>
             <LanguageSwitcher />
-            <Notifications />
-            <TopbarUser />
+            {!restricted && <Notifications />}
+            <TopbarUser restricted={restricted} />
           </div>
         </header>
         <main id="crm-main-content" tabIndex={-1} className={s.main}>

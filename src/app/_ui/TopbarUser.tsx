@@ -72,7 +72,7 @@ const skeletonAvatarStyle: React.CSSProperties = {
   flex: "0 0 auto",
 };
 
-export default function TopbarUser() {
+export default function TopbarUser({ restricted = false }: { restricted?: boolean }) {
   const [mounted, setMounted] = useState(false);
   const [me, setMe] = useState<any>(null);
   const [open, setOpen] = useState(false);
@@ -288,7 +288,7 @@ export default function TopbarUser() {
                 </div>
               </div>
 
-              <Link
+              {!restricted && <Link
                 href="/profile"
                 style={{
                   padding: "10px 12px",
@@ -302,7 +302,7 @@ export default function TopbarUser() {
                 onClick={() => setOpen(false)}
               >
                 Profil Ayarları
-              </Link>
+              </Link>}
 
               <button
                 className="danger"

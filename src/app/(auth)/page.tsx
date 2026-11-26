@@ -26,7 +26,9 @@ export default function LoginPage() {
 
       setSession(res.user, res.accessToken, res.refreshToken);
       window.location.href =
-        res.user?.role === "PREVIEW"
+        res.user?.role === 'AGENCY_ENTRY'
+          ? '/agency-customers'
+          : res.user?.role === "PREVIEW"
           ? "/admin"
           : res.user?.role === "AFTERSALES"
             ? "/units"

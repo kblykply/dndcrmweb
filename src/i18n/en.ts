@@ -124,6 +124,7 @@ meetings: "Meetings",
     AFTERSALES: "After Sales",
     ACCOUNTING: "Accounting",
     PREVIEW: "Preview",
+    AGENCY_ENTRY: 'Agency Customer Entry',
   },
   eventTypes: {
     LEAD_FOLLOWUP: "Lead Follow-up",

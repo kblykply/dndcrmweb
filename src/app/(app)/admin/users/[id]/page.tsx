@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
+import AgencyEntryAssignment from "../AgencyEntryAssignment";
 
 type Role =
   | "ADMIN"
@@ -14,7 +15,8 @@ type Role =
   | "SALES"
   | "AFTERSALES"
   | "ACCOUNTING"
-  | "PREVIEW";
+  | "PREVIEW"
+  | "AGENCY_ENTRY";
 
 type UserRow = {
   id: string;
@@ -22,6 +24,8 @@ type UserRow = {
   email: string;
   role: Role;
   managerId?: string | null;
+  entryAgencyId?: string | null;
+  entryAgency?: { id: string; name: string } | null;
   isActive: boolean;
   avatarUrl?: string | null;
   createdAt?: string;
@@ -35,6 +39,7 @@ const ROLES: Role[] = [
   "AFTERSALES",
   "ACCOUNTING",
   "PREVIEW",
+  "AGENCY_ENTRY",
 ];
 
 function safeTranslate(
@@ -150,6 +155,7 @@ export default function AdminUserDetailPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("CALLCENTER");
   const [managerId, setManagerId] = useState("");
+  const [entryAgencyId, setEntryAgencyId] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   const isAdmin = me?.role === "ADMIN";
@@ -187,6 +193,7 @@ export default function AdminUserDetailPage() {
       setPassword("");
       setRole(nextUser.role);
       setManagerId(nextUser.managerId || "");
+      setEntryAgencyId(nextUser.entryAgencyId || "");
       setIsActive(nextUser.isActive);
 
       const managerList = allRows.filter(
@@ -217,6 +224,7 @@ export default function AdminUserDetailPage() {
           role,
           managerId: managerRequired ? managerId || null : null,
           isActive,
+          entryAgencyId: role === "AGENCY_ENTRY" ? entryAgencyId : null,
         }),
       });
 
@@ -428,7 +436,7 @@ export default function AdminUserDetailPage() {
             <span className="muted" style={{ fontSize: 12 }}>
               {t("adminUsers.table.role")}
             </span>
-            <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
+            <select aria-label={locale === 'tr' ? 'Kullanıcı rolü' : 'User role'} value={role} onChange={(e) => setRole(e.target.value as Role)}>
               {ROLES.map((r) => (
                 <option key={r} value={r}>
                   {safeTranslate(t, `roles.${r}`, r)}
@@ -454,6 +462,8 @@ export default function AdminUserDetailPage() {
               ))}
             </select>
           </label>
+
+          {role === "AGENCY_ENTRY" && <AgencyEntryAssignment value={entryAgencyId} onChange={setEntryAgencyId} initialName={user?.entryAgency?.name} disabled={!isAdmin} />}
 
           <label style={{ display: "grid", gap: 6 }}>
             <span className="muted" style={{ fontSize: 12 }}>
@@ -486,6 +496,7 @@ export default function AdminUserDetailPage() {
               !isAdmin ||
               !name.trim() ||
               !email.trim() ||
+              (role === "AGENCY_ENTRY" && !entryAgencyId) ||
               (managerRequired && !managerId)
             }
           >

@@ -494,6 +494,10 @@ export const navigationGroups: readonly NavigationGroup[] = [
 
 export function navigationForRole(role?: string): NavigationGroup[] {
   if (!role) return [];
+  if (role === 'AGENCY_ENTRY') return [{
+    id: 'agency-entry', label: 'nav.groups.sales', icon: 'customers',
+    items: [{ id: 'agency-customers', href: '/agency-customers', label: 'nav.customers', icon: 'customers' }],
+  }];
   return navigationGroups
     .map((group) => ({
       ...group,

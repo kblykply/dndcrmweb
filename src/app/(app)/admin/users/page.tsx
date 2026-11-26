@@ -5,6 +5,7 @@ import Link from "next/link";
 import { authedFetch } from "@/lib/authedFetch";
 import { getUser } from "@/lib/auth";
 import { useLanguage } from "@/app/_ui/LanguageProvider";
+import AgencyEntryAssignment from './AgencyEntryAssignment';
 
 type Role =
   | "ADMIN"
@@ -13,7 +14,9 @@ type Role =
   | "SALES"
   | "AFTERSALES"
   | "ACCOUNTING"
-  | "PREVIEW";
+  | "PREVIEW"
+  | "AGENCY_ENTRY";
+// Agency entry accounts have no access to the employee CRM modules.
 
 type UserRow = {
   id: string;
@@ -21,6 +24,8 @@ type UserRow = {
   email: string;
   role: Role;
   managerId?: string | null;
+  entryAgencyId?: string | null;
+  entryAgency?: { id: string; name: string } | null;
   isActive: boolean;
   avatarUrl?: string | null;
   createdAt?: string;
@@ -34,6 +39,7 @@ const ROLES: Role[] = [
   "AFTERSALES",
   "ACCOUNTING",
   "PREVIEW",
+  "AGENCY_ENTRY",
 ];
 
 function safeTranslate(
@@ -147,6 +153,7 @@ export default function AdminUsersPage() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>("CALLCENTER");
   const [managerId, setManagerId] = useState("");
+  const [entryAgencyId, setEntryAgencyId] = useState("");
 
   const isAdmin = me?.role === "ADMIN";
   const isPreview = me?.role === "PREVIEW";
@@ -192,6 +199,7 @@ export default function AdminUsersPage() {
           password: password.trim(),
           role,
           managerId: needsManager ? managerId || null : null,
+          entryAgencyId: role === "AGENCY_ENTRY" ? entryAgencyId : null,
         }),
       });
 
@@ -200,6 +208,7 @@ export default function AdminUsersPage() {
       setPassword("");
       setRole("CALLCENTER");
       setManagerId("");
+      setEntryAgencyId("");
 
       await load();
     } catch (e: any) {
@@ -385,7 +394,7 @@ export default function AdminUsersPage() {
             type="password"
           />
 
-          <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
+          <select aria-label={locale === 'tr' ? 'Kullanıcı rolü' : 'User role'} value={role} onChange={(e) => setRole(e.target.value as Role)}>
             {ROLES.map((r) => (
               <option key={r} value={r}>
                 {safeTranslate(t, `roles.${r}`, r)}
@@ -415,12 +424,15 @@ export default function AdminUsersPage() {
               !name.trim() ||
               !email.trim() ||
               !password.trim() ||
+              (role === "AGENCY_ENTRY" && !entryAgencyId) ||
               (needsManager && !managerId)
             }
           >
             {saving ? t("adminUsers.creating") : t("adminUsers.create")}
           </button>
         </div>
+
+        {role === "AGENCY_ENTRY" && <AgencyEntryAssignment value={entryAgencyId} onChange={setEntryAgencyId} disabled={!isAdmin} />}
 
         <div
           style={{
@@ -471,7 +483,7 @@ export default function AdminUsersPage() {
                 {safeTranslate(
                   t,
                   "adminUsers.table.manager",
-                  locale === "tr" ? "Yönetici" : "Manager",
+                  locale === "tr" ? "Yönetici / Acente" : "Manager / Agency",
                 )}
               </th>
               <th>{t("adminUsers.table.status")}</th>
@@ -497,7 +509,7 @@ export default function AdminUsersPage() {
                     </span>
                   </td>
 
-                  <td>{managerName || "-"}</td>
+                  <td>{u.role === "AGENCY_ENTRY" ? u.entryAgency?.name || "-" : managerName || "-"}</td>
 
                   <td>
                     <span className={`badge ${u.isActive ? "success" : "danger"}`}>
