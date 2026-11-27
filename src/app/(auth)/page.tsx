@@ -33,7 +33,7 @@ export default function LoginPage() {
           : res.user?.role === "AFTERSALES"
             ? "/units"
             : res.user?.role === "ACCOUNTING"
-              ? "/finance"
+              ? "/finance/payment-tracking"
               : "/leads";
     } catch (error: unknown) {
       if (error instanceof ApiError && error.status === 401) {

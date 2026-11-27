@@ -101,7 +101,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       )
     )
       return;
-    window.location.replace("/finance");
+    window.location.replace("/finance/payment-tracking");
   }, [me?.role, pathname]);
 
   const callcenterAllowed = navigationForRole("CALLCENTER").flatMap((group) => group.items).some((item) => inArea(pathname, item.href)) || /^\/meetings\/[^/]+$/.test(pathname);
