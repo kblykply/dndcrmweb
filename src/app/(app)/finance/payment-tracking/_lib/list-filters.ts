@@ -54,7 +54,7 @@ export const defaults = {
   q: "",
   project: "",
   currency: "",
-  scope: "actionable",
+  scope: "all",
   assignee: "all",
   priority: "all",
   authorizationCode: "",

@@ -1128,7 +1128,7 @@ async function main() {
     await responseAfter(() => main.getByRole("button", { name: "Back to open balances", exact: true }).click());
     assert.equal(requests.at(-1).query.scope, "open");
     await responseAfter(() => main.getByRole("button", { name: "Clear", exact: true }).click());
-    assert.equal(requests.at(-1).query.scope, "actionable", "Open follow-ups retain the initial priority");
+    assert.equal(requests.at(-1).query.scope, "all", "Clearing filters restores every follow-up status");
 
     projectFixture = true;
     await responseAfter(() => main.getByRole("button", { name: "Refresh source", exact: true }).click());
