@@ -514,6 +514,7 @@ export default function PaymentTrackingDetail({
             salesMode={salesMode}
             caseKey={caseKey}
             dates={data.portfolio.installments.map((row) => row.dueDate)}
+            currency={data.item.identity.currency}
             tr={tr}
             disabled={loading || !!saving || customerActionsBlocked}
           />

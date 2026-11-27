@@ -144,7 +144,8 @@ test("detail report preserves zero balances, missing dates, Turkish text and eve
 test("customer statement limits by due year or month and includes all payment kinds and undated rows only in full statements", () => {
   const data = {
     source,
-    item: { unallocatedCredit: { status: "clear", recordCount: 0 },
+    item: {
+      unallocatedCredit: { status: "clear", recordCount: 0 },
       customerName: "İlker Şahin",
       key: "case-gbp",
       identity: { customerCode: "C1", unitCode: "LJ-A1" },
@@ -311,8 +312,10 @@ test("sales ledger exports preserve isolated cases and separate currency balance
   assert(report.metadata.some((row) => row.includes("Yalnız kendi carilerim")));
   const managed = buildSalesLedgerReport(data, true, "Geciken", "Satışçı: BOB");
   assert.equal(managed.title, "Müşteri Carileri");
-  assert(managed.metadata.some(row => row.includes("Satışçı: BOB")));
-  assert(!managed.metadata.some(row => row.includes("Yalnız kendi carilerim")));
+  assert(managed.metadata.some((row) => row.includes("Satışçı: BOB")));
+  assert(
+    !managed.metadata.some((row) => row.includes("Yalnız kendi carilerim")),
+  );
 });
 test("sales report guards accept only explicit sales mode and revoke downloads on role changes", () => {
   let user = { id: "bob", role: "SALES" };
@@ -350,31 +353,54 @@ test("sales report guards accept only explicit sales mode and revoke downloads o
   }
 });
 
-
 test("statement highlights only overdue unpaid balances and keeps incomplete totals unknown", () => {
-  const data = { source, item: { unallocatedCredit: { status: "clear", recordCount: 0 }, customerName: "İlker Şahin", key: "case-gbp", identity: { customerCode: "C1", unitCode: "LJ-A1" }, unitName: "La Joya Perla A-1" }, portfolio: { installments: [
-    line({dueDate:"2026-10-09",outstanding:75}),
-    line({dueDate:"2026-10-15",outstanding:50}),
-    line({dueDate:"2026-11-01",outstanding:100}),
-    line({dueDate:"2026-09-01",outstanding:0,paid:100}),
-    line({dueDate:"2026-10-01",outstanding:null}),
-    line({dueDate:null,outstanding:10}),
-    line({dueDate:"2026-10-01",currency:"EUR",outstanding:20}),
-  ] } };
+  const data = {
+    source,
+    item: {
+      unallocatedCredit: { status: "clear", recordCount: 0 },
+      customerName: "İlker Şahin",
+      key: "case-gbp",
+      identity: { customerCode: "C1", unitCode: "LJ-A1" },
+      unitName: "La Joya Perla A-1",
+    },
+    portfolio: {
+      installments: [
+        line({ dueDate: "2026-10-09", outstanding: 75 }),
+        line({ dueDate: "2026-10-15", outstanding: 50 }),
+        line({ dueDate: "2026-11-01", outstanding: 100 }),
+        line({ dueDate: "2026-09-01", outstanding: 0, paid: 100 }),
+        line({ dueDate: "2026-10-01", outstanding: null }),
+        line({ dueDate: null, outstanding: 10 }),
+        line({ dueDate: "2026-10-01", currency: "EUR", outstanding: 20 }),
+      ],
+    },
+  };
   const report = buildStatementReport(data, "", true);
   const ledger = report.sheets[1];
-  assert.deepEqual(report.sheets[0].rows.map(row => [row[0],row[3],row[4]]), [["EUR",20,20],["GBP",null,null]]);
-  const overdue = ledger.overdueRows.map(index => ledger.rows[index]);
-  assert.equal(overdue.length,2);
-  assert.deepEqual(overdue.map(row => [row[1],row[7],row[8],row[9]]), [["EUR",20,14,"Gecikmiş"],["GBP",75,6,"Gecikmiş"]]);
-  assert.equal(ledger.rows.find(row => row[9] === "Ödendi")[8],0);
-  assert.equal(ledger.rows.find(row => row[9] === "Bugün vadeli")[7],0);
-  assert.equal(ledger.rows.find(row => row[9] === "Vadesi gelmedi")[7],0);
-  assert.equal(ledger.rows.filter(row => row[9] === "Bilgi eksik").length,2);
-  assert.equal(report.pdf.subtitle,"İlker Şahin");
-  const monthly = buildStatementReport(data,"2026-11",true);
-  assert.equal(monthly.sheets[0].rows[0][4],0);
-  assert.equal(monthly.sheets[1].overdueRows.length,0);
+  assert.deepEqual(
+    report.sheets[0].rows.map((row) => [row[0], row[3], row[4]]),
+    [
+      ["EUR", 20, 20],
+      ["GBP", null, null],
+    ],
+  );
+  const overdue = ledger.overdueRows.map((index) => ledger.rows[index]);
+  assert.equal(overdue.length, 2);
+  assert.deepEqual(
+    overdue.map((row) => [row[1], row[7], row[8], row[9]]),
+    [
+      ["EUR", 20, 14, "Gecikmiş"],
+      ["GBP", 75, 6, "Gecikmiş"],
+    ],
+  );
+  assert.equal(ledger.rows.find((row) => row[9] === "Ödendi")[8], 0);
+  assert.equal(ledger.rows.find((row) => row[9] === "Bugün vadeli")[7], 0);
+  assert.equal(ledger.rows.find((row) => row[9] === "Vadesi gelmedi")[7], 0);
+  assert.equal(ledger.rows.filter((row) => row[9] === "Bilgi eksik").length, 2);
+  assert.equal(report.pdf.subtitle, "İlker Şahin");
+  const monthly = buildStatementReport(data, "2026-11", true);
+  assert.equal(monthly.sheets[0].rows[0][4], 0);
+  assert.equal(monthly.sheets[1].overdueRows.length, 0);
 });
 
 test("customer PDF keeps a short summary and ledger together, and repeats identity on long statements", async () => {
@@ -382,38 +408,206 @@ test("customer PDF keeps a short summary and ledger together, and repeats identi
   const originalSave = jsPDF.API.save;
   const originalFetch = globalThis.fetch;
   const outputs = [];
-  jsPDF.API.save = function(filename) {
-    outputs.push({filename, pages:this.getNumberOfPages(), bytes:Buffer.from(this.output("arraybuffer"))});
+  jsPDF.API.save = function (filename) {
+    outputs.push({
+      filename,
+      pages: this.getNumberOfPages(),
+      bytes: Buffer.from(this.output("arraybuffer")),
+    });
     return this;
   };
-  globalThis.fetch = async url => {
-    const bytes = readFileSync(path.join("public",String(url)));
-    return {ok:true,arrayBuffer:async()=>bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength)};
+  globalThis.fetch = async (url) => {
+    const bytes = readFileSync(path.join("public", String(url)));
+    return {
+      ok: true,
+      arrayBuffer: async () =>
+        bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        ),
+    };
   };
   try {
-    const data = { source, item: { unallocatedCredit: { status: "clear", recordCount: 0 },customerName:"İlker Şahin",key:"case-gbp",identity:{customerCode:"C1",unitCode:"PERLA-A1"},unitName:"La Joya Perla A-1"},portfolio:{installments:[
-      line({dueDate:"2026-07-10",amount:10000,paid:2500,outstanding:7500}),
-      line({dueDate:"2026-08-10",amount:10000,paid:10000,outstanding:0}),
-      line({dueDate:"2026-09-10",amount:10000,paid:4000,outstanding:6000}),
-      line({dueDate:"2026-10-15",amount:10000,paid:0,outstanding:10000}),
-      line({dueDate:"2026-11-10",amount:10000,paid:0,outstanding:10000}),
-    ]}};
-    await downloadFinanceReport(buildStatementReport(data,"",true),"pdf",true,()=>true);
-    assert.equal(outputs[0].pages,1,"Summary and a short ledger fit on the same page");
-    data.portfolio.installments = Array.from({length:100},(_,index)=>line({sequence:index+1,dueDate:index % 2 ? "2026-10-10" : "2026-11-10",projectCode:`ENTRY-${index}`}));
-    await downloadFinanceReport(buildStatementReport(data,"",true),"pdf",true,()=>true);
-    assert(outputs[1].pages>1);
+    const data = {
+      source,
+      item: {
+        unallocatedCredit: { status: "clear", recordCount: 0 },
+        customerName: "İlker Şahin",
+        key: "case-gbp",
+        identity: { customerCode: "C1", unitCode: "PERLA-A1" },
+        unitName: "La Joya Perla A-1",
+      },
+      portfolio: {
+        installments: [
+          line({
+            dueDate: "2026-07-10",
+            amount: 10000,
+            paid: 2500,
+            outstanding: 7500,
+          }),
+          line({
+            dueDate: "2026-08-10",
+            amount: 10000,
+            paid: 10000,
+            outstanding: 0,
+          }),
+          line({
+            dueDate: "2026-09-10",
+            amount: 10000,
+            paid: 4000,
+            outstanding: 6000,
+          }),
+          line({
+            dueDate: "2026-10-15",
+            amount: 10000,
+            paid: 0,
+            outstanding: 10000,
+          }),
+          line({
+            dueDate: "2026-11-10",
+            amount: 10000,
+            paid: 0,
+            outstanding: 10000,
+          }),
+        ],
+      },
+    };
+    await downloadFinanceReport(
+      buildStatementReport(data, "", true),
+      "pdf",
+      true,
+      () => true,
+    );
+    assert.equal(
+      outputs[0].pages,
+      1,
+      "Summary and a short ledger fit on the same page",
+    );
+    data.portfolio.installments = Array.from({ length: 100 }, (_, index) =>
+      line({
+        sequence: index + 1,
+        dueDate: index % 2 ? "2026-10-10" : "2026-11-10",
+        projectCode: `ENTRY-${index}`,
+      }),
+    );
+    await downloadFinanceReport(
+      buildStatementReport(data, "", true),
+      "pdf",
+      true,
+      () => true,
+    );
+    assert(outputs[1].pages > 1);
     if (process.env.REPORT_PREVIEW_DIR) {
-      const {writeFileSync} = require("node:fs");
-      outputs.forEach((output,index)=>writeFileSync(path.join(process.env.REPORT_PREVIEW_DIR,`cari-${index ? "uzun" : "ornek"}.pdf`),output.bytes));
+      const { writeFileSync } = require("node:fs");
+      outputs.forEach((output, index) =>
+        writeFileSync(
+          path.join(
+            process.env.REPORT_PREVIEW_DIR,
+            `cari-${index ? "uzun" : "ornek"}.pdf`,
+          ),
+          output.bytes,
+        ),
+      );
     }
-  } finally { jsPDF.API.save = originalSave; globalThis.fetch = originalFetch; }
+  } finally {
+    jsPDF.API.save = originalSave;
+    globalThis.fetch = originalFetch;
+  }
 });
 
- test("statement export refuses blocked or unverified closure status for every period", () => {
-   for (const status of ["blocked", "unavailable", undefined]) {
-     for (const period of ["", "2026", "2026-10"]) {
-       assert.throws(() => buildStatementReport({ item: { unallocatedCredit: status ? { status, recordCount: 1 } : undefined } }, period, true), /kapat|Kapat/);
-     }
-   }
- });
+test("statement export refuses blocked or unverified closure status for every period", () => {
+  for (const status of ["blocked", "unavailable", undefined]) {
+    for (const period of ["", "2026", "2026-10"]) {
+      assert.throws(
+        () =>
+          buildStatementReport(
+            {
+              item: {
+                unallocatedCredit: status
+                  ? { status, recordCount: 1 }
+                  : undefined,
+              },
+            },
+            period,
+            true,
+          ),
+        /kapat|Kapat/,
+      );
+    }
+  }
+});
+
+const { buildReceiptReport } = load(
+  path.join(base, "app/(app)/finance/_reports/receipts.ts"),
+);
+function receiptFixture() {
+  const amounts = [5175, 33412, 10000, 15000, 6424, 6800, 6363, 6600];
+  return {
+    key: "a".repeat(64),
+    source: {
+      generatedAt: "2026-11-27T10:00:00Z",
+      importedAt: "2026-11-27T09:55:00Z",
+      asOf: "2026-11-27",
+      sourceBatchId: "batch",
+    },
+    account: {
+      customerCode: "C1",
+      customerName: "İlker Şahin",
+      currency: "GBP",
+      unitCodes: ["U1"],
+      scope: "customer_currency",
+    },
+    rows: amounts.map((amount, i) => ({
+      id: String(i + 1),
+      customerCode: "C1",
+      currency: "GBP",
+      date: `2026-03-${String(i + 1).padStart(2, "0")}`,
+      ficheNo: `000${i + 1}`,
+      documentNo: i === 0 ? "" : `R${i + 1}`,
+      description: "Tahsilat veya komisyon mahsubu",
+      kind: [2, 3, 4, 6].includes(i) ? "transfer" : "cash",
+      amount,
+    })),
+    totals: {
+      cash: 51987,
+      bank: 0,
+      card: 0,
+      cheque: 0,
+      note: 0,
+      transfer: 37787,
+      total: 89774,
+    },
+  };
+}
+test("receipt statement preserves actual transaction dates and separates receipts from account transfers", () => {
+  const report = buildReceiptReport(receiptFixture(), true);
+  assert.equal(report.title, "Tahsilat Raporu");
+  assert.deepEqual(report.sheets[0].rows, [
+    ["Nakit tahsilat", "GBP", 51987],
+    ["Virman", "GBP", 37787],
+    ["Nakit, banka ve kart toplamı", "GBP", 51987],
+    ["Listelenen hareket toplamı", "GBP", 89774],
+  ]);
+  assert.equal(report.sheets[1].rows.length, 8);
+  assert.equal(report.sheets[1].rows[0][0], "1 Mar 2026");
+  assert.equal(report.sheets[1].rows[0][1], "0001");
+  assert.equal(report.sheets[1].rows[0][3], "");
+  assert(report.filename.startsWith("tahsilat-raporu-"));
+  assert(
+    !report.sheets.some((sheet) =>
+      sheet.columns.some((col) => /Kalan|Gecikmiş/.test(col.label)),
+    ),
+  );
+});
+test("receipt report rejects mixed-customer, mixed-currency or duplicated rows and incorrect totals", () => {
+  for (const mutate of [
+    (d) => (d.rows[0].customerCode = "OTHER"),
+    (d) => (d.rows[0].currency = "EUR"),
+    (d) => d.rows.push({ ...d.rows[0] }),
+    (d) => (d.totals.total = 1),
+  ]) {
+    const data = receiptFixture();
+    mutate(data);
+    assert.throws(() => buildReceiptReport(data, true), /doğrulanamadı/);
+  }
+});

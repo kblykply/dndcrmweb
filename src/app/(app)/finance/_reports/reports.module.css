@@ -108,3 +108,10 @@
 .menu::backdrop {
   background: #12233545;
 }
+
+.hint {
+  margin: -6px 0 4px;
+  color: #526174;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}

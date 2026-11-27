@@ -266,9 +266,9 @@ export function buildStatementReport(
       unknown: t("Bilgi eksik", "Incomplete"),
     })[status] || "—";
   return {
-    title: t("Müşteri cari ekstresi", "Customer account statement"),
+    title: t("Ödeme Planı ve Borç Durumu", "Payment Schedule and Balance"),
     filename:
-      `cari-${data.item.identity.unitCode || data.item.key.slice(0, 10)}-${period || "tum-vadeler"}`.replace(
+      `odeme-plani-ve-borc-durumu-${data.item.identity.customerCode || data.item.key.slice(0, 10)}-${data.item.identity.unitCode || "cari"}-${period || "tum-vadeler"}`.replace(
         /[^\p{L}\p{N}_.-]/gu,
         "_",
       ),
@@ -296,7 +296,7 @@ export function buildStatementReport(
         columns: [
           { label: t("Döviz", "Currency") },
           { label: t("Toplam plan", "Scheduled"), kind: "money" },
-          { label: t("Ödenen", "Paid"), kind: "money" },
+          { label: t("Ödenen / kapatılan", "Paid / settled"), kind: "money" },
           { label: t("Kalan borç", "Remaining"), kind: "money" },
           { label: t("Gecikmiş borç", "Overdue"), kind: "money" },
         ],
@@ -324,7 +324,7 @@ export function buildStatementReport(
           { label: t("Ödeme türü", "Payment type"), pdfWidth: 32 },
           { label: t("Kayıt kodu", "Record code"), pdfHidden: true },
           { label: t("Planlanan", "Scheduled"), kind: "money" },
-          { label: t("Ödenen", "Paid"), kind: "money" },
+          { label: t("Ödenen / kapatılan", "Paid / settled"), kind: "money" },
           { label: t("Kalan", "Remaining"), kind: "money" },
           { label: t("Gecikmiş tutar", "Overdue amount"), kind: "money" },
           {

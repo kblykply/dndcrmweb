@@ -7,6 +7,7 @@ import s from "./reports.module.css";
 export type ExportOption = {
   value: string;
   label: string;
+  description?: string;
   period?: "year" | "month";
 };
 export default function ExportMenu({
@@ -95,6 +96,7 @@ export default function ExportMenu({
           <label>
             {tr ? "Rapor" : "Report"}
             <select
+              aria-label={tr ? "Rapor" : "Report"}
               value={scope}
               disabled={busy}
               onChange={(event) => {
@@ -109,6 +111,9 @@ export default function ExportMenu({
               ))}
             </select>
           </label>
+          {selected?.description && (
+            <p className={s.hint}>{selected.description}</p>
+          )}
           {selected?.period && (
             <label>
               {selected.period === "year"
@@ -119,6 +124,7 @@ export default function ExportMenu({
                   ? "Ay"
                   : "Month"}
               <select
+                aria-label={selected.period === "year" ? (tr ? "Yıl" : "Year") : (tr ? "Ay" : "Month")}
                 value={selectedPeriod}
                 disabled={busy}
                 onChange={(event) => setPeriod(event.target.value)}
@@ -134,6 +140,7 @@ export default function ExportMenu({
           <label>
             {tr ? "Dosya türü" : "File type"}
             <select
+              aria-label={tr ? "Dosya türü" : "File type"}
               value={format}
               disabled={busy}
               onChange={(event) =>
