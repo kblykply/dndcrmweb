@@ -1,4 +1,5 @@
 "use client";
+import LogoDocuments from "./LogoDocuments";
 import StatementExport from "../../_reports/StatementExport";
 import { customerActionsAllowed, closureWarning } from "../_lib/closure-check";
 
@@ -1214,6 +1215,8 @@ export default function PaymentTrackingDetail({
           </details>
         </aside>
       </div>
+
+      <LogoDocuments key={`${apiBase}:${caseKey}`} caseKey={caseKey} salesMode={salesMode} tr={tr} />
 
       {compose && !customerActionsBlocked && (
         <ComposeDialog
