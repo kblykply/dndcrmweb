@@ -15,7 +15,12 @@ async function check(browser, role) {
   const errors = [], unexpected = [], reads = [];
   let posts = 0, polls = 0, statusReads = 0;
   const oldImport = new Date(Date.now() - 600000).toISOString();
-  const state = { workerOnline: true, source: { id: 'batch-old', importedAt: oldImport }, job: null };
+  const state = {
+    workerOnline: true,
+    source: { id: 'batch-old', importedAt: oldImport },
+    job: null,
+    automatic: { enabled: true, intervalMinutes: 15, staleAfterMinutes: 30, sourceStale: false, schedulerStale: false, blockedReason: null },
+  };
   const base = {
     ...fixture.base,
     authorization: { status: 'matched', codes: [], hasBlank: true },
@@ -70,6 +75,7 @@ async function check(browser, role) {
     await page.goto(origin + '/my-customer-accounts?currency=GBP', { waitUntil: 'domcontentloaded' });
     const button = page.getByRole('button', { name: 'Update Logo data', exact: true });
     await button.waitFor();
+    await page.getByText('Automatic updates: every 15 minutes', { exact: true }).waitFor();
     await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent?.includes('Update Logo data') && !b.disabled));
     if (role === 'SALES') {
       const before = reads.length;
@@ -103,6 +109,19 @@ async function check(browser, role) {
       const resumed = page.waitForResponse(r => new URL(r.url()).pathname === '/finance-sync');
       await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); document.dispatchEvent(new Event('visibilitychange')); });
       await resumed;
+      state.automatic.sourceStale = true;
+      state.automatic.blockedReason = 'RETRY_LIMIT_REACHED';
+      await page.clock.fastForward(30100);
+      await page.getByText('Logo data is over 30 minutes old. Showing the last successful import.', { exact: true }).waitFor();
+      await page.getByText('Automatic update retry limit reached. Check the connection and request another update.', { exact: true }).waitFor();
+      assert.equal(await button.isEnabled(), true, 'A stopped automatic schedule must allow manual recovery');
+      state.automatic.blockedReason = 'REVIEW_REQUIRED';
+      await page.clock.fastForward(30100);
+      await page.getByText('Automatic updates need review. Check the Logo data and request another update.', { exact: true }).waitFor();
+      state.automatic.blockedReason = null;
+      state.automatic.schedulerStale = true;
+      await page.clock.fastForward(30100);
+      await page.getByText('Automatic scheduler status could not be verified.', { exact: true }).waitFor();
     }
     assert.deepEqual(errors, []);
     assert.deepEqual(unexpected, []);

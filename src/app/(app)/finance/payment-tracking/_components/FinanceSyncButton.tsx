@@ -8,6 +8,14 @@ type SyncState = {
   workerOnline: boolean;
   source: { id: string; importedAt: string } | null;
   job: { id: string; status: string; stage: string; recordCount: number | null; errorCode: string | null } | null;
+  automatic?: {
+    enabled: boolean;
+    intervalMinutes: number;
+    staleAfterMinutes: number;
+    sourceStale: boolean | null;
+    schedulerStale: boolean;
+    blockedReason: string | null;
+  } | null;
 };
 export default function FinanceSyncButton({ tr, onUpdated, displayedImport }: { tr: boolean; onUpdated: () => void; displayedImport?: string | null }) {
   const [state, setState] = useState<SyncState | null>(null);
@@ -82,12 +90,30 @@ export default function FinanceSyncButton({ tr, onUpdated, displayedImport }: { 
     : (tr ? 'Güncelleme tamamlanamadı. Önceki veriler korundu.' : 'Update failed. Previous data retained.');
   else if (state?.job?.status === 'SUCCEEDED') message = tr ? 'Güncelleme tamamlandı' : 'Update completed';
   if (!error && state && !state.workerOnline) message += (message ? ' · ' : '') + (tr ? 'Aktarım servisi bağlantısı bekleniyor' : 'Waiting for transfer service');
+  const automatic = state?.automatic;
+  let automaticWarning = '';
+  if (automatic?.enabled) {
+    if (automatic.blockedReason === 'REVIEW_REQUIRED') automaticWarning = tr
+      ? 'Otomatik aktarım inceleme bekliyor. Logo verilerini kontrol edip yeniden güncelleyin.'
+      : 'Automatic updates need review. Check the Logo data and request another update.';
+    else if (automatic.blockedReason === 'RETRY_LIMIT_REACHED') automaticWarning = tr
+      ? 'Otomatik aktarımın tekrar sınırına ulaşıldı. Bağlantıyı kontrol edip yeniden güncelleyin.'
+      : 'Automatic update retry limit reached. Check the connection and request another update.';
+    else if (automatic.schedulerStale) automaticWarning = tr
+      ? 'Otomatik planlayıcının durumu doğrulanamıyor.'
+      : 'Automatic scheduler status could not be verified.';
+  }
   return <div style={{ display: 'grid', gap: 4, maxWidth: 300 }}>
     <button type="button" className={s.button} onClick={() => void start()} disabled={sending || active || !state || error}>
       <CloudDownload size={20} aria-hidden="true" />
       {sending || active ? (tr ? 'Güncelleniyor…' : 'Updating…') : (tr ? 'Logo verilerini güncelle' : 'Update Logo data')}
     </button>
     {state?.source && <small> {tr ? 'Son aktarım: ' : 'Last transfer: '}{new Date(state.source.importedAt).toLocaleString(tr ? 'tr-TR' : 'en-GB', { timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</small>}
+    {automatic?.enabled && <small>{tr ? `Otomatik aktarım: ${automatic.intervalMinutes} dakikada bir` : `Automatic updates: every ${automatic.intervalMinutes} minutes`}</small>}
+    {automatic?.sourceStale && <small role="alert">{tr
+      ? `Logo aktarımı ${automatic.staleAfterMinutes} dakikadan eski. Son başarılı aktarımın verileri gösteriliyor.`
+      : `Logo data is over ${automatic.staleAfterMinutes} minutes old. Showing the last successful import.`}</small>}
+    {automaticWarning && <small role="alert">{automaticWarning}</small>}
     {message && <small role="status" aria-live="polite">{message}</small>}
   </div>;
 }
