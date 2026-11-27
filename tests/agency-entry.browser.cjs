@@ -91,7 +91,9 @@ const api = process.env.API_ORIGIN || "http://127.0.0.1:43111";
     });
     const page = await context.newPage();
     await page.goto(`${base}/agency-customers`);
-    await page.getByRole("heading", { name: "Eklediğim müşteriler" }).waitFor();
+    await page
+      .getByRole("heading", { name: "Müşterilerim", exact: true, level: 1 })
+      .waitFor();
     await page
       .getByRole("button", { name: "Synthetic own customer", exact: true })
       .waitFor();
@@ -107,6 +109,20 @@ const api = process.env.API_ORIGIN || "http://127.0.0.1:43111";
         .count(),
       0,
     );
+    assert.equal(
+      await page.getByLabel(/^Ad soyad/).count(),
+      0,
+      "Creation form starts collapsed like the standard customer page",
+    );
+    await page
+      .getByRole("button", { name: "Yeni Müşteri", exact: true })
+      .click();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Müşteri ekle", exact: true })
+        .isDisabled(),
+      true,
+    );
     await page.getByLabel(/^Ad soyad/).fill("Synthetic new customer");
     await page.getByLabel("Telefon", { exact: true }).fill("5551234");
     await page
@@ -118,6 +134,25 @@ const api = process.env.API_ORIGIN || "http://127.0.0.1:43111";
     assert.equal(submitted.fullName, "Synthetic new customer");
     for (const key of ["agencyId", "ownerId", "createdById", "type"])
       assert.equal(Object.hasOwn(submitted, key), false);
+    assert.equal(
+      await page.getByLabel(/^Ad soyad/).count(),
+      0,
+      "Successful creation returns to the customer list",
+    );
+    await page
+      .getByRole("button", { name: "Synthetic new customer", exact: true })
+      .click();
+    await page.getByRole("region", { name: "Müşteri bilgileri" }).waitFor();
+    await page.getByRole("button", { name: "Kapat", exact: true }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 2,
+      ),
+      true,
+      "Mobile page stays within the viewport",
+    );
+    await page.setViewportSize({ width: 1280, height: 900 });
     await page.getByRole("button", { name: "Profil", exact: true }).click();
     assert.equal(
       await page.getByRole("link", { name: "Profil Ayarları" }).count(),
@@ -128,7 +163,7 @@ const api = process.env.API_ORIGIN || "http://127.0.0.1:43111";
       await page.goto(`${base}${path}`);
       await page.waitForURL(`${base}/agency-customers`);
       await page
-        .getByRole("heading", { name: "Eklediğim müşteriler" })
+        .getByRole("heading", { name: "Müşterilerim", exact: true, level: 1 })
         .waitFor();
     }
     assert.deepEqual(
@@ -224,6 +259,20 @@ const api = process.env.API_ORIGIN || "http://127.0.0.1:43111";
       JSON.stringify({
         adminAssignment: "role and required agency submitted correctly",
         realAccountsCreated: 0,
+      }),
+    );
+    await adminPage.goto(`${base}/customers`);
+    await adminPage
+      .getByRole("heading", { name: "Müşteriler", exact: true, level: 1 })
+      .waitFor();
+    await adminPage
+      .getByRole("button", { name: "Yeni Müşteri", exact: true })
+      .click();
+    await adminPage.getByPlaceholder("Ad Soyad", { exact: true }).waitFor();
+    console.log(
+      JSON.stringify({
+        standardCustomerHeader: "passed",
+        standardCreationPanel: "passed",
       }),
     );
     await adminContext.close();

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import CustomerPageHeader from "@/app/_ui/CustomerPageHeader";
 import { useEffect, useMemo, useState } from "react";
 import { authedFetch } from "@/lib/authedFetch";
 import {
@@ -507,59 +508,47 @@ export default function CustomersPage() {
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <div className="flex-between" style={{ gap: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "grid", gap: 4 }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-            {t("customers.label")}
-          </div>
+      <CustomerPageHeader
+        label={t("customers.label")}
+        title={t("customers.title")}
+        subtitle={t("customers.subtitle")}
+      >
+        <Link
+          href="/customers/nationality-report"
+          style={{
+            minHeight: 38,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 14px",
+            borderRadius: "var(--radius-sm)",
+            border: "1px solid var(--stroke)",
+            background: "var(--surface)",
+            color: "var(--text-primary)",
+            fontWeight: 800,
+            textDecoration: "none",
+          }}
+        >
+          {safeTranslate(
+            t,
+            "customers.nationalityReport",
+            locale === "tr" ? "Uyruk Haritası" : "Nationality Map",
+          )}
+        </Link>
 
-          <div style={{ fontSize: 28, fontWeight: 900 }}>
-            {t("customers.title")}
-          </div>
+        <button onClick={load} disabled={loading}>
+          {loading ? t("common.loading") : t("common.refresh")}
+        </button>
 
-          <div className="muted" style={{ fontSize: 13 }}>
-            {t("customers.subtitle")}
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link
-            href="/customers/nationality-report"
-            style={{
-              minHeight: 38,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "0 14px",
-              borderRadius: "var(--radius-sm)",
-              border: "1px solid var(--stroke)",
-              background: "var(--surface)",
-              color: "var(--text-primary)",
-              fontWeight: 800,
-              textDecoration: "none",
-            }}
+        {canCreate ? (
+          <button
+            className="primary"
+            onClick={() => setShowCreate((v) => !v)}
           >
-            {safeTranslate(
-              t,
-              "customers.nationalityReport",
-              locale === "tr" ? "Uyruk Haritası" : "Nationality Map",
-            )}
-          </Link>
-
-          <button onClick={load} disabled={loading}>
-            {loading ? t("common.loading") : t("common.refresh")}
+            {showCreate ? t("common.close") : t("customers.newCustomer")}
           </button>
-
-          {canCreate ? (
-            <button
-              className="primary"
-              onClick={() => setShowCreate((v) => !v)}
-            >
-              {showCreate ? t("common.close") : t("customers.newCustomer")}
-            </button>
-          ) : null}
-        </div>
-      </div>
+        ) : null}
+      </CustomerPageHeader>
 
       {isSales ? (
         <div
