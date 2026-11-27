@@ -652,7 +652,7 @@ export default function PaymentTrackingList({
             <RefreshCw size={20} className={loading ? s.spin : undefined} />
             {t("Yenile", "Refresh")}
           </button>
-          {!salesMode && ["ADMIN", "ACCOUNTING"].includes(role || "") && <FinanceSyncButton tr={tr} onUpdated={refreshSource} displayedImport={data?.source.importedAt} />}
+          {["ADMIN", "ACCOUNTING", "MANAGER", "SALES"].includes(role || "") && <FinanceSyncButton tr={tr} onUpdated={refreshSource} displayedImport={data?.source.importedAt} />}
         </div>
       </header>
       {data &&

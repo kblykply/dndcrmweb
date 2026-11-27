@@ -15,34 +15,48 @@ export default function FinanceSyncButton({ tr, onUpdated, displayedImport }: { 
   const [sending, setSending] = useState(false);
   const callback = useRef(onUpdated);
   const batch = useRef<string | null | undefined>(undefined);
+  const refreshedBatch = useRef<string | null>(null);
   const mounted = useRef(true);
   const requestNo = useRef(0);
   callback.current = onUpdated;
   const displayed = useRef(displayedImport);
   displayed.current = displayedImport;
+  const active = ['QUEUED', 'RUNNING'].includes(state?.job?.status || '');
   const accept = (data: SyncState) => {
     if (!mounted.current) return;
     setState(data); setError(false);
-    const firstReadOutdated = batch.current === undefined && displayed.current && data.source &&
+    const outdated = displayed.current && data.source &&
       Date.parse(displayed.current) !== Date.parse(data.source.importedAt);
-    if ((firstReadOutdated || (batch.current !== undefined && batch.current !== data.source?.id)) && data.source?.id) callback.current();
+    const changedWhileUnavailable = !displayed.current && batch.current !== undefined && batch.current !== data.source?.id;
+    if ((outdated || changedWhileUnavailable) && data.source?.id && refreshedBatch.current !== data.source.id) {
+      refreshedBatch.current = data.source.id;
+      callback.current();
+    }
     batch.current = data.source?.id ?? null;
   };
   useEffect(() => {
     mounted.current = true;
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
+    let busy = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const isVisible = () => document.visibilityState === 'visible';
     async function poll() {
+      if (stopped || busy || !isVisible()) return;
+      busy = true;
       const ticket = ++requestNo.current;
       try { const data = await authedFetch('/finance-sync'); if (!stopped && ticket === requestNo.current) accept(data); }
       catch { if (!stopped && ticket === requestNo.current) setError(true); }
-      if (!stopped) timer = setTimeout(poll, 5000);
+      finally {
+        busy = false;
+        if (!stopped && isVisible()) timer = setTimeout(poll, active ? 5000 : 30000);
+      }
     }
+    const visible = () => { clearTimeout(timer); if (isVisible()) void poll(); };
+    document.addEventListener('visibilitychange', visible);
     void poll();
-    return () => { stopped = true; mounted.current = false; clearTimeout(timer); };
-    // The callback ref avoids restarting polling on table refreshes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => { stopped = true; mounted.current = false; clearTimeout(timer); document.removeEventListener('visibilitychange', visible); };
+    // Callback refs stay current without restarting polling on ordinary table renders.
+  }, [active, displayedImport]);
   async function start() {
     if (sending) return;
     setSending(true);
@@ -51,7 +65,6 @@ export default function FinanceSyncButton({ tr, onUpdated, displayedImport }: { 
     catch { if (mounted.current) setError(true); }
     finally { if (mounted.current) setSending(false); }
   }
-  const active = ['QUEUED', 'RUNNING'].includes(state?.job?.status || '');
   const stages: Record<string, string> = tr
     ? { QUEUED: 'Güncelleme sırada', READING: 'Logo’dan okunuyor', VALIDATING: 'Veriler kontrol ediliyor', SAVING: 'Kaydediliyor' }
     : { QUEUED: 'Update queued', READING: 'Reading Logo', VALIDATING: 'Checking data', SAVING: 'Saving' };
