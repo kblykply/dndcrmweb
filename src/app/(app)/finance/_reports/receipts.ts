@@ -46,6 +46,17 @@ export type ReceiptReportData = {
     total: number;
   };
 };
+export function receiptLabels(tr: boolean): Record<ReceiptKind, string> {
+  const t = (a: string, b: string) => (tr ? a : b);
+  return {
+    cash: t("Nakit tahsilat", "Cash receipts"),
+    bank: t("Banka tahsilatı", "Bank receipts"),
+    card: t("Kredi kartı tahsilatı", "Card receipts"),
+    cheque: t("Çek girişi", "Cheques received"),
+    note: t("Senet girişi", "Promissory notes received"),
+    transfer: t("Virman", "Account transfers"),
+  };
+}
 export function buildReceiptReport(
   data: ReceiptReportData,
   tr: boolean,
@@ -68,14 +79,7 @@ export function buildReceiptReport(
   )
     fail();
   const kinds = receiptKinds;
-  const labels = {
-    cash: t("Nakit tahsilat", "Cash receipts"),
-    bank: t("Banka tahsilatı", "Bank receipts"),
-    card: t("Kredi kartı tahsilatı", "Card receipts"),
-    cheque: t("Çek girişi", "Cheques received"),
-    note: t("Senet girişi", "Promissory notes received"),
-    transfer: t("Virman", "Account transfers"),
-  };
+  const labels = receiptLabels(tr);
   const seen = new Set<string>(),
     cents = { cash: 0, bank: 0, card: 0, cheque: 0, note: 0, transfer: 0 };
   for (const row of data.rows) {

@@ -170,6 +170,13 @@ const fixture = new Function(
           url.pathname === api + "/" + fixture.key + "/statement"
         )
           data = detail;
+        else if (url.pathname === api + "/" + fixture.key + "/documents")
+          data = {
+            workerOnline: true,
+            updatedAt: new Date().toISOString(),
+            job: null,
+            documents: [],
+          };
         else {
           unexpected.push(req.method() + " " + url.pathname);
           return route.fulfill({ status: 404, headers, body: "{}" });

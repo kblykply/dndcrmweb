@@ -1,35 +1,31 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { FileText, LoaderCircle } from "lucide-react";
 import { authedFetch } from "@/lib/authedFetch";
+import {
+  requestReceiptReport,
+  waitForLogo,
+} from "../../_reports/receipt-request";
+import { receiptLabels, type ReceiptReportData } from "../../_reports/receipts";
+import { reportSessionGuard } from "../../_reports/session";
+import { dateLabel, money } from "../_lib/utils";
 
 type Document = {
   id: string;
   fileName: string;
-  fileSize: number;
   kind: string;
   number: string;
   date: string | null;
+  receiptIds?: string[];
   cached: boolean;
 };
 type Catalogue = {
   workerOnline: boolean;
+  receiptLinksReady?: boolean;
   updatedAt: string | null;
   job: { status: string; error: string | null } | null;
   documents: Document[];
 };
-function pause(signal: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    const abort = () => {
-      clearTimeout(timer);
-      reject(new DOMException("Aborted", "AbortError"));
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }, 2000);
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
 
 export default function LogoDocuments({
   caseKey,
@@ -40,14 +36,84 @@ export default function LogoDocuments({
   salesMode: boolean;
   tr: boolean;
 }) {
-  const base = `${salesMode ? "/sales-ledger" : "/payment-tracking"}/${encodeURIComponent(caseKey)}/documents`;
-  const [expanded, setExpanded] = useState(false),
-    [data, setData] = useState<Catalogue | null>(null),
-    [busy, setBusy] = useState(""),
-    [error, setError] = useState(""),
-    [link, setLink] = useState("");
-  const active = useRef<AbortController | null>(null),
-    popup = useRef<Window | null>(null);
+  const account = `${salesMode ? "/sales-ledger" : "/payment-tracking"}/${encodeURIComponent(caseKey)}`;
+  const base = `${account}/documents`;
+  const [report, setReport] = useState<ReceiptReportData | null>(null);
+  const [catalogue, setCatalogue] = useState<Catalogue | null>(null);
+  const [receiptError, setReceiptError] = useState("");
+  const [catalogueError, setCatalogueError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [opening, setOpening] = useState("");
+  const [openError, setOpenError] = useState("");
+  const [link, setLink] = useState("");
+  const active = useRef<AbortController | null>(null);
+  const popup = useRef<Window | null>(null);
+  const t = (a: string, b: string) => (tr ? a : b);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const signal = AbortSignal.any([
+      controller.signal,
+      AbortSignal.timeout(180_000),
+    ]);
+    const allowed = reportSessionGuard(salesMode ? "sales" : "finance");
+    void requestReceiptReport({
+      endpoint: `${account}/receipt-report`,
+      caseKey,
+      tr,
+      signal,
+      allowed,
+      useRecent: true,
+    }).then(
+      (value) => {
+        if (!signal.aborted && allowed()) setReport(value);
+      },
+      (error: unknown) => {
+        if (!controller.signal.aborted)
+          setReceiptError(
+            error instanceof Error && !signal.aborted
+              ? error.message
+              : tr
+                ? "Tahsilatlar yüklenemedi."
+                : "Receipts could not be loaded.",
+          );
+      },
+    );
+
+    async function loadCatalogue() {
+      const read = async () =>
+        (await authedFetch(base, { signal })) as Catalogue;
+      let next = await read();
+      if (!allowed() || signal.aborted) return;
+      setCatalogue(next);
+      const pending = () =>
+        next.job && ["QUEUED", "RUNNING"].includes(next.job.status);
+      const outdated =
+        !next.updatedAt ||
+        next.receiptLinksReady === false ||
+        Date.now() - Date.parse(next.updatedAt) > 5 * 60_000;
+      if (next.workerOnline && !pending() && (outdated || retry > 0)) {
+        next = (await authedFetch(`${base}/refresh`, {
+          method: "POST",
+          signal,
+        })) as Catalogue;
+        if (!allowed() || signal.aborted) return;
+        setCatalogue(next);
+      }
+      while (pending()) {
+        await waitForLogo(signal);
+        next = await read();
+        if (!allowed() || signal.aborted) return;
+        setCatalogue(next);
+      }
+      if (next.job?.status === "FAILED") setCatalogueError(true);
+    }
+    void loadCatalogue().catch(() => {
+      if (!controller.signal.aborted) setCatalogueError(true);
+    });
+    return () => controller.abort();
+  }, [account, base, caseKey, retry, salesMode, tr]);
+
   useEffect(
     () => () => {
       active.current?.abort();
@@ -55,59 +121,19 @@ export default function LogoDocuments({
     },
     [],
   );
-  const t = (a: string, b: string) => (tr ? a : b);
-  async function load(refresh = false) {
-    active.current?.abort();
-    const controller = new AbortController();
-    active.current = controller;
-    setBusy("catalogue");
-    setError("");
-    try {
-      let next = (await authedFetch(refresh ? `${base}/refresh` : base, {
-        method: refresh ? "POST" : "GET",
-        signal: controller.signal,
-      })) as Catalogue;
-      if (controller.signal.aborted) return;
-      setData(next);
-      const until = Date.now() + 180000;
-      while (next.job && ["QUEUED", "RUNNING"].includes(next.job.status)) {
-        if (Date.now() > until) throw Error("timeout");
-        await pause(controller.signal);
-        next = (await authedFetch(base, {
-          signal: controller.signal,
-        })) as Catalogue;
-        if (controller.signal.aborted) return;
-        setData(next);
-      }
-      if (next.job?.status === "FAILED") throw Error("catalogue failed");
-      if (next.job?.status === "FAILED")
-        setError(
-          t(
-            "Belge listesi alınamadı. Tekrar deneyin.",
-            "Could not load the document list. Please retry.",
-          ),
-        );
-    } catch {
-      if (!controller.signal.aborted)
-        setError(
-          t(
-            "Belgeler yüklenemedi. Daha sonra tekrar deneyin.",
-            "Documents could not be loaded. Try again later.",
-          ),
-        );
-    } finally {
-      if (active.current === controller) {
-        active.current = null;
-        setBusy("");
-      }
-    }
-  }
+
   async function open(document: Document) {
-    active.current?.abort();
+    if (active.current) return;
+    const allowed = reportSessionGuard(salesMode ? "sales" : "finance");
+    if (!allowed()) return;
     const controller = new AbortController();
+    const signal = AbortSignal.any([
+      controller.signal,
+      AbortSignal.timeout(180_000),
+    ]);
     active.current = controller;
-    setBusy(document.id);
-    setError("");
+    setOpening(document.id);
+    setOpenError("");
     setLink("");
     const tab = window.open("about:blank", "_blank");
     popup.current = tab;
@@ -122,208 +148,297 @@ export default function LogoDocuments({
     try {
       let result = await authedFetch(`${base}/${document.id}/open`, {
         method: "POST",
-        signal: controller.signal,
+        signal,
       });
-      const until = Date.now() + 180000;
-      while (result.status !== "READY") {
-        if (
-          result.status === "FAILED" ||
-          result.status === "NOT_REQUESTED" ||
-          result.status === "SUCCEEDED" ||
-          Date.now() > until
-        )
-          throw Error("Document unavailable");
-        await pause(controller.signal);
-        result = await authedFetch(`${base}/${document.id}/status`, {
-          signal: controller.signal,
-        });
+      while (allowed() && ["QUEUED", "RUNNING"].includes(result.status)) {
+        await waitForLogo(signal);
+        result = await authedFetch(`${base}/${document.id}/status`, { signal });
       }
-      if (controller.signal.aborted) return;
       if (
+        signal.aborted ||
+        !allowed() ||
+        result.status !== "READY" ||
         typeof result.url !== "string" ||
         new URL(result.url).protocol !== "https:"
       )
-        throw Error("Invalid URL");
+        throw new Error("Document unavailable");
       if (tab && !tab.closed) tab.location.replace(result.url);
       else setLink(result.url);
-      popup.current = null;
-      setData((previous) =>
-        previous
-          ? {
-              ...previous,
-              documents: previous.documents.map((item) =>
-                item.id === document.id ? { ...item, cached: true } : item,
-              ),
-            }
-          : previous,
+      setCatalogue(
+        (previous) =>
+          previous && {
+            ...previous,
+            documents: previous.documents.map((item) =>
+              item.id === document.id ? { ...item, cached: true } : item,
+            ),
+          },
       );
     } catch {
       tab?.close();
       if (!controller.signal.aborted)
-        setError(
+        setOpenError(
           t(
             "Belge açılamadı. Daha sonra tekrar deneyin.",
             "The document could not be opened. Try again later.",
           ),
         );
     } finally {
+      popup.current = null;
       if (active.current === controller) {
         active.current = null;
-        setBusy("");
+        setOpening("");
       }
     }
   }
+
+  const receiptDocuments = new Map<string, Document[]>();
+  const invoices: Document[] = [];
+  for (const document of catalogue?.documents ?? []) {
+    if (document.kind === "invoice") {
+      invoices.push(document);
+      continue;
+    }
+    for (const id of document.receiptIds ?? []) {
+      const files = receiptDocuments.get(id) ?? [];
+      files.push(document);
+      receiptDocuments.set(id, files);
+    }
+  }
+  const labels = receiptLabels(tr);
+  function documentButton(document: Document, invoice = false) {
+    const label = invoice
+      ? t("Faturayı aç", "Open invoice")
+      : t("Makbuzu aç", "Open receipt");
+    return (
+      <button
+        key={document.id}
+        type="button"
+        className="document-icon"
+        title={document.fileName}
+        aria-label={`${label}${document.number ? ` · ${document.number}` : ""}`}
+        disabled={!!opening || (!document.cached && !catalogue?.workerOnline)}
+        onClick={() => void open(document)}
+      >
+        {opening === document.id ? (
+          <LoaderCircle size={17} aria-hidden="true" />
+        ) : (
+          <FileText size={17} aria-hidden="true" />
+        )}
+      </button>
+    );
+  }
+
   return (
     <section
       className="card"
-      aria-label={t("Fatura ve tahsilat belgeleri", "Invoices and receipts")}
+      aria-label={t("Tahsilatlar ve faturalar", "Receipts and invoices")}
     >
-      <div className="document-heading">
-        <div>
-          <h2>{t("Fatura ve tahsilat belgeleri", "Invoices and receipts")}</h2>
-          <p className="muted">
-            {t(
-              "İlgili faturaları ve tahsilat belgelerini PDF olarak görüntüleyin.",
-              "View the related invoices and receipts as PDFs.",
-            )}
-          </p>
-        </div>
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={() => {
-            const next = !expanded;
-            setExpanded(next);
-            if (next && !data) void load();
-          }}
-        >
-          {expanded
-            ? t("Kapat", "Close")
-            : t("Belgeleri göster", "Show documents")}
-        </button>
-      </div>
-      {expanded && (
-        <div className="document-content">
-          {error && <p role="alert">{error}</p>}
-          {link && (
-            <a href={link} target="_blank" rel="noopener noreferrer">
-              {t("Hazır PDF’yi aç", "Open the ready PDF")}
-            </a>
+      <h2>
+        {t("Tahsilatlar", "Receipts")}
+        {report && ` · ${report.account.currency}`}
+      </h2>
+      {report && (
+        <p className="muted">
+          {t(
+            "Cari hesabın seçili dövizdeki hareketleri",
+            "Account movements in the selected currency",
           )}
-          {busy === "catalogue" && (
-            <p role="status">
-              {t("Belge listesi yükleniyor…", "Loading document list…")}
+          {" · "}
+          {report.rows.length} {t("kayıt", "records")}
+        </p>
+      )}
+      {!report && !receiptError && (
+        <p role="status">{t("Tahsilatlar yükleniyor…", "Loading receipts…")}</p>
+      )}
+      {(receiptError ||
+        catalogueError ||
+        (catalogue && !catalogue.workerOnline)) && (
+        <div className="status-line">
+          {receiptError && <p role="alert">{receiptError}</p>}
+          {(catalogueError || (catalogue && !catalogue.workerOnline)) && (
+            <p className="muted">
+              {t(
+                "Yeni belgelere şu anda ulaşılamıyor. Hazır belgeleri açabilirsiniz.",
+                "New documents are currently unavailable. Ready documents can still be opened.",
+              )}
             </p>
           )}
-          {data && (
-            <>
-              <button
-                type="button"
-                disabled={!!busy || !data.workerOnline}
-                onClick={() => void load(true)}
-              >
-                {data.updatedAt
-                  ? t("Belge listesini yenile", "Refresh document list")
-                  : t("Belge listesini getir", "Load document list")}
-              </button>
-              {!data.workerOnline && (
-                <p className="muted">
-                  {t(
-                    "Yeni belgelere şu anda ulaşılamıyor. Hazır belgeleri açabilirsiniz.",
-                    "New documents are currently unavailable. Ready documents can still be opened.",
-                  )}
-                </p>
-              )}
-              {data.updatedAt && data.documents.length === 0 && (
-                <p>
-                  {t(
-                    "Bu cari için eşleşen PDF belgesi bulunamadı.",
-                    "No matching PDF documents were found for this account.",
-                  )}
-                </p>
-              )}
-              <ul>
-                {data.documents.map((document) => (
-                  <li key={document.id}>
-                    <div>
-                      <strong>
-                        {document.kind === "invoice"
-                          ? t("Fatura", "Invoice")
-                          : document.kind === "bank_receipt"
-                            ? t("Banka tahsilatı", "Bank receipt")
-                            : t("Nakit tahsilat", "Cash receipt")}
-                        {document.number ? ` · ${document.number}` : ""}
-                      </strong>
-                      <span className="muted">
-                        {document.fileName}
-                        {document.date ? ` · ${document.date}` : ""} ·{" "}
-                        {(document.fileSize / 1024).toFixed(0)} KB
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={
-                        !!busy || (!document.cached && !data.workerOnline)
-                      }
-                      onClick={() => void open(document)}
-                    >
-                      {busy === document.id
-                        ? t("Hazırlanıyor…", "Preparing…")
-                        : t("PDF’yi aç", "Open PDF")}
-                    </button>
-                  </li>
+          <button
+            type="button"
+            onClick={() => {
+              setReceiptError("");
+              setCatalogueError(false);
+              setRetry((value) => value + 1);
+            }}
+          >
+            {t("Tekrar dene", "Retry")}
+          </button>
+        </div>
+      )}
+      {openError && <p role="alert">{openError}</p>}
+      {link && (
+        <a
+          href={link}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => setLink("")}
+        >
+          {t("Hazır PDF’yi aç", "Open the ready PDF")}
+        </a>
+      )}
+      {report &&
+        (report.rows.length ? (
+          <div
+            className="table-scroll"
+            role="region"
+            aria-label={t("Tahsilat tablosu", "Receipts table")}
+            tabIndex={0}
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">{t("Tarih", "Date")}</th>
+                  <th scope="col">{t("İşlem", "Transaction")}</th>
+                  <th scope="col">{t("Fiş no", "Transaction no.")}</th>
+                  <th scope="col">{t("Açıklama", "Description")}</th>
+                  <th scope="col" className="amount">
+                    {t("Tutar", "Amount")}
+                  </th>
+                  <th scope="col" className="document-cell">
+                    PDF
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.rows.map((row) => (
+                  <tr key={row.id}>
+                    <td>{dateLabel(row.date, tr)}</td>
+                    <td>{labels[row.kind]}</td>
+                    <td>{row.ficheNo || "—"}</td>
+                    <td>{row.description || "—"}</td>
+                    <td className="amount">
+                      {money(row.amount, tr)} {row.currency}
+                    </td>
+                    <td className="document-cell">
+                      {receiptDocuments
+                        .get(row.id)
+                        ?.map((doc) => documentButton(doc))}
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            </>
-          )}
-          {error && !data && (
-            <button type="button" disabled={!!busy} onClick={() => void load()}>
-              {t("Tekrar dene", "Retry")}
-            </button>
-          )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p>
+            {t(
+              "Bu cari hesapta tahsilat kaydı yok.",
+              "This account has no receipt records.",
+            )}
+          </p>
+        ))}
+      {!!invoices.length && (
+        <div className="invoices">
+          <h3>{t("Faturalar", "Invoices")}</h3>
+          <ul>
+            {invoices.map((invoice) => (
+              <li key={invoice.id}>
+                <span>
+                  {invoice.number || invoice.fileName}
+                  {invoice.date && ` · ${dateLabel(invoice.date, tr)}`}
+                </span>
+                {documentButton(invoice, true)}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       <style jsx>{`
-        .document-heading,
-        .document-content li {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 16px;
-          flex-wrap: wrap;
+        .card {
+          min-width: 0;
         }
         h2 {
           font-size: 18px;
           margin: 0;
         }
+        h3 {
+          font-size: 15px;
+          margin: 0 0 4px;
+        }
         p {
           margin: 8px 0;
           font-size: 13px;
         }
-        .document-content {
+        .table-scroll {
+          margin-top: 12px;
+          overflow-x: auto;
+        }
+        table {
+          width: 100%;
+          min-width: 620px;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+        th,
+        td {
+          text-align: left;
+          padding: 9px 10px;
+          border-bottom: 1px solid var(--stroke);
+        }
+        th {
+          color: var(--muted);
+          font-weight: 650;
+        }
+        td:nth-child(4) {
+          max-width: 520px;
+          overflow-wrap: anywhere;
+        }
+        .amount {
+          text-align: right;
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
+        }
+        .document-cell {
+          position: sticky;
+          right: 0;
+          background: var(--surface);
+          text-align: right;
+          white-space: nowrap;
+        }
+        .document-icon {
+          display: inline-grid;
+          place-items: center;
+          min-width: 34px;
+          min-height: 34px;
+          padding: 5px;
+        }
+        .document-icon + .document-icon {
+          margin-left: 4px;
+        }
+        .status-line {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .invoices {
           margin-top: 16px;
         }
         ul {
           list-style: none;
           padding: 0;
-          margin: 12px 0 0;
+          margin: 0;
         }
         li {
-          padding: 14px 0;
-          border-top: 1px solid var(--stroke);
-        }
-        li > div {
-          display: grid;
-          gap: 5px;
-          min-width: 0;
-          flex: 1 1 240px;
-        }
-        li span,
-        li strong {
-          overflow-wrap: anywhere;
+          padding: 8px 0;
+          border-bottom: 1px solid var(--stroke);
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          justify-content: space-between;
         }
         li span {
-          font-size: 12px;
+          overflow-wrap: anywhere;
         }
         [role="alert"] {
           color: var(--danger);

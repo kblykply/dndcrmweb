@@ -3,7 +3,8 @@ import { authedFetch } from "@/lib/authedFetch";
 import type { PaymentTrackingDetail } from "../payment-tracking/_lib/types";
 import { requireSourceAudit } from "../payment-tracking/_lib/source-integrity";
 import { requireCustomerActions } from "../payment-tracking/_lib/closure-check";
-import { buildReceiptReport, type ReceiptReportData } from "./receipts";
+import { buildReceiptReport } from "./receipts";
+import { requestReceiptReport } from "./receipt-request";
 import { buildStatementReport } from "./build";
 import { downloadFinanceReport } from "./download";
 import { reportSessionGuard } from "./session";
@@ -76,52 +77,20 @@ export default function StatementExport({
       onExport={async (format, scope, period) => {
         const allowed = reportSessionGuard(salesMode ? "sales" : "finance");
         if (scope === "receipts") {
-          const endpoint = `${salesMode ? "/sales-ledger" : "/payment-tracking"}/${encodeURIComponent(caseKey)}/receipt-report`;
-          const signal = AbortSignal.timeout(180_000);
-          const verifySession = () => {
-            if (!allowed())
-              throw new Error(tr ? "Oturum değişti." : "Your session changed.");
-          };
-          verifySession();
-          await authedFetch(endpoint, { method: "POST", signal });
-          while (!signal.aborted) {
-            verifySession();
-            const result = (await authedFetch(endpoint, { signal })) as
-              | { status: "READY"; report: ReceiptReportData }
-              | {
-                  status: "QUEUED" | "RUNNING" | "FAILED" | "NOT_REQUESTED";
-                  error?: string;
-                };
-            if (result.status === "READY") {
-              verifySession();
-              if (result.report.key !== caseKey)
-                throw new Error(
-                  tr
-                    ? "Cari bilgileri doğrulanamadı."
-                    : "The account could not be verified.",
-                );
-              await downloadFinanceReport(
-                buildReceiptReport(result.report, tr),
-                format,
-                tr,
-                allowed,
-              );
-              return;
-            }
-            if (result.status !== "QUEUED" && result.status !== "RUNNING")
-              throw new Error(
-                (tr && result.error) ||
-                  (tr
-                    ? "Tahsilat hareketleri okunamadı. Tekrar deneyin."
-                    : "The collection records could not be read. Please retry."),
-              );
-            await new Promise((resolve) => setTimeout(resolve, 2_000));
-          }
-          throw new Error(
-            tr
-              ? "Rapor hazırlanamadı. Tekrar deneyin."
-              : "The report timed out. Please retry.",
+          const data = await requestReceiptReport({
+            endpoint: `${salesMode ? "/sales-ledger" : "/payment-tracking"}/${encodeURIComponent(caseKey)}/receipt-report`,
+            caseKey,
+            tr,
+            signal: AbortSignal.timeout(180_000),
+            allowed,
+          });
+          await downloadFinanceReport(
+            buildReceiptReport(data, tr),
+            format,
+            tr,
+            allowed,
           );
+          return;
         }
         const data = (await authedFetch(
           `${salesMode ? "/sales-ledger" : "/payment-tracking"}/${encodeURIComponent(caseKey)}/statement`,

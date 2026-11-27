@@ -529,6 +529,13 @@ async function main() {
           }
           if (invalidCurrencyTotal && allCurrencies) body.filteredSummary.overdueAmount = 16020;
         }
+      } else if (method === "GET" && [key, siblingKey].some((entry) => path === `/payment-tracking/${entry}/documents`)) {
+        body = { workerOnline: true, updatedAt: new Date().toISOString(), job: null, documents: [] };
+      } else if (method === "GET" && [key, siblingKey].some((entry) => path === `/payment-tracking/${entry}/receipt-report`)) {
+        body = { status: "READY", report: {
+          key: path.split("/").at(-2), source: { generatedAt: new Date().toISOString() },
+          account: { currency: "GBP" }, rows: [],
+        } };
       } else if (method === "GET" && [key, siblingKey].some((entry) => path === `/payment-tracking/${entry}/statement`)) {
         body = detail(path.split("/").at(-2));
         if (body.item.unallocatedCredit?.status !== "clear") { status = 409; body = { code: "PAYMENT_UNALLOCATED_CREDIT", message: "Finance review required" }; }

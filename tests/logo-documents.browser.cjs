@@ -33,12 +33,49 @@ const fixture = new Function(
       }, user);
       await context.routeWebSocket("**/*", (socket) => socket.close());
       const api = role === "SALES" ? "/sales-ledger" : "/payment-tracking";
+      let receiptRequested = false;
+      let catalogueReady = false;
       let metadataReads = 0,
         fetchRequests = 0,
         cacheTransfers = 0,
         cached = false,
         online = true,
         job = null;
+      const documents = () => [
+        {
+          id: "d".repeat(64),
+          fileName: "synthetic-receipt.pdf",
+          kind: "cash_receipt",
+          number: "TEST-1",
+          date: "2026-11-27",
+          receiptIds: ["1"],
+          cached,
+        },
+        {
+          id: "e".repeat(64),
+          fileName: "synthetic-invoice.pdf",
+          kind: "invoice",
+          number: "INV-1",
+          date: "2026-11-27",
+          receiptIds: [],
+          cached: true,
+        },
+      ];
+      const report = {
+        key: fixture.key,
+        account: { currency: "GBP" },
+        source: { generatedAt: new Date().toISOString() },
+        rows: ["1", "2"].map((id) => ({
+          id,
+          date: "2026-11-27",
+          currency: "GBP",
+          kind: "cash",
+          ficheNo: "TEST-1",
+          documentNo: id === "1" ? "D1" : "",
+          description: id === "1" ? "Makbuzlu tahsilat" : "Belgesiz tahsilat",
+          amount: 200,
+        })),
+      };
       const errors = [],
         unexpected = [];
       await context.route("**/*", async (route) => {
@@ -109,41 +146,30 @@ const fixture = new Function(
             assignees: [],
             followupAssignees: [],
           };
+        } else if (url.pathname === `${api}/${fixture.key}/receipt-report`) {
+          if (request.method() === "POST") {
+            receiptRequested = true;
+            data = { status: "QUEUED" };
+          } else
+            data = receiptRequested
+              ? { status: "READY", report }
+              : { status: "NOT_REQUESTED" };
         } else if (url.pathname === `${api}/${fixture.key}/documents`) {
           metadataReads++;
           data = {
             workerOnline: online,
-            updatedAt: new Date().toISOString(),
+            updatedAt: catalogueReady ? new Date().toISOString() : null,
             job,
-            documents: [
-              {
-                id: "d".repeat(64),
-                fileName: "synthetic-invoice.pdf",
-                fileSize: 1000,
-                kind: "invoice",
-                number: "TEST-1",
-                date: "2026-11-27",
-                cached,
-              },
-            ],
+            documents: catalogueReady ? documents() : [],
           };
         } else if (url.pathname.endsWith("/documents/refresh")) {
+          catalogueReady = true;
           job = { status: "SUCCEEDED", error: null };
           data = {
             workerOnline: online,
             updatedAt: new Date().toISOString(),
             job,
-            documents: [
-              {
-                id: "d".repeat(64),
-                fileName: "synthetic-invoice.pdf",
-                fileSize: 1000,
-                kind: "invoice",
-                number: "TEST-1",
-                date: "2026-11-27",
-                cached,
-              },
-            ],
+            documents: documents(),
           };
         } else if (url.pathname.endsWith("/open")) {
           fetchRequests++;
@@ -189,23 +215,32 @@ const fixture = new Function(
           fixture.key,
       );
       const panel = page.getByRole("region", {
-        name: "Fatura ve tahsilat belgeleri",
+        name: "Tahsilatlar ve faturalar",
         exact: true,
       });
       await expect(panel).toBeVisible();
-      assert.equal(metadataReads, 0);
-      assert.equal(fetchRequests, 0);
-      await panel
-        .getByRole("button", { name: "Belgeleri göster", exact: true })
-        .click();
+      const first = panel
+        .getByRole("row")
+        .filter({ hasText: "Makbuzlu tahsilat" });
+      const second = panel
+        .getByRole("row")
+        .filter({ hasText: "Belgesiz tahsilat" });
+      await expect(first).toBeVisible();
+      await expect(second).toBeVisible();
       await expect(
-        panel.getByText("synthetic-invoice.pdf", { exact: false }),
+        first.getByRole("button", { name: "Makbuzu aç · TEST-1", exact: true }),
+      ).toBeEnabled();
+      await expect(second.getByRole("button")).toHaveCount(0);
+      await expect(
+        panel.getByRole("button", { name: "Faturayı aç · INV-1", exact: true }),
       ).toBeVisible();
-      assert.equal(metadataReads, 1);
+      assert(receiptRequested);
+      assert(catalogueReady);
+      assert(metadataReads > 0);
       assert.equal(fetchRequests, 0);
       let popupEvent = page.waitForEvent("popup");
       await panel
-        .getByRole("button", { name: "PDF’yi aç", exact: true })
+        .getByRole("button", { name: "Makbuzu aç · TEST-1", exact: true })
         .click();
       let popup = await popupEvent;
       await popup.waitForURL("https://pdf.example.invalid/fixture.pdf");
@@ -213,7 +248,7 @@ const fixture = new Function(
       assert.equal(cacheTransfers, 1);
       popupEvent = page.waitForEvent("popup");
       await panel
-        .getByRole("button", { name: "PDF’yi aç", exact: true })
+        .getByRole("button", { name: "Makbuzu aç · TEST-1", exact: true })
         .click();
       popup = await popupEvent;
       await popup.waitForURL("https://pdf.example.invalid/fixture.pdf");
@@ -224,13 +259,16 @@ const fixture = new Function(
         "Second open must reuse the cached document",
       );
       online = false;
-      await panel.getByRole('button', {name:'Belge listesini yenile',exact:true}).click();
-      await expect(panel.getByText('Yeni belgelere şu anda ulaşılamıyor. Hazır belgeleri açabilirsiniz.',{exact:true})).toBeVisible();
-      await expect(panel.getByRole('button',{name:'PDF’yi aç',exact:true})).toBeEnabled();
-      await panel.getByRole("button", { name: "Kapat", exact: true }).click();
-      await panel
-        .getByRole("button", { name: "Belgeleri göster", exact: true })
-        .click();
+      await page.reload();
+      await expect(
+        panel.getByText(
+          "Yeni belgelere şu anda ulaşılamıyor. Hazır belgeleri açabilirsiniz.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(
+        panel.getByRole("button", { name: "Makbuzu aç · TEST-1", exact: true }),
+      ).toBeEnabled();
       await page.setViewportSize({ width: 390, height: 844 });
       assert.equal(
         await page.evaluate(
